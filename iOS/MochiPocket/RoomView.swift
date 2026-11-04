@@ -93,7 +93,7 @@ struct RoomView: View {
             let radius = (10 + CGFloat(1 - phase) * 30) * layout.scale
             var arc = Path()
             arc.addArc(center: ear, radius: radius, startAngle: .degrees(148), endAngle: .degrees(212), clockwise: false)
-            context.stroke(arc, with: .color(MochiStyle.accent.opacity(0.6 * sin(.pi * phase) * appear)),
+            context.stroke(arc, with: .color(Theme.tint.opacity(0.6 * sin(.pi * phase) * appear)),
                            style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
         }
     }

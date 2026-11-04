@@ -9,67 +9,79 @@ struct SessionCard: View {
     @State private var replying = false
     @State private var text = ""
     @FocusState private var focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: symbol).foregroundStyle(tint)
-                Text(card.project).font(.system(.headline, design: .rounded)).lineLimit(1)
-                Spacer(minLength: 4)
-                Text(label)
-                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                    .foregroundStyle(tint)
-                    .padding(.horizontal, 9).padding(.vertical, 4)
-                    .background(Capsule().fill(tint.opacity(0.13)))
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Space.s) {
+                    IconTile(symbol: symbol, tint: tint)
+                    Text(card.project).font(.mochi(.headline)).foregroundStyle(Theme.ink).fixedSize()
+                    Spacer(minLength: Theme.Space.xs)
+                    Tag(text: label, tint: tint).fixedSize()
+                }
+                VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                    HStack(spacing: Theme.Space.s) {
+                        IconTile(symbol: symbol, tint: tint)
+                        Text(card.project).font(.mochi(.headline)).foregroundStyle(Theme.ink).lineLimit(2)
+                    }
+                    Tag(text: label, tint: tint)
+                }
             }
             if let summary = card.summary {
-                Text(summary.done).font(.system(.subheadline, design: .rounded))
+                Text(summary.done).font(.mochi(.subheadline)).foregroundStyle(Theme.ink)
                     .fixedSize(horizontal: false, vertical: true)
                 if let session = summary.session, !session.isEmpty {
                     Label(session, systemImage: "text.alignleft")
-                        .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+                        .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
                 }
                 if !card.files.isEmpty { files }
                 if let finished = card.finishedAt {
                     Text("Finished \(Date(timeIntervalSince1970: finished).formatted(.relative(presentation: .named)))")
-                        .font(.system(.caption2, design: .rounded)).foregroundStyle(.tertiary)
+                        .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
                 }
             } else {
                 Text(card.phase == "working" ? "Claude is working — a summary comes when it finishes."
                                              : "A summary comes when Claude finishes its next turn.")
-                    .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+                    .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
             }
             if replying {
                 replyField
             } else {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Space.s) {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             ForEach(card.summary?.next ?? [], id: \.self) { suggestion in
-                                Button(suggestion) {
+                                Button {
                                     text = suggestion
                                     startReplying()
+                                } label: {
+                                    Text(suggestion)
+                                        .font(.mochi(.footnote, .semibold))
+                                        .foregroundStyle(Theme.tint)
+                                        .padding(.horizontal, 12)
+                                        .frame(minHeight: 34)
+                                        .background(Capsule().fill(Theme.sunken))
+                                        .frame(minHeight: Theme.touch)
+                                        .contentShape(Rectangle())
                                 }
-                                .font(.system(.caption, design: .rounded).weight(.semibold))
-                                .padding(.horizontal, 10).padding(.vertical, 6)
-                                .background(Capsule().fill(MochiStyle.accent.opacity(0.12)))
-                                .foregroundStyle(MochiStyle.accent)
+                                .buttonStyle(ClayPressStyle())
+                                .accessibilityHint("Starts a reply with this")
                             }
                         }
                     }
                     Button { startReplying() } label: {
                         Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
-                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                            .font(.mochi(.subheadline, .semibold))
                     }
                     .buttonStyle(.borderedProminent)
                     .buttonBorderShape(.capsule)
+                    .controlSize(.large)
                 }
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.85)))
-        .animation(.spring(duration: 0.3), value: replying)
+        .mochiCard()
+        .animation(reduceMotion ? nil : .spring(duration: 0.3), value: replying)
     }
 
     private var files: some View {
@@ -77,37 +89,47 @@ struct SessionCard: View {
             HStack(spacing: 6) {
                 ForEach(card.files, id: \.self) { file in
                     Label(file, systemImage: "doc.text")
-                        .font(.system(.caption2, design: .monospaced))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(Theme.ink)
                         .lineLimit(1)
                         .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Capsule().fill(Color.black.opacity(0.05)))
+                        .background(Capsule().fill(Theme.sunken))
                 }
             }
         }
+        .accessibilityLabel("Changed files: \(card.files.joined(separator: ", "))")
     }
 
     private var replyField: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Theme.Space.xs) {
             TextField("Tell Claude what to do next", text: $text, axis: .vertical)
+                .font(.mochi(.body))
                 .lineLimit(1...4)
                 .textFieldStyle(.plain)
                 .focused($focused)
                 .submitLabel(.send)
                 .onSubmit(submit)
+                .padding(.leading, Theme.Space.m)
             Button(action: submit) {
-                Image(systemName: "paperplane.fill").font(.system(size: 15, weight: .semibold))
+                Image(systemName: "paperplane.fill").font(.mochi(.body, .semibold))
+                    .frame(width: Theme.touch, height: Theme.touch)
+                    .contentShape(Rectangle())
             }
             .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .accessibilityLabel("Send to Claude")
             Button {
                 replying = false
                 text = ""
             } label: {
-                Image(systemName: "xmark").font(.system(size: 12, weight: .bold))
+                Image(systemName: "xmark").font(.mochi(.footnote, .bold))
+                    .frame(width: Theme.touch, height: Theme.touch)
+                    .contentShape(Rectangle())
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.inkSecondary)
+            .accessibilityLabel("Cancel reply")
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.black.opacity(0.04)))
+        .frame(minHeight: Theme.touch)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.inner, style: .continuous).fill(Theme.sunken))
     }
 
     private func startReplying() {
@@ -146,11 +168,11 @@ struct SessionCard: View {
 
     private var tint: Color {
         switch card.phase {
-        case "working": return MochiStyle.accent
-        case "waiting": return .orange
-        case "done": return .green
-        case "error": return .red
-        default: return .gray
+        case "working": return Theme.tint
+        case "waiting": return Theme.warning
+        case "done": return Theme.success
+        case "error": return Theme.danger
+        default: return Theme.inkSecondary
         }
     }
 }

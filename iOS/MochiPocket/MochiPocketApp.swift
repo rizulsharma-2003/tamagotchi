@@ -10,7 +10,8 @@ struct MochiPocketApp: App {
     init() {
         // Start listening at launch, not when the screen appears: iOS also wakes the app in the
         // background to hand over a Live Activity's update address after the Mac starts one.
-        ActivityCoordinator.shared.start()
+        // Simulator screenshots (`-demoContent 1`) skip Live Activities: their push setup asks for notifications.
+        if !UserDefaults.standard.bool(forKey: "demoContent") { ActivityCoordinator.shared.start() }
         MacLink.shared.start()
         PhoneWorld.shared.start()
     }

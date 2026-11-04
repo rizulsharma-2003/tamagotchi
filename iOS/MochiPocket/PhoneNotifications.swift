@@ -37,7 +37,8 @@ final class PhoneNotifications: NSObject, UNUserNotificationCenterDelegate {
             UNNotificationCategory(identifier: "mochi-meeting", actions: [join], intentIdentifiers: [], options: []),
             UNNotificationCategory(identifier: "mochi-draft", actions: [openDraft], intentIdentifiers: [], options: []),
         ])
-        Task { await refresh(asking: true) }
+        // Simulator screenshots (`-demoContent 1`) skip the permission prompt.
+        Task { await refresh(asking: !UserDefaults.standard.bool(forKey: "demoContent")) }
         catchUp()
     }
 

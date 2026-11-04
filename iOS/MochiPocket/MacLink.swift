@@ -222,6 +222,42 @@ final class MacLink {
         sessions = Array(list.prefix(6))
     }
 
+    #if DEBUG
+    /// `-demoContent 1` (Simulator screenshots): sample mail, meetings, a Notion task and Claude sessions.
+    func showDemoContent() {
+        let now = Date().timeIntervalSince1970
+        agent = AgentPending(
+            enabled: true,
+            headline: "A busy afternoon: the design review is at 4, and Priya is waiting on the October invoice.",
+            items: [
+                AgentNote(id: "cal:demo1", source: .calendar, title: "Design review", detail: "With Aditi and Sam · Google Meet",
+                          important: true, at: now, due: now + 2 * 3600, link: "https://meet.google.com/abc-defg-hij"),
+                AgentNote(id: "mail:demo1", source: .gmail, title: "Priya Sharma",
+                          detail: "Can you send the October invoice today? Finance closes the books tomorrow.", important: true,
+                          at: now - 1800, link: "https://mail.google.com/mail/u/0/#inbox/demo1", subject: "Invoice for October", vip: true),
+                AgentNote(id: "mail:demo2", source: .gmail, title: "Aditi Rao", detail: "Shared the new onboarding flow; would love your notes before Friday.",
+                          important: true, at: now - 3600, link: "https://mail.google.com/mail/u/0/#inbox/demo2", subject: "Onboarding v2 for review"),
+                AgentNote(id: "notion:demo1", source: .notion, title: "Finish the launch checklist", detail: "Due today · Product",
+                          important: false, at: now - 7200, due: now + 5 * 3600, link: "https://www.notion.so"),
+                AgentNote(id: "mail:demo3", source: .gmail, title: "GitHub", detail: "1 new commit pushed to main.",
+                          important: false, at: now - 9000, link: "https://mail.google.com/mail/u/0/#inbox/demo3", subject: "[tamagotchi] Mochi's own voice"),
+            ],
+            lookedAt: now - 300, updatedAt: now - 300)
+        lastCheckedBy = "cloud"
+        summariesShared = true
+        sessions = [
+            PhoneSessionCard(id: "demo-s1", project: "mac-Tamagotchi", phase: "working",
+                             summary: TurnSummary(done: "Gave Mochi its own Kokoro voice and made Siri read reliably.", next: ["Push it to GitHub"]),
+                             files: ["KokoroVoice.swift", "UpdatesReader.swift"], finishedAt: now - 600, phaseSince: now - 120),
+            PhoneSessionCard(id: "demo-s2", project: "mochi-cloud", phase: "done",
+                             summary: TurnSummary(done: "Drafted a reply to Priya in Gmail Drafts. Nothing was sent."),
+                             files: [], finishedAt: now - 2400, phaseSince: now - 2400),
+        ]
+        exchanges = [Exchange(id: "demo-e1", text: "What's pending?", project: nil, state: .done,
+                              reply: "Five things. The design review at 4 and Priya's invoice need you.", sentAt: Date().addingTimeInterval(-900))]
+    }
+    #endif
+
     /// Development builds keep a short log of the link in Documents (copied off with devicectl).
     func log(_ line: String) {
         #if DEBUG

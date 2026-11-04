@@ -20,38 +20,71 @@ struct UpdatesView: View {
             List {
                 if let headline = link.agent?.headline, !headline.isEmpty {
                     Section {
-                        Label(headline, systemImage: "sparkles")
-                            .font(.system(.subheadline, design: .rounded))
+                        Label {
+                            Text(headline).font(.mochi(.subheadline)).foregroundStyle(Theme.ink)
+                        } icon: {
+                            IconTile(symbol: "sparkles", tint: Theme.tint)
+                        }
+                        .listRowBackground(Theme.surface)
                     }
                 }
                 Section {
                     if waiting.isEmpty {
-                        Text("Nothing waiting. \(petName) will tell you when something comes in.")
-                            .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+                        Label {
+                            Text("Nothing waiting. \(petName) will tell you when something comes in.")
+                        } icon: {
+                            Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.success)
+                        }
+                        .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
+                        .listRowBackground(Theme.surface)
                     }
                     ForEach(waiting) { note in
                         UpdateRow(note: note, done: false) { withAnimation { store.toggleDone(note.id) } }
                             .swipeActions(edge: .trailing) { doneButton(note) }
                             .swipeActions(edge: .leading) { draftButton(note) }
                             .contextMenu { menu(note) }
+                            .listRowBackground(Theme.surface)
                     }
                 } header: {
-                    Text("Waiting for you")
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Waiting for you")
+                        Spacer()
+                        if waiting.count > 1 {
+                            Button {
+                                withAnimation { store.markDone(waiting.map(\.id)) }
+                            } label: {
+                                Label("Mark all done", systemImage: "checkmark.circle")
+                                    .font(.mochi(.subheadline, .semibold))
+                                    .foregroundStyle(Theme.tint)
+                                    .frame(minHeight: Theme.touch)
+                                    .contentShape(Rectangle())
+                            }
+                            .accessibilityLabel("Mark all \(waiting.count) done")
+                        }
+                    }
+                    .font(.mochi(.title3, .bold))
+                    .foregroundStyle(Theme.ink)
+                    .textCase(nil)
                 } footer: {
                     if let looked = link.agent?.lookedAt {
                         Text("Checked by \(link.lastCheckedBy == "cloud" ? "Mochi Cloud" : "your Mac") "
                              + Date(timeIntervalSince1970: looked).formatted(.relative(presentation: .named))
                              + ". Pull down to check again.")
+                            .font(.mochi(.footnote))
+                            .foregroundStyle(Theme.inkSecondary)
                     }
                 }
                 ForEach(store.history(excluding: Set(waiting.map(\.id))), id: \.day) { group in
-                    Section(dayTitle(group.day)) {
+                    Section {
                         ForEach(group.entries) { entry in
                             UpdateRow(note: entry.note, done: store.isDone(entry.id))
                                 .swipeActions(edge: .trailing) { doneButton(entry.note) }
                                 .swipeActions(edge: .leading) { draftButton(entry.note) }
                                 .contextMenu { menu(entry.note) }
+                                .listRowBackground(Theme.surface)
                         }
+                    } header: {
+                        Text(dayTitle(group.day)).font(.mochi(.headline)).foregroundStyle(Theme.inkSecondary).textCase(nil)
                     }
                 }
             }
@@ -68,19 +101,10 @@ struct UpdatesView: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
-                if waiting.count > 1 {
-                    ToolbarItem(placement: .bottomBar) {
-                        Button {
-                            withAnimation { store.markDone(waiting.map(\.id)) }
-                        } label: {
-                            Label("Mark all \(waiting.count) done", systemImage: "checkmark.circle")
-                        }
-                    }
-                }
             }
             .sheet(item: $drafting) { DraftReplySheet(note: $0, link: link) }
         }
-        .tint(MochiStyle.accent)
+        .tint(Theme.tint)
         .onDisappear { reader.stop() }
     }
 
@@ -96,7 +120,7 @@ struct UpdatesView: View {
     private func draftButton(_ note: AgentNote) -> some View {
         if note.threadID != nil, link.draftsAvailable {
             Button { drafting = note } label: { Label("Draft reply", systemImage: "arrowshape.turn.up.left") }
-                .tint(MochiStyle.accent)
+                .tint(Theme.tint)
         }
     }
 
@@ -130,67 +154,62 @@ struct UpdatesView: View {
 }
 
 /// One update: who or what, the subject, Mochi's one-line gist, and where tapping it goes (mail in the Gmail
-/// app). With `onDone`, a grey checkbox marks it done (it turns green, then the row leaves); meetings with a
-/// video link get a Join button.
+/// app). With `onDone`, a checkbox marks it done (it turns green, then the row leaves); meetings with a video link
+/// get a Join button. Every control has a 44-point touch area.
 struct UpdateRow: View {
     let note: AgentNote
     var done = false
     var onDone: (() -> Void)?
     @State private var ticked = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .body) private var box: CGFloat = 24
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
+            row
+            if dynamicTypeSize.isAccessibilitySize { joinButton.padding(.leading, 44) }
+        }
+    }
+
+    private var row: some View {
+        HStack(alignment: .top, spacing: Theme.Space.s) {
             Button {
                 OpenLinks.open(note)
             } label: {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: done ? "checkmark.circle.fill" : note.source.symbol)
-                        .foregroundStyle(done ? Color.green : tint)
-                        .frame(width: 22)
-                        .padding(.top, 2)
+                HStack(alignment: .top, spacing: Theme.Space.m) {
+                    IconTile(symbol: done ? "checkmark" : tileSymbol, tint: done ? Theme.success : tint)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             if note.vip == true, !done {
-                                Image(systemName: "star.fill").font(.caption2).foregroundStyle(.yellow)
+                                Image(systemName: "star.fill").font(.mochi(.caption)).foregroundStyle(Theme.vip)
                                     .accessibilityLabel("VIP")
                             }
-                            Text(note.title).font(.system(.subheadline, design: .rounded).weight(.semibold)).lineLimit(1)
+                            Text(note.title).font(.mochi(.subheadline, .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
                                 .strikethrough(done)
                         }
                         if let subject = note.subject {
-                            Text(subject).font(.system(.footnote, design: .rounded).weight(.medium)).lineLimit(1)
+                            Text(subject).font(.mochi(.footnote, .medium)).foregroundStyle(Theme.ink).lineLimit(1)
                         }
-                        Text(note.detail).font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary).lineLimit(2)
+                        Text(note.detail).font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary).lineLimit(2)
+                        if note.important, note.source == .gmail, !done, onDone == nil {
+                            Tag(text: "Needs you", tint: Theme.warning).padding(.top, 2)
+                        }
                     }
-                    Spacer(minLength: 4)
-                    if note.important, note.source == .gmail, !done, onDone == nil {
-                        Text("Needs you")
-                            .font(.system(.caption2, design: .rounded).weight(.semibold))
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal, 7).padding(.vertical, 3)
-                            .background(Capsule().fill(Color.orange.opacity(0.13)))
-                    }
+                    .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+                    Spacer(minLength: Theme.Space.xs)
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, Theme.Space.s)
                 .contentShape(Rectangle())
-                .opacity(done ? 0.55 : 1)
+                .opacity(done ? 0.6 : 1)
             }
             .buttonStyle(.plain)
             .accessibilityHint(note.link == nil ? "" : note.source == .calendar ? "Joins the meeting" : "Opens it")
-            if isMeeting, !done, let link = note.link, let url = URL(string: link) {
-                Button { OpenLinks.openApp(url) } label: {
-                    Label("Join", systemImage: "video.fill")
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(Capsule().fill(MochiStyle.accent.opacity(0.15)))
-                }
-                .buttonStyle(.borderless)
-                .padding(.top, 4)
-            }
+            if !dynamicTypeSize.isAccessibilitySize { joinButton }
             if let onDone, !done {
                 Button {
                     guard !ticked else { return }
-                    withAnimation(.spring(duration: 0.25)) { ticked = true }
+                    withAnimation(reduceMotion ? nil : .spring(duration: 0.25)) { ticked = true }
                     // Let the green tick show for a moment before the row leaves.
                     Task {
                         try? await Task.sleep(for: .milliseconds(450))
@@ -198,25 +217,55 @@ struct UpdateRow: View {
                     }
                 } label: {
                     Image(systemName: ticked ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 22, weight: .regular))
-                        .foregroundStyle(ticked ? Color.green : Color.gray.opacity(0.55))
+                        .font(.system(size: box, weight: .regular))
+                        .foregroundStyle(ticked ? Theme.success : Theme.inkSecondary.opacity(0.75))
                         .contentTransition(.symbolEffect(.replace))
-                        .frame(width: 32, height: 32)
+                        .frame(width: Theme.touch, height: Theme.touch)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
                 .sensoryFeedback(.success, trigger: ticked) { _, now in now }
                 .accessibilityLabel("Mark \(note.title) done")
-                .padding(.top, 2)
             }
         }
+    }
+
+    /// "Join" for meetings with a video link.
+    @ViewBuilder
+    private var joinButton: some View {
+        if isMeeting, !done, let link = note.link, let url = URL(string: link) {
+            Button { OpenLinks.openApp(url) } label: {
+                    Label("Join", systemImage: "video.fill")
+                        .font(.mochi(.footnote, .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 32)
+                        .background(Capsule().fill(Theme.tint))
+                        .frame(minHeight: Theme.touch)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(ClayPressStyle())
+                .accessibilityLabel("Join \(note.title)")
+            }
     }
 
     /// A meeting whose link is a video call (not a calendar page).
     private var isMeeting: Bool { note.source == .calendar && note.link?.hasPrefix("https://") == true }
 
+    private var tileSymbol: String {
+        switch note.source {
+        case .gmail: return "envelope.fill"
+        case .calendar: return "calendar"
+        case .notion: return "checklist"
+        }
+    }
+
     private var tint: Color {
-        if note.source == .calendar { return MochiStyle.accent }
-        return note.important ? .orange : .secondary
+        switch note.source {
+        case .calendar: return Theme.tint
+        case .notion: return Theme.indigo
+        case .gmail: return note.important ? Theme.warning : Theme.inkSecondary
+        }
     }
 }
 
@@ -236,9 +285,9 @@ struct DraftReplySheet: View {
             Form {
                 Section {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(note.title).font(.system(.subheadline, design: .rounded).weight(.semibold))
-                        if let subject = note.subject { Text(subject).font(.system(.footnote, design: .rounded).weight(.medium)) }
-                        Text(note.detail).font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+                        Text(note.title).font(.mochi(.subheadline, .semibold))
+                        if let subject = note.subject { Text(subject).font(.mochi(.footnote, .medium)) }
+                        Text(note.detail).font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
                     }
                 }
                 Section {
@@ -253,9 +302,9 @@ struct DraftReplySheet: View {
                 switch phase {
                 case .asked:
                     Label("On its way. You'll get a notification when the draft is in Gmail (about a minute).", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Theme.success)
                 case .failed(let problem):
-                    Label(problem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                    Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
                 default:
                     EmptyView()
                 }
@@ -273,7 +322,7 @@ struct DraftReplySheet: View {
                 }
             }
         }
-        .tint(MochiStyle.accent)
+        .tint(Theme.tint)
         .presentationDetents([.medium, .large])
         .onAppear { focused = true }
     }

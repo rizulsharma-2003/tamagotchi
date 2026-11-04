@@ -44,7 +44,7 @@ struct PocketSettingsView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
         }
-        .tint(MochiStyle.accent)
+        .tint(Theme.tint)
         .task { await notifications.refresh() }
         .onDisappear { reader.stop() }
     }
@@ -54,9 +54,10 @@ struct PocketSettingsView: View {
     private var liveActivityCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Lock Screen & Dynamic Island").font(.system(.headline, design: .rounded))
+                Text("Lock Screen & Dynamic Island").font(.mochi(.headline)).foregroundStyle(Theme.ink)
                 Spacer()
-                Circle().fill(coordinator.activitiesEnabled ? Color.green : Color.gray).frame(width: 8, height: 8)
+                Tag(text: coordinator.activitiesEnabled ? "On" : "Off", symbol: coordinator.activitiesEnabled ? "checkmark" : "xmark",
+                    tint: coordinator.activitiesEnabled ? Theme.success : Theme.inkSecondary)
             }
             TimelineView(.periodic(from: .now, by: 0.5)) { timeline in
                 let frame = Int(timeline.date.timeIntervalSinceReferenceDate * 2) % 10
@@ -68,11 +69,7 @@ struct PocketSettingsView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(["working", "waiting", "done", "error", "idle", "asleep"], id: \.self) { phase in
-                        Button(phase.capitalized) { previewPhase = phase }
-                            .font(.system(.caption, design: .rounded).weight(.semibold))
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(Capsule().fill(previewPhase == phase ? MochiStyle.accent : Color.white.opacity(0.8)))
-                            .foregroundStyle(previewPhase == phase ? Color.white : Color.primary)
+                        Chip(title: phase.capitalized, selected: previewPhase == phase) { previewPhase = phase }
                     }
                 }
             }
@@ -88,9 +85,9 @@ struct PocketSettingsView: View {
             Text(coordinator.activitiesEnabled
                  ? "Your Mac shows Mochi here automatically while Claude works."
                  : "Live Activities are off — turn them on in Settings › Mochi.")
-                .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+                .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         }
-        .pocketCard()
+        .mochiCard()
     }
 
     // MARK: Mochi's voice
@@ -102,11 +99,11 @@ struct PocketSettingsView: View {
     private var voiceCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("\(petName)'s voice").font(.system(.headline, design: .rounded))
+                Text("\(petName)'s voice").font(.mochi(.headline)).foregroundStyle(Theme.ink)
                 Spacer()
                 Button { hear() } label: {
                     Label(reader.speaking ? "Stop" : "Hear It", systemImage: reader.speaking ? "stop.fill" : "play.fill")
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .font(.mochi(.caption, .semibold))
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.capsule)
@@ -123,7 +120,7 @@ struct PocketSettingsView: View {
                 iPhoneControls
             }
             Divider()
-            Text("When you ask Siri “What's waiting in Mochi”").font(.system(.subheadline, design: .rounded))
+            Text("When you ask Siri “What's waiting in Mochi”").font(.mochi(.subheadline))
             Picker("Who reads it", selection: $siriReads) {
                 Text("\(petName) reads it").tag(false)
                 Text("Siri reads it").tag(true)
@@ -134,9 +131,9 @@ struct PocketSettingsView: View {
                    + "looking at the screen. To hear it every time, search “Siri Responses” in Settings and pick Prefer Spoken Responses."
                  : "\(petName) reads it in this voice every time, while Siri shows the list. Siri's own voice isn't open to apps, "
                    + "so this is the way to always hear it the same.")
-                .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+                .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         }
-        .pocketCard()
+        .mochiCard()
         .onAppear { voices = MochiVoice.choices() }
         .onReceive(NotificationCenter.default.publisher(for: AVSpeechSynthesizer.availableVoicesDidChangeNotification)) { _ in
             voices = MochiVoice.choices()
@@ -149,29 +146,25 @@ struct PocketSettingsView: View {
         if kokoro.downloaded {
             HStack(spacing: 8) {
                 ForEach(KokoroVoice.Style.all) { style in
-                    Button(style.title) {
+                    Chip(title: style.title, selected: naturalStyle == style.id) {
                         naturalStyle = style.id
                         hear(restart: true)
-                    }
-                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(Capsule().fill(naturalStyle == style.id ? MochiStyle.accent : Color.white.opacity(0.8)))
-                    .foregroundStyle(naturalStyle == style.id ? Color.white : Color.primary)
+                        }
                 }
             }
-            Text(KokoroVoice.Style.current.blurb).font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+            Text(KokoroVoice.Style.current.blurb).font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
             if kokoro.phase == .loading {
                 Label("Getting \(petName)'s voice ready…", systemImage: "hourglass")
-                    .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+                    .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
             }
         } else {
             switch kokoro.phase {
             case .downloading(let fraction):
                 ProgressView(value: fraction) {
-                    Text("Downloading \(petName)'s voice… \(Int(fraction * 100))%").font(.system(.footnote, design: .rounded))
+                    Text("Downloading \(petName)'s voice… \(Int(fraction * 100))%").font(.mochi(.footnote))
                 }
             case .loading:
-                ProgressView { Text("Getting it ready…").font(.system(.footnote, design: .rounded)) }
+                ProgressView { Text("Getting it ready…").font(.mochi(.footnote)) }
             default:
                 Button {
                     Task {
@@ -188,20 +181,20 @@ struct PocketSettingsView: View {
         }
         if case .failed(let problem) = kokoro.phase {
             Label(problem, systemImage: "exclamationmark.triangle")
-                .font(.system(.footnote, design: .rounded)).foregroundStyle(.orange)
+                .font(.mochi(.footnote, .medium)).foregroundStyle(Theme.warning)
         }
         Text(kokoro.downloaded
              ? "Kokoro, an open-source voice, speaks on this iPhone: nothing is sent anywhere. If it can't talk for a moment, "
                + "the iPhone voice reads instead."
              : "Kokoro is an open-source voice that runs on this iPhone. It downloads once (best on Wi-Fi); after that "
                + "nothing is sent anywhere. Until then \(petName) uses the iPhone voice.")
-            .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+            .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         if kokoro.downloaded {
             Button("Remove the Download", role: .destructive) {
                 reader.stop()
                 kokoro.remove()
             }
-            .font(.system(.footnote, design: .rounded))
+            .font(.mochi(.footnote))
         }
     }
 
@@ -210,19 +203,15 @@ struct PocketSettingsView: View {
     private var iPhoneControls: some View {
         HStack(spacing: 8) {
             ForEach(MochiVoice.Character.allCases) { option in
-                Button(option.title) {
+                Chip(title: option.title, selected: character == option) {
                     voiceCharacter = option.rawValue
                     hear(restart: true)
-                }
-                .font(.system(.caption, design: .rounded).weight(.semibold))
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(Capsule().fill(character == option ? MochiStyle.accent : Color.white.opacity(0.8)))
-                .foregroundStyle(character == option ? Color.white : Color.primary)
+                    }
             }
         }
-        Text(character.blurb).font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+        Text(character.blurb).font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         HStack {
-            Text("Voice").font(.system(.subheadline, design: .rounded))
+            Text("Voice").font(.mochi(.subheadline))
             Spacer()
             Picker("Voice", selection: $voiceID) {
                 Text("Best on this iPhone" + (MochiVoice.automatic().map { " (\($0.name))" } ?? "")).tag("")
@@ -242,7 +231,7 @@ struct PocketSettingsView: View {
             }
             .buttonStyle(.bordered)
         }
-        Text(voiceHint).font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+        Text(voiceHint).font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
     }
 
     @ViewBuilder
@@ -283,7 +272,7 @@ struct PocketSettingsView: View {
 
     private var summariesCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Claude's summaries").font(.system(.headline, design: .rounded))
+            Text("Claude's summaries").font(.mochi(.headline)).foregroundStyle(Theme.ink)
             row("Shared by your Mac", ok: link.summariesShared == true,
                 detail: link.summariesShared == true ? "On" : link.summariesShared == false ? "Off on the Mac" : "Waiting for your Mac")
             row("Notifications", ok: notificationsAllowed, detail: notificationText)
@@ -301,9 +290,9 @@ struct PocketSettingsView: View {
             Text("When a Claude session on your Mac finishes, you get what it did and the files it changed. Reply from the "
                  + "notification, or from the session's card, and your words go to that session. Turn it on in "
                  + "\(phone.world.settings.petName)'s Settings › iPhone on your Mac.")
-                .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+                .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         }
-        .pocketCard()
+        .mochiCard()
     }
 
     private var notificationsAllowed: Bool {
@@ -322,7 +311,7 @@ struct PocketSettingsView: View {
 
     private var macCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Your Mac").font(.system(.headline, design: .rounded))
+            Text("Your Mac").font(.mochi(.headline)).foregroundStyle(Theme.ink)
             row("iCloud", ok: coordinator.iCloudAvailable, detail: coordinator.iCloudAvailable ? "Signed in" : "Sign in to iCloud")
             row("Room and pet", ok: phone.linkedToMac, detail: phone.linkedToMac ? "Following your Mac" : "Waiting for your Mac")
             row("Live Activity address", ok: coordinator.hasPushToStartToken,
@@ -330,57 +319,40 @@ struct PocketSettingsView: View {
                     ? "Shared" + (coordinator.lastSaved.map { " · \($0.formatted(.relative(presentation: .named)))" } ?? "")
                     : "Not shared yet")
             Text("Your iPhone and Mac find each other through your iCloud: same Apple ID, no account or server.")
-                .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+                .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         }
-        .pocketCard()
+        .mochiCard()
     }
 
     // MARK: Mochi Cloud
 
     private var cloudCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Mochi Cloud").font(.system(.headline, design: .rounded))
+            Text("Mochi Cloud").font(.mochi(.headline)).foregroundStyle(Theme.ink)
             row("Hourly checks", ok: link.cloudSeenAt != nil,
                 detail: link.cloudSeenAt.map { "Last news \($0.formatted(.relative(presentation: .named)))" } ?? "No news from the cloud yet")
             row("Check now without your Mac", ok: link.cloudAvailable, detail: link.cloudAvailable ? "Ready" : "Add the API trigger on your Mac")
             Toggle("Check now always asks Mochi Cloud", isOn: $checkNowUsesCloud)
-                .font(.system(.subheadline, design: .rounded))
+                .font(.mochi(.subheadline))
             Text(checkNowUsesCloud
                  ? "Check now goes straight to the cloud, whether your Mac is on or off. Answers take a minute or two and arrive as a notification."
                  : "Check now asks your Mac first (faster when it's on) and the cloud only when your Mac doesn't answer.")
-                .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+                .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
             Text("While your Mac is off, a Claude task in Anthropic's cloud checks your mail, calendar and Notion every hour from 8 am "
                  + "to 11 pm and notifies you here. News your Mac already gave you arrives quietly. Set it up in your Mac's "
                  + "Settings › Agent › Mochi Cloud.")
-                .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+                .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         }
-        .pocketCard()
+        .mochiCard()
     }
 
     private func row(_ title: String, ok: Bool, detail: String) -> some View {
         HStack {
-            Image(systemName: ok ? "checkmark.circle.fill" : "circle.dashed").foregroundStyle(ok ? Color.green : Color.secondary)
-            Text(title).font(.system(.subheadline, design: .rounded))
+            Image(systemName: ok ? "checkmark.circle.fill" : "circle.dashed").foregroundStyle(ok ? Theme.success : Theme.inkSecondary)
+                .accessibilityHidden(true)
+            Text(title).font(.mochi(.subheadline))
             Spacer()
-            Text(detail).font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+            Text(detail).font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         }
-    }
-}
-
-/// The app's warm backdrop.
-struct PocketBackground: View {
-    var body: some View {
-        LinearGradient(colors: [Color(red: 1.0, green: 0.96, blue: 0.92), Color(red: 0.98, green: 0.88, blue: 0.80)],
-                       startPoint: .top, endPoint: .bottom)
-            .ignoresSafeArea()
-    }
-}
-
-extension View {
-    /// A rounded white card, as used across Mochi Pocket.
-    func pocketCard() -> some View {
-        padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.75)))
     }
 }
