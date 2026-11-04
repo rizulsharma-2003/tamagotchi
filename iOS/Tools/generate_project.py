@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Writes iOS/MochiPocket.xcodeproj/project.pbxproj (Xcode 16+ synchronized folders).
 
-Targets: MochiPocket (app: MochiPocket/, Shared/, SharedArt/, SharedData/ + the TamagotchiCore package product) and
+Targets: MochiPocket (app: MochiPocket/, Shared/, SharedArt/, SharedData/ + the TamagotchiCore package product and
+FluidAudio 0.18.2 for Kokoro, Mochi's natural voice) and
 MochiLiveActivity (widget extension: MochiLiveActivity/, Shared/, SharedData/) and MochiNotifications (notification
 service extension: MochiNotifications/, SharedData/). All three share the app group group.com.insideedge.mochi.
 Run again after changing settings here.
@@ -37,6 +38,16 @@ def k(name):
     if name not in kids:
         kids[name] = "4D4F43484902" + format(len(kids) + 1, "012X")
     return kids[name]
+
+
+mids = {}
+
+
+def m(name):
+    """Ids for the FluidAudio (Kokoro voice) package objects."""
+    if name not in mids:
+        mids[name] = "4D4F43484903" + format(len(mids) + 1, "012X")
+    return mids[name]
 
 
 common = {
@@ -106,6 +117,7 @@ P.append(f"\t\t{i('embedFile')} = {{isa = PBXBuildFile; fileRef = {i('extProduct
 P.append(f"\t\t{j('embedFile')} = {{isa = PBXBuildFile; fileRef = {j('product')}; settings = {{ATTRIBUTES = (RemoveHeadersOnCopy, ); }}; }};\n")
 P.append(f"\t\t{i('coreFile')} = {{isa = PBXBuildFile; productRef = {i('coreProduct')}; }};\n")
 P.append(f"\t\t{i('wireFile')} = {{isa = PBXBuildFile; productRef = {i('wireProduct')}; }};\n")
+P.append(f"\t\t{m('fluidFile')} = {{isa = PBXBuildFile; productRef = {m('fluidProduct')}; }};\n")
 P.append("/* End PBXBuildFile section */\n\n")
 P.append(f"\t\t{i('proxy')} = {{\n\t\t\tisa = PBXContainerItemProxy;\n\t\t\tcontainerPortal = {i('project')};\n\t\t\tproxyType = 1;\n"
          f"\t\t\tremoteGlobalIDString = {i('extTarget')};\n\t\t\tremoteInfo = MochiLiveActivity;\n\t\t}};\n")
@@ -122,7 +134,8 @@ for g in ("MochiPocket", "MochiLiveActivity", "Shared", "SharedArt"):
 P.append(f"\t\t{j('groupMochiNotifications')} = {{\n\t\t\tisa = PBXFileSystemSynchronizedRootGroup;\n\t\t\tpath = MochiNotifications;\n\t\t\tsourceTree = \"<group>\";\n\t\t}};\n")
 P.append(f"\t\t{k('groupSharedData')} = {{\n\t\t\tisa = PBXFileSystemSynchronizedRootGroup;\n\t\t\tpath = SharedData;\n\t\t\tsourceTree = \"<group>\";\n\t\t}};\n")
 P.append(phase("PBXFrameworksBuildPhase", "nseFrameworks"))
-P.append(phase("PBXFrameworksBuildPhase", "appFrameworks", f"\t\t\t\t{i('coreFile')},\n\t\t\t\t{i('wireFile')},\n"))
+P.append(phase("PBXFrameworksBuildPhase", "appFrameworks",
+               f"\t\t\t\t{i('coreFile')},\n\t\t\t\t{i('wireFile')},\n\t\t\t\t{m('fluidFile')},\n"))
 P.append(phase("PBXFrameworksBuildPhase", "extFrameworks"))
 children = "".join(f"\t\t\t\t{i('group' + g)},\n" for g in ("Shared", "SharedArt", "MochiPocket", "MochiLiveActivity"))
 children += f"\t\t\t\t{j('groupMochiNotifications')},\n\t\t\t\t{k('groupSharedData')},\n"
@@ -142,7 +155,7 @@ def target(key, name, phases, deps, product, ptype, packages=""):
 P.append(target("app", "MochiPocket",
                 f"\t\t\t\t{i('appSources')},\n\t\t\t\t{i('appFrameworks')},\n\t\t\t\t{i('appResources')},\n\t\t\t\t{i('embedPhase')},\n",
                 f"\t\t\t\t{i('dependency')},\n\t\t\t\t{j('dependency')},\n", "appProduct", "com.apple.product-type.application",
-                f"\t\t\t\t{i('coreProduct')},\n\t\t\t\t{i('wireProduct')},\n"))
+                f"\t\t\t\t{i('coreProduct')},\n\t\t\t\t{i('wireProduct')},\n\t\t\t\t{m('fluidProduct')},\n"))
 P.append(target("ext", "MochiLiveActivity", f"\t\t\t\t{i('extSources')},\n\t\t\t\t{i('extFrameworks')},\n\t\t\t\t{i('extResources')},\n",
                 "", "extProduct", "com.apple.product-type.app-extension"))
 P.append(f"\t\t{j('target')} = {{\n\t\t\tisa = PBXNativeTarget;\n\t\t\tbuildConfigurationList = {j('configs')};\n"
@@ -155,7 +168,7 @@ P.append(f"\t\t{i('project')} = {{\n\t\t\tisa = PBXProject;\n\t\t\tattributes = 
          f"\t\t\t\tLastSwiftUpdateCheck = 2700;\n\t\t\t\tLastUpgradeCheck = 2700;\n\t\t\t}};\n\t\t\tbuildConfigurationList = {i('projectConfigs')};\n"
          f"\t\t\tdevelopmentRegion = en;\n\t\t\thasScannedForEncodings = 0;\n\t\t\tknownRegions = (\n\t\t\t\ten,\n\t\t\t\tBase,\n\t\t\t);\n"
          f"\t\t\tmainGroup = {i('mainGroup')};\n\t\t\tminimizedProjectReferenceProxies = 1;\n"
-         f"\t\t\tpackageReferences = (\n\t\t\t\t{i('localPackage')},\n\t\t\t);\n\t\t\tpreferredProjectObjectVersion = 77;\n"
+         f"\t\t\tpackageReferences = (\n\t\t\t\t{i('localPackage')},\n\t\t\t\t{m('fluidPackage')},\n\t\t\t);\n\t\t\tpreferredProjectObjectVersion = 77;\n"
          f"\t\t\tproductRefGroup = {i('products')};\n\t\t\tprojectDirPath = \"\";\n\t\t\tprojectRoot = \"\";\n"
          f"\t\t\ttargets = (\n\t\t\t\t{i('appTarget')},\n\t\t\t\t{i('extTarget')},\n\t\t\t\t{j('target')},\n\t\t\t);\n\t\t}};\n")
 for t in ("app", "ext"):
@@ -179,6 +192,12 @@ for lst, (d, r) in (("projectConfigs", ("projDebug", "projRelease")), ("appConfi
 P.append(f"\t\t{i('localPackage')} = {{\n\t\t\tisa = XCLocalSwiftPackageReference;\n\t\t\trelativePath = ..;\n\t\t}};\n")
 P.append(f"\t\t{i('coreProduct')} = {{\n\t\t\tisa = XCSwiftPackageProductDependency;\n\t\t\tpackage = {i('localPackage')};\n\t\t\tproductName = TamagotchiCore;\n\t\t}};\n")
 P.append(f"\t\t{i('wireProduct')} = {{\n\t\t\tisa = XCSwiftPackageProductDependency;\n\t\t\tpackage = {i('localPackage')};\n\t\t\tproductName = TamagotchiWire;\n\t\t}};\n")
+# Kokoro, Mochi's natural voice, runs through FluidAudio (Apache-2.0), pinned to a release that was checked.
+P.append(f"\t\t{m('fluidPackage')} = {{\n\t\t\tisa = XCRemoteSwiftPackageReference;\n"
+         f"\t\t\trepositoryURL = \"https://github.com/FluidInference/FluidAudio.git\";\n"
+         f"\t\t\trequirement = {{\n\t\t\t\tkind = exactVersion;\n\t\t\t\tversion = 0.18.2;\n\t\t\t}};\n\t\t}};\n")
+P.append(f"\t\t{m('fluidProduct')} = {{\n\t\t\tisa = XCSwiftPackageProductDependency;\n\t\t\tpackage = {m('fluidPackage')};\n"
+         f"\t\t\tproductName = FluidAudio;\n\t\t}};\n")
 P.append("\t};\n\trootObject = " + i("project") + ";\n}\n")
 (R / "MochiPocket.xcodeproj" / "project.pbxproj").write_text("".join(P))
 print("wrote", R / "MochiPocket.xcodeproj" / "project.pbxproj", f"({len(ids)} objects)")

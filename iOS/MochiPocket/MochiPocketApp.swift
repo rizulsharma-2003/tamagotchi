@@ -28,6 +28,13 @@ struct MochiPocketApp: App {
                 link.read()
                 Task { await PhoneNotifications.shared.refresh() }
                 PhoneNotifications.shared.catchUp()
+                // Load Mochi's natural voice while you're here, so Siri finds it ready (it lets go after a few quiet minutes).
+                if KokoroVoice.inUse {
+                    Task {
+                        await KokoroVoice.shared.prepare()
+                        KokoroVoice.shared.idle()
+                    }
+                }
             default: break
             }
         }

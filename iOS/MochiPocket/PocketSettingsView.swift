@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 import UserNotifications
@@ -11,6 +12,15 @@ struct PocketSettingsView: View {
     @State private var notifications = PhoneNotifications.shared
     @State private var previewPhase = "working"
     @AppStorage("checkNowUsesCloud") private var checkNowUsesCloud = true
+    @AppStorage(MochiVoice.characterKey) private var voiceCharacter = MochiVoice.Character.mochi.rawValue
+    @AppStorage(MochiVoice.voiceKey) private var voiceID = ""
+    @AppStorage(MochiVoice.siriReadsKey) private var siriReads = false
+    @AppStorage(KokoroVoice.enabledKey) private var natural = false
+    @AppStorage(KokoroVoice.styleKey) private var naturalStyle = KokoroVoice.Style.all[0].id
+    @State private var kokoro = KokoroVoice.shared
+    @State private var voices: [AVSpeechSynthesisVoice] = []
+    @State private var personalVoice = AVSpeechSynthesizer.personalVoiceAuthorizationStatus
+    @State private var reader = UpdatesReader.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -20,6 +30,7 @@ struct PocketSettingsView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         liveActivityCard
+                        voiceCard
                         summariesCard
                         cloudCard
                         macCard
@@ -35,6 +46,7 @@ struct PocketSettingsView: View {
         }
         .tint(MochiStyle.accent)
         .task { await notifications.refresh() }
+        .onDisappear { reader.stop() }
     }
 
     // MARK: Lock Screen & Dynamic Island
@@ -79,6 +91,192 @@ struct PocketSettingsView: View {
                 .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
         }
         .pocketCard()
+    }
+
+    // MARK: Mochi's voice
+
+    private var petName: String { phone.world.settings.petName }
+
+    private var character: MochiVoice.Character { MochiVoice.Character(rawValue: voiceCharacter) ?? .mochi }
+
+    private var voiceCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("\(petName)'s voice").font(.system(.headline, design: .rounded))
+                Spacer()
+                Button { hear() } label: {
+                    Label(reader.speaking ? "Stop" : "Hear It", systemImage: reader.speaking ? "stop.fill" : "play.fill")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+            }
+            Picker("Kind of voice", selection: $natural) {
+                Text("Natural").tag(true)
+                Text("iPhone voice").tag(false)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: natural) { reader.stop() }
+            if natural {
+                naturalControls
+            } else {
+                iPhoneControls
+            }
+            Divider()
+            Text("When you ask Siri “What's waiting in Mochi”").font(.system(.subheadline, design: .rounded))
+            Picker("Who reads it", selection: $siriReads) {
+                Text("\(petName) reads it").tag(false)
+                Text("Siri reads it").tag(true)
+            }
+            .pickerStyle(.segmented)
+            Text(siriReads
+                 ? "Siri reads it in Siri's voice, but only when Siri talks: by default it stays quiet when it thinks you're "
+                   + "looking at the screen. To hear it every time, search “Siri Responses” in Settings and pick Prefer Spoken Responses."
+                 : "\(petName) reads it in this voice every time, while Siri shows the list. Siri's own voice isn't open to apps, "
+                   + "so this is the way to always hear it the same.")
+                .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+        }
+        .pocketCard()
+        .onAppear { voices = MochiVoice.choices() }
+        .onReceive(NotificationCenter.default.publisher(for: AVSpeechSynthesizer.availableVoicesDidChangeNotification)) { _ in
+            voices = MochiVoice.choices()
+        }
+    }
+
+    /// Kokoro: download it once, then pick one of Mochi's natural voices.
+    @ViewBuilder
+    private var naturalControls: some View {
+        if kokoro.downloaded {
+            HStack(spacing: 8) {
+                ForEach(KokoroVoice.Style.all) { style in
+                    Button(style.title) {
+                        naturalStyle = style.id
+                        hear(restart: true)
+                    }
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Capsule().fill(naturalStyle == style.id ? MochiStyle.accent : Color.white.opacity(0.8)))
+                    .foregroundStyle(naturalStyle == style.id ? Color.white : Color.primary)
+                }
+            }
+            Text(KokoroVoice.Style.current.blurb).font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+            if kokoro.phase == .loading {
+                Label("Getting \(petName)'s voice ready…", systemImage: "hourglass")
+                    .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+            }
+        } else {
+            switch kokoro.phase {
+            case .downloading(let fraction):
+                ProgressView(value: fraction) {
+                    Text("Downloading \(petName)'s voice… \(Int(fraction * 100))%").font(.system(.footnote, design: .rounded))
+                }
+            case .loading:
+                ProgressView { Text("Getting it ready…").font(.system(.footnote, design: .rounded)) }
+            default:
+                Button {
+                    Task {
+                        if await kokoro.prepare() {
+                            hear(restart: true)
+                        }
+                    }
+                } label: {
+                    Label("Download \(petName)'s Voice (\(KokoroVoice.downloadSize))", systemImage: "arrow.down.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        if case .failed(let problem) = kokoro.phase {
+            Label(problem, systemImage: "exclamationmark.triangle")
+                .font(.system(.footnote, design: .rounded)).foregroundStyle(.orange)
+        }
+        Text(kokoro.downloaded
+             ? "Kokoro, an open-source voice, speaks on this iPhone: nothing is sent anywhere. If it can't talk for a moment, "
+               + "the iPhone voice reads instead."
+             : "Kokoro is an open-source voice that runs on this iPhone. It downloads once (best on Wi-Fi); after that "
+               + "nothing is sent anywhere. Until then \(petName) uses the iPhone voice.")
+            .font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+        if kokoro.downloaded {
+            Button("Remove the Download", role: .destructive) {
+                reader.stop()
+                kokoro.remove()
+            }
+            .font(.system(.footnote, design: .rounded))
+        }
+    }
+
+    /// The iPhone's own voices, made Mochi's with a character.
+    @ViewBuilder
+    private var iPhoneControls: some View {
+        HStack(spacing: 8) {
+            ForEach(MochiVoice.Character.allCases) { option in
+                Button(option.title) {
+                    voiceCharacter = option.rawValue
+                    hear(restart: true)
+                }
+                .font(.system(.caption, design: .rounded).weight(.semibold))
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(Capsule().fill(character == option ? MochiStyle.accent : Color.white.opacity(0.8)))
+                .foregroundStyle(character == option ? Color.white : Color.primary)
+            }
+        }
+        Text(character.blurb).font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+        HStack {
+            Text("Voice").font(.system(.subheadline, design: .rounded))
+            Spacer()
+            Picker("Voice", selection: $voiceID) {
+                Text("Best on this iPhone" + (MochiVoice.automatic().map { " (\($0.name))" } ?? "")).tag("")
+                voiceSection("Personal Voice", voices.filter { $0.voiceTraits.contains(.isPersonalVoice) })
+                voiceSection("Premium & Enhanced", voices.filter { !$0.voiceTraits.contains(.isPersonalVoice) && $0.quality != .default })
+                voiceSection("Standard", voices.filter { !$0.voiceTraits.contains(.isPersonalVoice) && $0.quality == .default })
+            }
+            .pickerStyle(.menu)
+            .onChange(of: voiceID) { hear(restart: true) }
+        }
+        if personalVoice == .notDetermined {
+            Button("Use a Personal Voice…") {
+                Task {
+                    personalVoice = await AVSpeechSynthesizer.requestPersonalVoiceAuthorization()
+                    voices = MochiVoice.choices()
+                }
+            }
+            .buttonStyle(.bordered)
+        }
+        Text(voiceHint).font(.system(.footnote, design: .rounded)).foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder
+    private func voiceSection(_ title: String, _ list: [AVSpeechSynthesisVoice]) -> some View {
+        if !list.isEmpty {
+            Section(title) {
+                ForEach(list, id: \.identifier) { Text(MochiVoice.label($0)).tag($0.identifier) }
+            }
+        }
+    }
+
+    private var voiceHint: String {
+        let hasPersonal = voices.contains { $0.voiceTraits.contains(.isPersonalVoice) }
+        if personalVoice == .authorized, !hasPersonal {
+            return "No Personal Voice on this iPhone yet: make one in Settings › Accessibility › Personal Voice (it takes a "
+                + "few minutes of reading aloud), then pick it here: \(petName) talks in your voice, with its own character on top."
+        }
+        if !voices.contains(where: { $0.quality != .default }) {
+            return "For a far more natural \(petName), download a Premium voice: in Settings, search “Voices”, pick English "
+                + "and tap a voice marked Premium. It shows up here once it's downloaded."
+        }
+        return "Everything is spoken on this iPhone; nothing is sent anywhere."
+    }
+
+    /// Plays a sample in the voice as set now; a second tap stops it.
+    private func hear(restart: Bool = false) {
+        if reader.speaking, !restart {
+            reader.stop()
+            return
+        }
+        reader.say("Hi, I'm \(petName)! Two things are waiting for you. Your design review is at 4 pm, "
+                   + "and Priya needs you: the invoice for October. That's everything.",
+                   voice: MochiVoice(character: character, voiceID: voiceID.isEmpty ? nil : voiceID,
+                                     natural: natural && kokoro.downloaded, style: .current))
     }
 
     // MARK: Claude's summaries

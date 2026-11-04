@@ -11,6 +11,7 @@
 		4D4F43484901000000000001 = {isa = PBXBuildFile; fileRef = 4D4F43484901000000000002; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4D4F43484900000000000003 = {isa = PBXBuildFile; productRef = 4D4F43484900000000000004; };
 		4D4F43484900000000000005 = {isa = PBXBuildFile; productRef = 4D4F43484900000000000006; };
+		4D4F43484903000000000001 = {isa = PBXBuildFile; productRef = 4D4F43484903000000000002; };
 /* End PBXBuildFile section */
 
 		4D4F43484900000000000007 = {
@@ -85,6 +86,7 @@
 			files = (
 				4D4F43484900000000000003,
 				4D4F43484900000000000005,
+				4D4F43484903000000000001,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -142,6 +144,7 @@
 			packageProductDependencies = (
 				4D4F43484900000000000004,
 				4D4F43484900000000000006,
+				4D4F43484903000000000002,
 			);
 			productName = MochiPocket;
 			productReference = 4D4F4348490000000000000B;
@@ -212,6 +215,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				4D4F4348490000000000001E,
+				4D4F43484903000000000003,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4D4F43484900000000000014;
@@ -500,6 +504,19 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4D4F4348490000000000001E;
 			productName = TamagotchiWire;
+		};
+		4D4F43484903000000000003 = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.18.2;
+			};
+		};
+		4D4F43484903000000000002 = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4D4F43484903000000000003;
+			productName = FluidAudio;
 		};
 	};
 	rootObject = 4D4F43484900000000000008;

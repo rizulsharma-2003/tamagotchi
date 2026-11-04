@@ -61,6 +61,9 @@ struct ContentView: View {
         .onChange(of: link.cloudAskedAt) { _, _ in talk.cloudTookOver() }
         .task {
             if let text = UserDefaults.standard.string(forKey: "sendCommand") { talk.send(typed: text) }
+            #if DEBUG
+            if UserDefaults.standard.bool(forKey: "kokoroTest") { await KokoroVoice.shared.selfTest() }
+            #endif
         }
     }
 
