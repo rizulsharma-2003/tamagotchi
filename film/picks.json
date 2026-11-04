@@ -1,0 +1,7 @@
+{
+  "clip:S09": "from-gemini/S10.mp4",
+  "clip:S10": "from-gemini/S11.mp4",
+  "clip:S11": "from-gemini/S12.mp4",
+  "clip:S12": "from-gemini/S13.mp4",
+  "keyframe:S12": "reference/crops/S12-frame.png"
+}

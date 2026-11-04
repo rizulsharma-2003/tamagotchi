@@ -1,0 +1,233 @@
+<title>Mochi Film Kit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* One reading column: the film's steps in order, each shot a scene card with its two prompts on "Patch's laptop" screens. */
+:root {
+  --bg: #f8f1e8; --surface: #fffaf4; --ink: #2d2420; --muted: #75665d; --line: #e6d8c9;
+  --patch: #b9603f; --mochi: #f3cfae; --screen: #1f1c2c; --screen-ink: #e8e4fb; --screen-dim: #9b95b8;
+  --done: #3c8a57; --amber: #c98a1b; --on-patch: #ffffff; --screen-line: #3b3650; --art-bg: #fbf4ec;
+  --display: "Fredoka", "SF Pro Rounded", ui-rounded, system-ui, sans-serif;
+  --body: "Nunito", ui-rounded, system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #191513; --surface: #221d1a; --ink: #f2e9e1; --muted: #b2a298; --line: #3a312c;
+  --patch: #e0896a; --mochi: #6e5444; --screen: #121019; --screen-ink: #e8e4fb; --screen-dim: #8f89ad;
+  --done: #6cc28a; --amber: #e3a843; --on-patch: #1b1210; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #191513; --surface: #221d1a; --ink: #f2e9e1; --muted: #b2a298; --line: #3a312c;
+  --patch: #e0896a; --mochi: #6e5444; --screen: #121019; --screen-ink: #e8e4fb; --screen-dim: #8f89ad;
+  --done: #6cc28a; --amber: #e3a843; --on-patch: #1b1210; color-scheme: dark }
+
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); }
+.page { max-width: 820px; margin: 0 auto; padding-block: 40px 80px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 48px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 6vw, 2.9rem); }
+h2 { font-size: 1.6rem; }
+h3 { font-size: 1.2rem; }
+p { margin: 0; }
+.eyebrow { font: 600 0.75rem/1 var(--body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--patch); }
+.lede { color: var(--muted); max-width: 62ch; }
+header { display: grid; gap: 14px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.meta strong { color: var(--ink); }
+
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; padding: 0; margin: 0; list-style: none; counter-reset: step; }
+.steps li { counter-increment: step; display: grid; gap: 4px; padding: 14px 16px; border-top: 3px solid var(--patch); background: var(--surface); }
+.steps li::before { content: counter(step); font: 600 1.4rem/1 var(--display); color: var(--patch); }
+.steps b { font-family: var(--display); font-weight: 600; }
+.steps span { color: var(--muted); font-size: 0.9rem; }
+
+section { display: grid; gap: 20px; }
+.section-head { display: grid; gap: 8px; }
+.progress { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.9rem; }
+.bar { flex: 1 1 200px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--done); transition: width .3s; }
+
+.card { display: grid; gap: 16px; padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; min-width: 0; }
+.card.complete { border-color: var(--done); }
+.card-head { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.tc { font: 500 0.8rem/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.slug { font: 600 0.78rem/1.3 var(--mono); letter-spacing: 0.04em; color: var(--muted); }
+.shows { font-size: 0.95rem; }
+.shows b { color: var(--patch); }
+.lines { display: grid; gap: 6px; margin: 0; padding: 12px 16px; border-left: 3px solid var(--mochi); }
+.lines p { max-width: 62ch; }
+.lines b { font-family: var(--display); font-weight: 600; letter-spacing: 0.03em; margin-right: 6px; }
+
+.refs { display: flex; flex-wrap: wrap; gap: 10px; }
+.refs figure { margin: 0; display: grid; gap: 4px; width: 132px; }
+.refs img { width: 132px; height: 96px; object-fit: contain; background: var(--art-bg); border-radius: 8px; border: 1px solid var(--line); }
+.refs figcaption { font: 0.7rem/1.3 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+
+.task { display: grid; gap: 10px; min-width: 0; }
+.task-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.task-head h4 { margin: 0; font: 700 0.95rem/1.3 var(--body); }
+.where { font-weight: 400; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.85rem; color: var(--muted); }
+.chip { font: 500 0.78rem/1 var(--mono); padding: 5px 8px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); color: var(--ink); }
+
+.screen { position: relative; background: var(--screen); color: var(--screen-ink); border-radius: 10px; min-width: 0; }
+.screen pre { margin: 0; padding: 16px 16px 16px 34px; font: 0.8rem/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 15.5em; overflow-y: auto; }
+.screen::before { content: ">"; position: absolute; left: 14px; top: 16px; font: 500 0.8rem/1.6 var(--mono); color: var(--patch); }
+.screen.open pre { max-height: none; }
+.screen-tools { display: flex; gap: 8px; padding: 0 12px 12px; justify-content: flex-end; }
+button { font: 700 0.85rem/1 var(--body); border-radius: 8px; padding: 9px 14px; cursor: pointer; border: 1px solid transparent; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+.copy { background: var(--patch); color: var(--on-patch); }
+.copy.ok { background: var(--done); color: var(--on-patch); }
+.more { background: transparent; color: var(--screen-dim); border-color: var(--screen-line); }
+.checks { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.checks label { display: inline-flex; gap: 8px; align-items: center; font-weight: 600; cursor: pointer; }
+.checks input { width: 18px; height: 18px; accent-color: var(--done); }
+
+.notes { display: grid; gap: 14px; }
+.stack { display: grid; gap: 20px; }
+.notes > div { display: grid; gap: 4px; padding-left: 14px; border-left: 3px solid var(--line); }
+.notes > div > b { font-family: var(--display); font-weight: 600; }
+code { font: 0.85em var(--mono); background: var(--surface); border: 1px solid var(--line); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
+a { color: var(--patch); }
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+
+<div class="page">
+  <header>
+    <span class="eyebrow">Short film kit · Gemini Pro</span>
+    <h1 id="film-title">Mochi &amp; Patch</h1>
+    <p class="lede" id="logline"></p>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <ol class="steps" aria-label="How to make the film">
+    <li><b>Character sheets</b><span>Gemini app · 3 images, made once</span></li>
+    <li><b>A still per shot</b><span>Gemini app · attach the sheets</span></li>
+    <li><b>Animate each still</b><span>Flow · Frames to Video</span></li>
+    <li><b>Hand back to Claude</b><span>Save into <code>film/from-gemini/</code></span></li>
+  </ol>
+
+  <section aria-labelledby="sheets-title">
+    <div class="section-head">
+      <span class="eyebrow">Step 1 · Gemini app</span>
+      <h2 id="sheets-title">Character sheets</h2>
+      <p class="lede">Open <a href="https://gemini.google.com" target="_blank" rel="noopener">gemini.google.com</a>, choose image creation, attach the app art shown (from your Mac at the path under each picture), paste the prompt. Regenerate until it looks right, then download it with the name shown. Every later image uses these, so take your time here.</p>
+    </div>
+    <div id="sheets" class="stack"></div>
+  </section>
+
+  <section aria-labelledby="shots-title">
+    <div class="section-head">
+      <span class="eyebrow">Steps 2 and 3 · Gemini app, then Flow</span>
+      <h2 id="shots-title">The 12 shots</h2>
+      <p class="lede">For each shot: in a new Gemini chat, open Tools and make sure video is switched off and image is on, then make the still with the listed sheets attached. Then in <a href="https://labs.google/flow" target="_blank" rel="noopener">Flow</a>, start a Frames to Video clip, add the still as the first frame, paste the video prompt, and use Veo 3.1 Fast for drafts. Download the clip with the name shown.</p>
+      <div class="progress"><span id="progress-text">0 of 12 clips done</span><span class="bar"><i id="progress-bar"></i></span></div>
+    </div>
+    <div id="shots" class="stack"></div>
+  </section>
+
+  <section aria-labelledby="back-title">
+    <div class="section-head">
+      <span class="eyebrow">Step 4 · Claude</span>
+      <h2 id="back-title">Hand it back</h2>
+    </div>
+    <div class="notes">
+      <div><b>Where to save</b><p>Put the clips and the <code>S12-frame.png</code> still in <code>mac-Tamagotchi/film/from-gemini/</code>. If the names get messy, that's fine: tell Claude and it will sort them by looking at each one.</p></div>
+      <div><b>What Claude does</b><p>Cuts the 12 clips together at 1080p, smooths the joins, adds the MacTamagotchi end card and English subtitles, and mixes in a music track if you add one.</p></div>
+      <div><b>Credits</b><p>Draft every shot in Fast and only redo the best-loved ones in Quality. A shot that goes wrong twice usually needs a simpler action line; ask Claude to rewrite it.</p></div>
+      <div><b>Voices</b><p>Veo makes a fresh voice for every clip, so Mochi can sound a little different from shot to shot. Keep the voice line in the prompt word for word and regenerate any clip that sounds off.</p></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const DATA = /*DATA*/null;
+const store = {
+  get(key) { try { return localStorage.getItem(key) === "1"; } catch { return false; } },
+  set(key, on) { try { localStorage.setItem(key, on ? "1" : "0"); } catch {} },
+};
+const el = (tag, attrs = {}, ...children) => {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) k === "class" ? node.className = v : node.setAttribute(k, v);
+  for (const child of children) node.append(child);
+  return node;
+};
+const tc = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+function screen(text, id) {
+  const pre = el("pre", { id }, text);
+  const copy = el("button", { class: "copy", type: "button" }, "Copy prompt");
+  copy.addEventListener("click", () => {
+    const done = () => { copy.textContent = "Copied"; copy.classList.add("ok"); setTimeout(() => { copy.textContent = "Copy prompt"; copy.classList.remove("ok"); }, 1600); };
+    const select = () => { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); copy.textContent = "Selected: press ⌘C"; };
+    try { navigator.clipboard.writeText(text).then(done, select); } catch { select(); }
+  });
+  const wrap = el("div", { class: "screen" }, pre);
+  const more = el("button", { class: "more", type: "button", "aria-expanded": "false" }, "Show all");
+  more.addEventListener("click", () => { const open = wrap.classList.toggle("open"); more.textContent = open ? "Show less" : "Show all"; more.setAttribute("aria-expanded", String(open)); });
+  wrap.append(el("div", { class: "screen-tools" }, more, copy));
+  return wrap;
+}
+
+function task(title, where, chipsLabel, chips, saveAs, text, id) {
+  const chipRow = el("div", { class: "chips" });
+  if (chips.length) { chipRow.append(chipsLabel); chips.forEach(c => chipRow.append(el("span", { class: "chip" }, c))); }
+  const saveRow = el("div", { class: "chips" }, "Save as", el("span", { class: "chip" }, saveAs));
+  return el("div", { class: "task" },
+    el("div", { class: "task-head" }, el("h4", {}, title, " ", el("span", { class: "where" }, where))),
+    ...(chips.length ? [chipRow] : []), screen(text, id), saveRow);
+}
+
+function check(key, label, onChange) {
+  const box = el("input", { type: "checkbox", id: key });
+  box.checked = store.get(key);
+  box.addEventListener("change", () => { store.set(key, box.checked); onChange(); });
+  return el("label", { for: key }, box, label);
+}
+
+function updateProgress() {
+  const done = DATA.shots.filter(s => store.get(`clip-${s.id}`)).length;
+  document.getElementById("progress-text").textContent = `${done} of ${DATA.shots.length} clips done`;
+  document.getElementById("progress-bar").style.width = `${done / DATA.shots.length * 100}%`;
+  DATA.shots.forEach(s => document.getElementById(`card-${s.id}`).classList.toggle("complete", store.get(`clip-${s.id}`)));
+}
+
+function render() {
+  document.getElementById("film-title").textContent = DATA.title;
+  document.getElementById("logline").textContent = DATA.logline;
+  const meta = document.getElementById("meta");
+  meta.append(el("span", {}, el("strong", {}, `${DATA.runtime} s`), " running time"),
+              el("span", {}, el("strong", {}, `${DATA.shots.length}`), " shots of 8 s"),
+              el("span", {}, el("strong", {}, "16:9"), " 1080p"));
+
+  const sheets = document.getElementById("sheets");
+  for (const s of DATA.sheets) {
+    const refs = el("div", { class: "refs" });
+    s.refs.forEach(r => refs.append(el("figure", {}, el("img", { src: r.src, alt: `${s.name} as drawn in the app` }), el("figcaption", {}, r.path))));
+    const card = el("article", { class: "card" }, el("h3", {}, s.name));
+    if (s.refs.length) card.append(refs);
+    else card.append(el("p", { class: "shows" }, "No app art for this one: Gemini designs the character from the description."));
+    card.append(task("Prompt", "· Gemini app, image", "", [], s.save, s.prompt, `sheet-${s.id}`));
+    sheets.append(card);
+  }
+
+  const shots = document.getElementById("shots");
+  for (const s of DATA.shots) {
+    const lines = el("div", { class: "lines" });
+    s.dialogue.forEach(([who, line]) => lines.append(el("p", {}, el("b", {}, who.toUpperCase()), line)));
+    shots.append(el("article", { class: "card", id: `card-${s.id}` },
+      el("div", { class: "card-head" }, el("span", { class: "tc" }, `${s.id} · ${tc(s.start)}–${tc(s.start + s.seconds)}`), el("h3", {}, s.title)),
+      el("span", { class: "slug" }, s.slug),
+      el("p", { class: "shows" }, el("b", {}, "Shows "), s.shows),
+      lines,
+      task("Still frame", "· Gemini app, image", "Attach", s.attach, s.saveFrame, s.frame, `frame-${s.id}`),
+      task("Video", "· Flow, Frames to Video, still as first frame", "First frame", [s.saveFrame], s.saveClip, s.clip, `clip-text-${s.id}`),
+      el("div", { class: "checks" }, check(`frame-${s.id}-done`, "Still done", () => {}), check(`clip-${s.id}`, "Clip done", updateProgress))));
+  }
+  updateProgress();
+}
+render();
+</script>

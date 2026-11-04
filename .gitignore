@@ -1,0 +1,24 @@
+# Build output
+.build/
+build/
+**/build/
+DerivedData/
+.swiftpm/
+xcuserdata/
+
+# Secrets and signing material: never committed
+.env
+.env.*
+*.p8
+*.p12
+*.pem
+*.cer
+*.mobileprovision
+*.provisionprofile
+
+# Local tools and rendered media
+film/.venv/
+film/out/
+.vscode/
+.DS_Store
+__pycache__/

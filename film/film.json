@@ -1,0 +1,358 @@
+{
+  "title": "Mochi & Patch: Never Alone",
+  "logline": "A developer keeps staring at the terminal, wondering whether Claude is still working or waiting for them, until Mochi climbs out of the menu bar and shows how MacTamagotchi and Mochi Pocket keep watch on the Mac and the iPhone.",
+  "models": {
+    "image": "gemini-3-pro-image-preview",
+    "video_fast": "veo-3.1-fast-generate-preview",
+    "video_standard": "veo-3.1-generate-preview"
+  },
+  "pricing_estimate_usd": {
+    "video_per_second": {
+      "fast": 0.15,
+      "standard": 0.4
+    },
+    "image": 0.15
+  },
+  "budget_usd": 100,
+  "style": "High-end 3D animated feature film look: soft global illumination, a warm cinematic key light with a gentle rim light, rich but soft colours (cream, peach, terracotta, warm wood, dusk blue), shallow depth of field with creamy bokeh, subtle film grain, 35mm anamorphic lens look. Stylised, appealing character design, never photorealistic.",
+  "style_short": "High-end 3D animated feature film, warm cinematic lighting, soft global illumination, shallow depth of field. Keep every character exactly as it looks in the starting image. Keep only the characters that are in the starting image: no new creatures, no speech bubbles, no text or labels.",
+  "negative": "subtitles, captions, on-screen text, watermark, logo, brand logos, extra limbs, extra eyes, distorted faces, photorealistic humans, live action, horror, background music",
+  "audio_rule": "Audio: only the spoken dialogue, the listed sound effects and natural ambience. No background music. No subtitles or text on screen.",
+  "characters": {
+    "mochi": {
+      "name": "Mochi",
+      "look": "Mochi, a small, soft, round, bean-shaped cat-like creature: cream-coloured body with a warm peach-tan edge tone and a smooth velvety plush surface like a mochi dessert, two short rounded cat ears with pink insides, big glossy dark-navy eyes with two white sparkle highlights each, a tiny ω-shaped cat mouth, rosy peach blush on both cheeks, small nub arms at its sides, tiny round feet, a short tail ending in a fluffy curl, and a thin red collar with a small round gold bell. No whiskers, no visible fur strands. It moves with bouncy squash and stretch.",
+      "voice": "a bright, bubbly, high-pitched, playful cartoon voice, warm and a little cheeky",
+      "refs": [
+        "reference/crops/mochi-grownup.png"
+      ],
+      "tag": "the small cream cat-like creature with the red collar"
+    },
+    "patch": {
+      "name": "Patch",
+      "look": "Patch, a small blocky creature built from chunky terracotta-orange cubes (#CC7A5D), like a 3D pixel-art voxel figure with softly bevelled edges and a matte clay finish: a wide rectangular body that is wider than it is tall, two tall narrow black slit eyes and nothing else on its face (no nose, no mouth, no snout block), two stubby block arms on its sides and four short block legs. A small glowing orange asterisk-shaped spinner floats above its head and rotates while it works. It moves in crisp, stepped, stop-motion-like motions.",
+      "voice": "a calm, gentle, slightly low voice with a soft digital shimmer, short matter-of-fact sentences, dry humour",
+      "refs": [
+        "reference/crops/patch-idle.png",
+        "reference/crops/patch-waiting.png",
+        "reference/crops/patch-celebrate.png"
+      ],
+      "tag": "the blocky terracotta-orange creature"
+    },
+    "sam": {
+      "name": "Sam",
+      "look": "Sam, a young adult software developer with messy dark hair, round tortoiseshell glasses, warm brown skin and an oversized mustard-yellow hoodie, designed in the same stylised animated-film look (not photorealistic).",
+      "voice": "a friendly, slightly tired young adult voice",
+      "refs": [],
+      "human": true,
+      "tag": "the developer in the mustard-yellow hoodie"
+    }
+  },
+  "locations": {
+    "desk_night": {
+      "slug": "INT. SAM'S APARTMENT - NIGHT",
+      "description": "Sam's small apartment at night: a wooden desk by a rain-streaked window with blurred city lights, a warm desk lamp, a MacBook Pro with the notch showing a dark terminal window, a mug and a small potted plant."
+    },
+    "menubar": {
+      "slug": "INT. THE MENU BAR - CONTINUOUS",
+      "description": "An extreme macro close-up along the top edge of a MacBook Pro screen at night: the macOS menu bar as a long glowing ledge with the black notch and small status icons, shot like a tiny world."
+    },
+    "mochi_room": {
+      "slug": "INT. MOCHI'S ROOM, INSIDE THE MENU BAR",
+      "description": "Mochi's room, the miniature world that lives inside the menu bar: a cozy room with warm cream walls, a round window with a soft blue sky, a small framed pink-heart picture, a wooden desk with two drawers, a tiny dark laptop on the desk, a small potted plant and a warm wooden floor."
+    },
+    "cafe": {
+      "slug": "INT. CAFÉ - AFTERNOON",
+      "description": "A sunny neighbourhood café in the afternoon: a wooden table by a big window, a latte, Sam's iPhone 14 Pro lying on the table."
+    },
+    "phone_closeup": {
+      "slug": "INT. CAFÉ - ON SAM'S IPHONE",
+      "description": "A close-up of an iPhone 14 Pro with the Dynamic Island at the top, held in Sam's hand in a sunny café; the screen shows Mochi's cozy room (cream walls, round window, little wooden desk)."
+    },
+    "desk_morning": {
+      "slug": "INT. SAM'S APARTMENT - MORNING",
+      "description": "Sam's apartment in the morning: sunlight through the window, the wooden desk, the MacBook Pro open, a small speaker, a plant."
+    },
+    "desk_sunset": {
+      "slug": "INT. SAM'S APARTMENT - SUNSET",
+      "description": "Sam's apartment at golden hour: warm orange sunset light across the wooden desk, the MacBook Pro open and an iPhone standing beside it."
+    }
+  },
+  "shots": [
+    {
+      "id": "S01",
+      "title": "Is it waiting for me?",
+      "location": "desk_night",
+      "characters": [
+        "sam"
+      ],
+      "keyframe": "Wide shot, slightly high angle: Sam sits hunched at the desk, chin on fist, staring at the MacBook's dark terminal, lit by the screen glow and the lamp, rain on the window.",
+      "camera": "Slow push-in towards Sam.",
+      "action": "Sam lifts their chin off their fist, leans closer to the screen and squints, says the line to themselves, then slumps back in the chair with a sigh.",
+      "dialogue": [
+        [
+          "sam",
+          "Is Claude still working... or is it waiting for me again?"
+        ]
+      ],
+      "sfx": "rain on the window, soft keyboard taps, a tired sigh",
+      "shows": "The problem: you can't tell whether Claude Code is still working, waiting for you, or done."
+    },
+    {
+      "id": "S02",
+      "title": "Psst, up here",
+      "location": "menubar",
+      "characters": [
+        "mochi"
+      ],
+      "keyframe": "Macro shot along the glowing menu bar: tiny Mochi stands on the menu bar next to the notch, leaning over the edge of the screen and looking down towards the camera.",
+      "camera": "Macro lens, slow slide along the menu bar, then hold on Mochi.",
+      "action": "Mochi trots along the menu bar, stops at the edge, leans over and waves a nub arm at the camera, bouncing with squash and stretch; its bell jingles.",
+      "dialogue": [
+        [
+          "mochi",
+          "Psst! Up here! Stop staring at the terminal. Patch and I have got this."
+        ]
+      ],
+      "sfx": "tiny pitter-patter footsteps, a little bell jingle",
+      "shows": "Mochi lives in the Mac's menu bar."
+    },
+    {
+      "id": "S03",
+      "title": "What Claude is really doing",
+      "location": "mochi_room",
+      "characters": [
+        "mochi",
+        "patch"
+      ],
+      "keyframe": "Medium-wide shot inside Mochi's room: Patch stands on the wooden desk next to the tiny laptop, typing, the orange spinner glowing above its head; Mochi sits on the floor in front of the desk, smiling at the camera.",
+      "camera": "Gentle dolly-in at desk height.",
+      "action": "Patch types in crisp stepped motions while its spinner rotates and the laptop screen flickers with coloured code lines. Mochi gestures proudly towards Patch, then Patch glances at the camera.",
+      "dialogue": [
+        [
+          "mochi",
+          "Patch shows what Claude is really doing: reading, editing, running tests."
+        ],
+        [
+          "patch",
+          "Currently: editing."
+        ]
+      ],
+      "sfx": "soft clicky typing, a gentle digital hum",
+      "shows": "Patch mirrors what Claude Code is really doing, read from Claude Code's own hooks."
+    },
+    {
+      "id": "S04",
+      "title": "Claude needs you",
+      "location": "mochi_room",
+      "characters": [
+        "patch",
+        "mochi"
+      ],
+      "keyframe": "Medium shot inside Mochi's room: the tiny laptop screen shows a big amber question mark; Patch faces the camera with one blocky arm raised high, a small speech bubble with an orange padlock icon beside it; Mochi is mid-jump beside the desk, waving both arms.",
+      "camera": "Static medium shot with a slight handheld wobble on Mochi's jump.",
+      "action": "Patch's spinner turns steady amber. Patch raises its arm and holds it up. Mochi jumps up and down, waving both arms at the camera urgently.",
+      "dialogue": [
+        [
+          "patch",
+          "Claude needs a yes from you."
+        ],
+        [
+          "mochi",
+          "Sam! Permission needed, right now!"
+        ]
+      ],
+      "sfx": "a soft alert chime, bouncy boing sounds as Mochi jumps",
+      "shows": "When Claude needs permission, Patch raises a hand and Mochi waves at you."
+    },
+    {
+      "id": "S05",
+      "title": "Coffee time",
+      "location": "desk_night",
+      "characters": [
+        "sam",
+        "mochi"
+      ],
+      "keyframe": "Over-the-shoulder shot from beside the MacBook: Sam smiles and clicks the trackpad; tiny Mochi sits on the top edge of the MacBook's lid, legs dangling, looking at Sam.",
+      "camera": "Static, then a slight tilt up as Sam stands.",
+      "action": "Sam clicks to approve, nods, stands up and grabs a jacket to leave. Tiny Mochi on the lid looks worried, its ears drooping.",
+      "dialogue": [
+        [
+          "sam",
+          "Approved. I'm grabbing coffee."
+        ],
+        [
+          "mochi",
+          "But what if Claude needs you again?"
+        ]
+      ],
+      "sfx": "a trackpad click, a chair rolling back, a jacket rustle",
+      "shows": "The next problem: stepping away from the Mac means missing Claude."
+    },
+    {
+      "id": "S06",
+      "title": "The Dynamic Island",
+      "location": "cafe",
+      "characters": [
+        "mochi",
+        "patch"
+      ],
+      "keyframe": "Extreme close-up of an iPhone lying face up on the café table, its screen filling most of the frame and facing the camera, a latte softly blurred behind it. At the top of the lock screen, the small black pill has stretched into a wider black rounded window; inside it, tiny flat on-screen Mochi waves and tiny flat on-screen Patch raises one arm beside a small amber question mark. Below, a rounded lock-screen card shows Mochi's cozy little room. Sam's hand, in a mustard-yellow hoodie sleeve, reaches in from the right edge.",
+      "camera": "Slow push-in on the phone screen; the phone stays flat on the table.",
+      "action": "The screen wakes up. The black window at the top of the screen widens a little, and inside it tiny on-screen Mochi bounces and waves while tiny Patch keeps its arm raised. Sam's hand reaches in and taps the black window. Everything on the phone stays flat on the screen.",
+      "dialogue": [
+        [
+          "mochi",
+          "Psst, it's me! Claude's asking for you again."
+        ]
+      ],
+      "sfx": "a gentle phone chime, soft café chatter, a cup clinking",
+      "shows": "Mochi Pocket: the Live Activity in the Dynamic Island and on the Lock Screen lights up when Claude needs you.",
+      "audio_note": "Mochi's tiny voice comes from the phone's speaker."
+    },
+    {
+      "id": "S07",
+      "title": "Hold Mochi to talk",
+      "location": "phone_closeup",
+      "characters": [
+        "mochi",
+        "sam"
+      ],
+      "keyframe": "Close-up of the iPhone screen in Sam's hand: Mochi stands in its cozy room on the screen; Sam's thumb presses gently on Mochi; Mochi turns its right ear and shoulder towards the thumb, listening.",
+      "camera": "Close-up, very slow push-in on the screen.",
+      "action": "Sam's thumb holds on Mochi; Mochi leans in and tilts its right ear forward, listening, then nods eagerly and does a happy little hop.",
+      "dialogue": [
+        [
+          "sam",
+          "Tell Claude to go ahead and run the tests."
+        ],
+        [
+          "mochi",
+          "Sending it to your Mac!"
+        ]
+      ],
+      "sfx": "a soft listening chime, a quick whoosh",
+      "shows": "Hold Mochi on the iPhone to talk; the request runs on the Mac through Ask Mochi."
+    },
+    {
+      "id": "S08",
+      "title": "Tests passed",
+      "location": "mochi_room",
+      "characters": [
+        "patch",
+        "mochi"
+      ],
+      "keyframe": "Medium shot inside Mochi's room: Patch hops in the air above the desk with a tiny golden trophy raised, confetti bursting; the laptop screen shows golden sparkles; Mochi bounces with joy on the floor.",
+      "camera": "Low angle, slight slow motion at the top of the hop.",
+      "action": "Patch crouches, hops up and lands with a squash, raising a tiny golden trophy as confetti rains. Mochi bounces up and the two high-five.",
+      "dialogue": [
+        [
+          "patch",
+          "Tests passed. Turn complete."
+        ],
+        [
+          "mochi",
+          "High five!"
+        ]
+      ],
+      "sfx": "a confetti pop, a short bright success chime, a high-five slap",
+      "shows": "Finished turns and passing tests get a celebration."
+    },
+    {
+      "id": "S09",
+      "title": "Summary and reply",
+      "location": "phone_closeup",
+      "characters": [
+        "sam",
+        "mochi"
+      ],
+      "keyframe": "Over-the-shoulder close-up from just behind Sam: the back of Sam's messy dark hair and a mustard-yellow hoodie shoulder fill the left edge, softly out of focus, and Sam's face is not visible at all. Sam's hand holds the iPhone upright with its screen facing the camera, sharp and large in the frame. At the top of the screen a rounded white notification banner with a tiny Mochi icon has slid down. Below it, on the screen, Mochi stands in its cozy room, big and clearly visible, looking out at the viewer with its mouth open mid-sentence and one nub arm pointing up at the notification. The sunny café is blurred in the background.",
+      "camera": "Static over-the-shoulder shot, focus locked on the phone screen.",
+      "action": "On the phone screen, Mochi talks to the viewer, bouncing a little and pointing up at the notification with a nub arm. Then Sam's thumb taps the notification, a small reply box with a keyboard slides up, and Sam types a quick reply with one thumb. Sam's face stays out of view the whole time.",
+      "dialogue": [
+        [
+          "mochi",
+          "Here's what Claude changed. Reply right here, and I'll pass it on."
+        ]
+      ],
+      "sfx": "a notification ping, soft typing taps, café ambience",
+      "shows": "Claude's summary arrives on the iPhone and you can reply to that session from the notification.",
+      "audio_note": "Mochi's voice comes from the phone's speaker and Mochi's mouth on the screen moves with the words. Sam is silent the whole time."
+    },
+    {
+      "id": "S10",
+      "title": "Ask Mochi",
+      "location": "desk_morning",
+      "characters": [
+        "sam",
+        "mochi"
+      ],
+      "keyframe": "Morning sunlight: Sam at the desk, fingers resting on the Option and Space keys of the MacBook; a small rounded floating card has popped up below the menu bar with tiny Mochi inside it, ears perked, listening.",
+      "camera": "Medium shot from beside the desk, rack focus from Sam to the floating card.",
+      "action": "Sam holds Option-Space and speaks; Mochi's card glows; the lo-fi music from the small speaker stops and a chat window slides open on the Mac's screen.",
+      "dialogue": [
+        [
+          "sam",
+          "Mochi, pause the music and open Slack."
+        ],
+        [
+          "mochi",
+          "Done and done!"
+        ]
+      ],
+      "sfx": "quiet lo-fi music from the desk speaker that cuts off, a soft whoosh of a window opening",
+      "shows": "Ask Mochi on the Mac: hold Option-Space to control the Mac by voice or text."
+    },
+    {
+      "id": "S11",
+      "title": "Focus, then stretch",
+      "location": "desk_morning",
+      "characters": [
+        "sam",
+        "mochi"
+      ],
+      "keyframe": "Medium shot: Sam types, deeply focused; on the top edge of the MacBook lid tiny Mochi is curled up asleep with little floating Z's; a small glowing timer ring hovers near the menu bar.",
+      "camera": "Locked-off shot with a gentle time-lapse light shift.",
+      "action": "Mochi sleeps while Sam codes and the light shifts; then Mochi wakes, yawns and stretches big; Sam leans back and stretches both arms up too.",
+      "dialogue": [
+        [
+          "mochi",
+          "Twenty-five minutes of focus... stretch break!"
+        ]
+      ],
+      "sfx": "soft snoring, a gentle bell ding, a big yawn",
+      "shows": "Focus buddy: Mochi naps while you focus and wakes you for a stretch break."
+    },
+    {
+      "id": "S12",
+      "title": "We've got you",
+      "location": "desk_sunset",
+      "characters": [
+        "mochi",
+        "patch",
+        "sam"
+      ],
+      "keyframe": "Golden-hour wide shot of the desk: the MacBook and the iPhone side by side; tiny Mochi sits on the MacBook lid and tiny Patch stands beside it; the iPhone screen glows with the same cozy room; Sam leans back smiling in the background.",
+      "camera": "Slow pull-back and rise.",
+      "action": "Patch gives a small stepped wave; Mochi waves both arms at the camera, its bell jingling, as the camera pulls back.",
+      "dialogue": [
+        [
+          "patch",
+          "Today: twelve turns, all tests green."
+        ],
+        [
+          "mochi",
+          "Your Mac, your iPhone, your Claude. We've got you."
+        ]
+      ],
+      "sfx": "a bell jingle, warm evening ambience",
+      "shows": "The daily recap, and the promise: Mac and iPhone, together."
+    }
+  ],
+  "end_card": {
+    "title": "MacTamagotchi",
+    "subtitle": "with Mochi Pocket for iPhone",
+    "tagline": "Local-first · Real Claude Code hooks · No screen reading",
+    "seconds": 4
+  }
+}

@@ -1,0 +1,1 @@
+../../Sources/App/Rendering/PixelMascot.swift
