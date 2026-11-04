@@ -1,0 +1,20 @@
+name: mochi_art
+description: >-
+  Mochi, Patch and their room drawn with CustomPainters: a port of the Swift renderers in
+  Sources/App/Rendering (PetRenderer, CompanionRenderer, PixelMascot, ItemRenderer,
+  AccessoryRenderer, ThemeRenderer, SceneRenderer) and the room and seasonal art.
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
