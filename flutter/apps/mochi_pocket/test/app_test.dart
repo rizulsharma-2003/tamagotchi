@@ -68,8 +68,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   }
 
-  /// The Mac shares its state and is online.
+  /// The Mac shares its state and is online (the relay lists the room first, as its `sync` does).
   Future<void> macShares(WidgetTester tester) async {
+    relay.devices();
     relay.presence(macOnline: true);
     relay.fromMac(LinkKey.look, sampleLook().toValue());
     relay.fromMac(LinkKey.claude, const ClaudeMirror(phase: 'working', category: 'edit').toValue());
@@ -87,13 +88,18 @@ void main() {
 
   testWidgets('unpaired: the pairing screen; scanning the Mac\'s code pairs and shows home', (tester) async {
     await launch(tester, scan: (_) async => pairingCode.url);
-    expect(find.text('Pair with your Mac'), findsOneWidget);
-    expect(find.textContaining('Pair Another Device'), findsOneWidget);
+    expect(find.text('Pair with your Mac or PC'), findsOneWidget);
+    expect(find.textContaining('Pair a Phone'), findsOneWidget);
+    expect(find.textContaining('Settings › Phones'), findsOneWidget);
     await tester.tap(find.text('Scan the Code'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     expect(model.phase, PairingPhase.paired);
     expect(store.saved, phoneCredentials);
+    // Named from the pairing code until the relay lists the room, then by what it is.
+    expect(find.text('and Patch, from Test Mac'), findsOneWidget);
+    relay.devices();
+    await tester.pump();
     expect(find.text('and Patch, from your Mac'), findsOneWidget);
     expect(notifier.permissionRequests, 1, reason: 'notifications are asked for once paired');
     await finish(tester);
@@ -110,7 +116,8 @@ void main() {
   testWidgets('home mirrors the iPhone: name, Mac online, friendship, the room, actions, cards', (tester) async {
     store.saved = phoneCredentials;
     await launch(tester);
-    expect(find.text('Connecting…').evaluate().isNotEmpty || find.text('Mac away').evaluate().isNotEmpty, isTrue);
+    // Before the relay lists the room, the computer is only known by the pairing code's name.
+    expect(find.text('Connecting…').evaluate().isNotEmpty || find.text('Computer away').evaluate().isNotEmpty, isTrue);
     await macShares(tester);
     expect(find.text('Mochi'), findsOneWidget);
     expect(find.text('Mac online'), findsOneWidget);
@@ -136,9 +143,22 @@ void main() {
   testWidgets('the Mac away shows honestly, with when it left', (tester) async {
     store.saved = phoneCredentials;
     await launch(tester);
+    relay.devices();
     relay.presence(macOnline: false, lastSeen: DateTime(2026, 11, 5, 14, 2).millisecondsSinceEpoch / 1000);
     await tester.pump();
     expect(find.textContaining('Mac away since'), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('a PC host is named as a PC', (tester) async {
+    store.saved = phoneCredentials;
+    await launch(tester);
+    relay.devices(platform: 'windows', name: 'DESKTOP-7');
+    relay.presence(macOnline: false, lastSeen: DateTime(2026, 11, 5, 14, 2).millisecondsSinceEpoch / 1000);
+    await tester.pump();
+    expect(find.textContaining('PC away since'), findsOneWidget);
+    expect(find.text('and Patch, from your PC'), findsOneWidget);
+    expect(find.text('Claude on your PC'), findsOneWidget);
     await finish(tester);
   });
 
@@ -382,7 +402,7 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('Paired with Test Mac'), findsOneWidget);
+    expect(find.text('Paired with Test Mac (Mac)'), findsOneWidget);
     expect(find.text('Test Phone'), findsOneWidget);
     expect(find.text('relay.test'), findsOneWidget);
     // This model has no push service: Settings says alerts only come while the app is open, and why.
@@ -396,7 +416,7 @@ void main() {
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 200));
     }
-    expect(find.text('Pair with your Mac'), findsOneWidget);
+    expect(find.text('Pair with your Mac or PC'), findsOneWidget);
     expect(store.saved, isNull);
     expect(leaves.single.device, 'dev_phone');
     await finish(tester);
@@ -413,7 +433,7 @@ void main() {
     for (var i = 0; i < 3; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
-    expect(find.text('Pair with your Mac'), findsOneWidget);
+    expect(find.text('Pair with your Mac or PC'), findsOneWidget);
     expect(leaves, isEmpty, reason: 'the room is already gone');
     await finish(tester);
   });

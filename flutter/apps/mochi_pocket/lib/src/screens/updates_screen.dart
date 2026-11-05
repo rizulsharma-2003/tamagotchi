@@ -129,7 +129,7 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
               children: [
                 const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5)),
                 const SizedBox(width: Space.m),
-                Expanded(child: Text('Waiting to hear from your Mac…', style: context.type.footnote)),
+                Expanded(child: Text('Waiting to hear from ${model.host.yours}…', style: context.type.footnote)),
               ],
             ),
           ),
@@ -154,7 +154,7 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(Space.xs, Space.xs, Space.xs, 0),
           child: Text(
-            'Checked by ${agent?.origin?.startsWith('cloud') == true ? 'Mochi Cloud' : 'your Mac'} ${relativeTime(looked)}. Pull down to check again.',
+            'Checked by ${agent?.origin?.startsWith('cloud') == true ? 'Mochi Cloud' : model.host.yours} ${relativeTime(looked)}. Pull down to check again.',
             style: context.type.footnote,
           ),
         ),

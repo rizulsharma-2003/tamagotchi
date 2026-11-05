@@ -73,8 +73,10 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
     final unpair = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: Text('Unpair from ${model.macName}?'),
-        content: const Text("Mochi forgets this pairing and leaves your Mac's room. To use it again, pair with a new code from your Mac."),
+        title: Text('Unpair from ${model.host.name ?? model.host.yours}?'),
+        content: Text(
+          "Mochi forgets this pairing and leaves ${model.host.yours}'s room. To use it again, pair with a new code from your Mac or PC.",
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Cancel')),
           TextButton(
@@ -129,17 +131,18 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   Widget _link() {
     final credentials = model.credentials;
     final lastSeen = model.mac?.lastSeen;
+    final host = model.host;
     final explanation = switch (model.connection) {
       MacConnection.macOnline =>
-        'Connected to the relay, and your Mac is online. Messages reach it in under a second, end-to-end encrypted.',
+        'Connected to the relay, and ${host.yours} is online. Messages reach it in under a second, end-to-end encrypted.',
       MacConnection.macAway =>
-        "Connected to the relay, but your Mac isn't (it's asleep or off${lastSeen == null ? '' : ', since ${clockTime(context, lastSeen)}'}). "
+        "Connected to the relay, but ${host.yours} isn't (it's asleep or off${lastSeen == null ? '' : ', since ${clockTime(context, lastSeen)}'}). "
             'What you send waits for it for 10 minutes.',
       MacConnection.connecting => 'Connecting to the relay…',
       MacConnection.noConnection =>
         "Can't reach the relay right now (no internet?). What you send waits here and goes when the phone is back online.",
       MacConnection.removed =>
-        "This phone isn't in your Mac's room any more: it was removed, or the room was deleted. Unpair, then pair again.",
+        "This phone isn't in ${host.yours}'s room any more: it was removed, or the room was deleted. Unpair, then pair again.",
     };
     return ClayCard(
       child: Column(
@@ -158,7 +161,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
           ),
           const SizedBox(height: Space.m),
           NoteLabel(
-            text: 'Paired with ${model.macName}',
+            text: 'Paired with ${model.hostList}',
             icon: Icons.link_rounded,
             tint: context.palette.tint,
             textColor: context.palette.ink,
@@ -216,7 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
         Icons.notifications_active_rounded,
         p.success,
         'Notifications: on (Firebase)',
-        "Claude's finished turns, approvals and news from your Mac reach this phone even when Mochi is closed. "
+        "Claude's finished turns, approvals and news from ${model.host.yours} reach this phone even when Mochi is closed. "
             'They are end-to-end encrypted: only this phone can read them.',
       ),
       PushStatus.starting => (
@@ -232,7 +235,12 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
         'Push is off because ${model.pushProblem ?? 'it could not be set up'}. Alerts still arrive while the app is open '
             'or running in the background.',
       ),
-      PushStatus.off => (Icons.notifications_off_rounded, p.inkSecondary, 'Notifications: off', 'Pair with your Mac to get its alerts.'),
+      PushStatus.off => (
+        Icons.notifications_off_rounded,
+        p.inkSecondary,
+        'Notifications: off',
+        'Pair with your Mac or PC to get its alerts.',
+      ),
     };
     return MergeSemantics(
       child: Row(

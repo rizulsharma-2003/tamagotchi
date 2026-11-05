@@ -14,6 +14,7 @@ class AgentCard extends StatelessWidget {
     required this.pending,
     required this.waiting,
     required this.petName,
+    required this.host,
     required this.opener,
     required this.markDone,
     required this.seeAll,
@@ -28,6 +29,9 @@ class AgentCard extends StatelessWidget {
   /// The card's items you haven't marked done.
   final List<AgentNote> waiting;
   final String petName;
+
+  /// The computer that checked, by name ("your Mac", "your PC").
+  final LinkHostName host;
   final LinkOpener opener;
   final void Function(AgentNote note) markDone;
   final VoidCallback seeAll;
@@ -157,7 +161,7 @@ class AgentCard extends StatelessWidget {
             children: [
               if (looked != null)
                 Text(
-                  'Checked by ${pending.origin?.startsWith('cloud') == true ? 'Mochi Cloud' : 'your Mac'} · ${relativeTime(looked)}',
+                  'Checked by ${pending.origin?.startsWith('cloud') == true ? 'Mochi Cloud' : host.yours} · ${relativeTime(looked)}',
                   style: context.type.footnote,
                 ),
               OutlinedButton.icon(

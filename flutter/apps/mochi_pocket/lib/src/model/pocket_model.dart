@@ -66,12 +66,14 @@ class PocketModel extends ChangeNotifier {
     LinkLeaver? leave,
     PushService? push,
     ShownAlerts? shown,
+    LocalDocument? hostDocument,
     this.deviceName = 'Android phone',
     DateTime Function()? clock,
   }) : _push = push,
        _shown = shown ?? MemoryShownAlerts(),
        _store = credentialStore,
        _doneDocument = doneDocument,
+       _hostDocument = hostDocument ?? MemoryDocument(),
        _notifier = notifier,
        _connect = connect,
        _join = join ?? _relayJoin,
@@ -84,6 +86,10 @@ class PocketModel extends ChangeNotifier {
   final ShownAlerts _shown;
   final CredentialStore _store;
   final LocalDocument _doneDocument;
+
+  /// The platform of the computer last seen in this phone's room (`{"room", "platform"}`), so its name doesn't
+  /// change while the relay's device list loads.
+  final LocalDocument _hostDocument;
   final AlertNotifier _notifier;
   final LinkConnector _connect;
   final LinkJoiner _join;
@@ -111,6 +117,7 @@ class PocketModel extends ChangeNotifier {
 
   LinkStatus _status = LinkStatus.offline;
   List<LinkPeer> _peers = const [];
+  LinkPlatform? _knownHostPlatform;
 
   PetLook? _look;
   ClaudeMirror? _claude;
@@ -147,14 +154,17 @@ class PocketModel extends ChangeNotifier {
   LinkStatus get status => _status;
   List<LinkPeer> get peers => _peers;
 
-  /// "Rizul's MacBook", from the pairing code.
-  String get macName => _credentials?.peerName ?? 'your Mac';
+  /// The computer this phone talks to, named for the screens: "your Mac", "your PC", "BELPL-LT-636 (Mac)". Until the
+  /// relay lists the room, the name from the pairing code and the platform last seen here.
+  LinkHostName get host =>
+      LinkPeerNames.host(_peers, me: _credentials?.device, pairedName: _credentials?.peerName, knownPlatform: _knownHostPlatform);
 
-  /// The computer in the room (an online one first).
-  LinkPeer? get mac {
-    final hosts = _peers.where((peer) => peer.role == 'host' && peer.device != _credentials?.device).toList();
-    return hosts.where((peer) => peer.online).firstOrNull ?? hosts.firstOrNull;
-  }
+  /// Every computer in the room, labeled: "BELPL-LT-636 (Mac)", or two joined with "and".
+  String get hostList =>
+      LinkPeerNames.hostList(_peers, me: _credentials?.device, pairedName: _credentials?.peerName, knownPlatform: _knownHostPlatform);
+
+  /// The computer in the room (an online one first, then the one seen last).
+  LinkPeer? get mac => LinkPeerNames.hosts(_peers, me: _credentials?.device).firstOrNull;
 
   bool get macOnline => _status == LinkStatus.online && (mac?.online ?? false);
 
@@ -212,6 +222,7 @@ class PocketModel extends ChangeNotifier {
       _log('the saved pairing could not be read (${error.runtimeType})');
     }
     _done = DoneMarks.fromJson(await _doneDocument.read())..prune(now: _now);
+    _knownHostPlatform = await _savedHostPlatform(saved?.room);
     _log('loaded ${saved == null ? 'no pairing' : 'the pairing'} in ${watch.elapsedMilliseconds} ms');
     if (saved != null && saved.roomKey != null) {
       _use(saved);
@@ -227,12 +238,12 @@ class PocketModel extends ChangeNotifier {
   Future<bool> pair(String text) async {
     final code = PairingCode.parse(text);
     if (text.trim().isEmpty) {
-      _problem = 'Nothing to paste. Copy the pairing link on your Mac first, or scan its code.';
+      _problem = 'Nothing to paste. Copy the pairing link on your Mac or PC first, or scan its code.';
       notifyListeners();
       return false;
     }
     if (code == null) {
-      _problem = "That isn't a Mochi pairing link. On your Mac: Mochi's Settings › iPhone › Mochi Link › Pair Another Device…";
+      _problem = "That isn't a Mochi pairing link. On your Mac or PC: open Mochi's Settings › Phones › Pair a Phone.";
       notifyListeners();
       return false;
     }
@@ -248,6 +259,7 @@ class PocketModel extends ChangeNotifier {
       await _store.save(joined);
       await _disconnect();
       _clearRoom();
+      _knownHostPlatform = await _savedHostPlatform(joined.room);
       _use(joined);
       _phase = PairingPhase.paired;
       _log('paired with ${code.name}');
@@ -266,11 +278,11 @@ class PocketModel extends ChangeNotifier {
   }
 
   static String _explain(LinkPairingException error) => switch (error.code) {
-    'invite_used' => 'That code was already used. On your Mac, make a new one (Pair Another Device…) and scan it again.',
+    'invite_used' => 'That code was already used. On your Mac or PC, make a new one (Pair a Phone…) and scan it again.',
     'invite_expired' ||
     'invite_not_found' ||
-    'invite_invalid' => 'That code has expired (they last 10 minutes). On your Mac, make a new one and scan it again.',
-    'room_full' => "Your Mac's room is full (8 devices). Remove one on your Mac first.",
+    'invite_invalid' => 'That code has expired (they last 10 minutes). On your Mac or PC, make a new one and scan it again.',
+    'room_full' => 'That room is full (8 devices). Remove one on your Mac or PC first.',
     _ => error.message,
   };
 
@@ -288,12 +300,14 @@ class PocketModel extends ChangeNotifier {
     _credentials = null;
     _clearRoom();
     _done = DoneMarks();
+    _knownHostPlatform = null;
     _phase = PairingPhase.unpaired;
     _problem = null;
     notifyListeners();
     try {
       await _store.delete();
       await _doneDocument.delete();
+      await _hostDocument.delete();
     } on Object catch (error) {
       _log('unpairing could not clear everything (${error.runtimeType})');
     }
@@ -420,7 +434,31 @@ class PocketModel extends ChangeNotifier {
     _status = presence.status;
     _peers = presence.peers;
     if (presence.status == LinkStatus.removed) _log('the relay ended this pairing');
+    _rememberHostPlatform();
     notifyListeners();
+  }
+
+  /// The host platform saved for [room], if this phone has seen one there.
+  Future<LinkPlatform?> _savedHostPlatform(String? room) async {
+    if (room == null) return null;
+    try {
+      final json = await _hostDocument.read();
+      return json?['room'] == room ? LinkPlatform.parse(json?['platform'] as String?) : null;
+    } on Object {
+      return null;
+    }
+  }
+
+  void _rememberHostPlatform() {
+    final room = _credentials?.room;
+    final platform = LinkPeerNames.hosts(_peers, me: _credentials?.device).map((peer) => peer.linkPlatform).nonNulls.firstOrNull;
+    if (room == null || platform == null || platform == _knownHostPlatform) return;
+    _knownHostPlatform = platform;
+    unawaited(
+      _hostDocument
+          .write({'room': room, 'platform': platform.name})
+          .catchError((Object error) => _log('the host platform was not saved (${error.runtimeType})')),
+    );
   }
 
   /// Reads every state value the Mac shares.

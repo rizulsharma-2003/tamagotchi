@@ -11,6 +11,7 @@ void main() {
   late FakeNotifier notifier;
   late MemoryCredentialStore store;
   late MemoryDocument doneDocument;
+  late MemoryDocument hostDocument;
   late List<(PairingCode, String)> joins;
   late List<LinkCredentials> leaves;
   late PocketModel model;
@@ -20,6 +21,7 @@ void main() {
     final made = PocketModel(
       credentialStore: store,
       doneDocument: doneDocument,
+      hostDocument: hostDocument,
       notifier: notifier,
       connect: relay.connect,
       join:
@@ -47,6 +49,7 @@ void main() {
     notifier = FakeNotifier();
     store = MemoryCredentialStore();
     doneDocument = MemoryDocument();
+    hostDocument = MemoryDocument();
     joins = [];
     leaves = [];
     cues = [];
@@ -66,7 +69,7 @@ void main() {
     test('a saved pairing reconnects at launch with its own credential', () async {
       await paired();
       expect(model.phase, PairingPhase.paired);
-      expect(model.macName, 'Test Mac');
+      expect(model.host.yours, 'Test Mac', reason: 'the name from the pairing code until the relay lists the room');
       expect(relay.socket.url.toString(), 'wss://relay.test/v1/rooms/room_1/socket');
       expect(relay.socket.headers['authorization'], 'Bearer dev_phone.phone-secret');
       expect(relay.socket.sent.first['op'], 'hello');
@@ -87,7 +90,8 @@ void main() {
     test("text that isn't a pairing link is refused with a hint, and nothing is joined", () async {
       await model.load();
       expect(await model.pair('https://example.com'), isFalse);
-      expect(model.problem, contains('Pair Another Device'));
+      expect(model.problem, contains('On your Mac or PC'));
+      expect(model.problem, contains('Settings › Phones › Pair a Phone'));
       expect(joins, isEmpty);
       expect(model.phase, PairingPhase.unpaired);
     });
@@ -179,6 +183,35 @@ void main() {
       await pumpEventQueue();
       expect(model.connection, MacConnection.macAway);
       expect(model.mac?.lastSeen, 1762243200);
+    });
+
+    test('the computer is named from the relay: a Mac or a PC, with its own name', () async {
+      await paired();
+      relay.devices(name: 'BELPL-LT-636', online: true);
+      await pumpEventQueue();
+      expect(model.host.yours, 'your Mac');
+      expect(model.hostList, 'BELPL-LT-636 (Mac)');
+      relay.devices(platform: 'windows', name: 'DESKTOP-7', online: true);
+      await pumpEventQueue();
+      expect(model.host.yours, 'your PC');
+      expect(model.host.onlineText, 'PC online');
+      expect(model.hostList, 'DESKTOP-7 (PC)');
+    });
+
+    test("the computer's platform is remembered for its room, so the name doesn't change while the room loads", () async {
+      await paired();
+      relay.devices(name: 'BELPL-LT-636');
+      await pumpEventQueue();
+      expect(hostDocument.json, {'room': 'room_1', 'platform': 'macOS'});
+      model.dispose();
+      model = makeModel();
+      await paired();
+      expect(model.peers, isEmpty);
+      expect(model.host.yours, 'your Mac');
+      expect(model.hostList, 'Test Mac (Mac)');
+      await model.unpair();
+      expect(hostDocument.json, isNull);
+      expect(model.host.yours, 'your computer');
     });
 
     test("the Mac's alerts become notifications", () async {

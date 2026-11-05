@@ -95,8 +95,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (now == _announced || now == MacConnection.connecting) return;
     _announced = now;
     final text = switch (now) {
-      MacConnection.macOnline => 'Your Mac is online',
-      MacConnection.macAway => 'Your Mac is away',
+      MacConnection.macOnline => '${model.host.yoursCapitalized} is online',
+      MacConnection.macAway => '${model.host.yoursCapitalized} is away',
       MacConnection.noConnection => 'No connection to Mochi Link',
       MacConnection.removed => "This phone isn't paired any more",
       MacConnection.connecting => '',
@@ -124,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _sendTyped() {
     final sent = model.send(_typed.text);
     if (sent == null) return;
-    if (!model.macOnline) _say("Your Mac is away. I'll pass it on when it wakes.");
+    if (!model.macOnline) _say("${model.host.yoursCapitalized} is away. I'll pass it on when it wakes.");
     _typed.clear();
     _setTyping(false);
     // Back to the room, where Mochi says the Mac's answer.
@@ -205,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
         gap,
         ClayCard(
           child: NoteLabel(
-            text: 'Mochi Link has changed since this version. Update Mochi for Android to keep talking to your Mac.',
+            text: 'Mochi Link has changed since this version. Update Mochi for Android to keep talking to ${model.host.yours}.',
             icon: Icons.system_update_rounded,
             tint: p.warning,
           ),
@@ -229,6 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
           pending: agent,
           waiting: model.waiting,
           petName: model.petName,
+          host: model.host,
           opener: widget.opener,
           markDone: (note) => _markDone(note.id, note.title),
           seeAll: _openUpdates,
@@ -241,7 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ],
       gap,
       ..._claude(p),
-      if (model.exchanges.isNotEmpty) ...[gap, RecentCard(exchanges: model.exchanges, macOnline: model.macOnline)],
+      if (model.exchanges.isNotEmpty) ...[gap, RecentCard(exchanges: model.exchanges, macOnline: model.macOnline, host: model.host)],
     ];
   }
 
@@ -259,7 +260,10 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Semantics(header: true, child: Text(model.petName, style: context.type.largeTitle)),
                 const SizedBox(height: 2),
-                Text('and ${model.companionName}, from your Mac', style: context.type.subheadline.copyWith(color: p.inkSecondary)),
+                Text(
+                  'and ${model.companionName}, from ${model.host.yours}',
+                  style: context.type.subheadline.copyWith(color: p.inkSecondary),
+                ),
               ],
             ),
           ),
@@ -285,8 +289,8 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         NoteLabel(
           text:
-              "This phone isn't in ${model.macName}'s room any more: it was removed on the Mac, or the room was deleted. "
-              'Pair again to keep talking to your Mac.',
+              "This phone isn't in ${model.host.name ?? model.host.yours}'s room any more: it was removed on ${model.host.yours}, "
+              'or the room was deleted. Pair again to keep talking to ${model.host.yours}.',
           icon: Icons.link_off_rounded,
           tint: p.danger,
           textColor: p.ink,
@@ -386,7 +390,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onSubmitted: (_) => _sendTyped(),
             onChanged: (_) => setState(() {}),
             style: context.type.body,
-            decoration: InputDecoration(hintText: 'Tell ${model.petName} what to do on your Mac'),
+            decoration: InputDecoration(hintText: 'Tell ${model.petName} what to do on ${model.host.yours}'),
           ),
         ),
         const SizedBox(width: Space.s),
@@ -416,17 +420,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     return [
       SectionTitle(
-        title: 'Claude on your Mac',
+        title: 'Claude on ${model.host.yours}',
         note: sessions.isEmpty ? null : '${sessions.length} session${sessions.length == 1 ? '' : 's'}',
       ),
       const SizedBox(height: Space.m),
       if (shared == null)
-        note(Icons.chat_bubble_rounded, 'Waiting to hear from your Mac…')
+        note(Icons.chat_bubble_rounded, 'Waiting to hear from ${model.host.yours}…')
       else if (!shared)
         note(
           Icons.chat_bubble_rounded,
-          "Turn on “Send Claude's summaries to my iPhone” in ${model.petName}'s Settings › iPhone on your Mac to see what each "
-          'session did and reply to it here.',
+          "Turn on “Send Claude's summaries to my phones” in ${model.petName}'s Settings › Phones on ${model.host.yours} to see "
+          'what each session did and reply to it here.',
         )
       else if (sessions.isEmpty)
         note(Icons.bedtime_rounded, 'No Claude sessions right now. When one finishes, its summary shows up here.')
@@ -450,14 +454,15 @@ String Function(DateTime time) spokenTimeFor(BuildContext context) {
   return (time) => localizations.formatTimeOfDay(TimeOfDay.fromDateTime(time), alwaysUse24HourFormat: twentyFour);
 }
 
-/// "Mac online", "Mac away since 14:02", "Connecting…": the header's pill.
+/// "Mac online", "PC away since 14:02", "Connecting…": the header's pill.
 Widget connectionPill(BuildContext context, PocketModel model) {
   final p = context.palette;
+  final host = model.host;
   final lastSeen = model.mac?.lastSeen;
   return switch (model.connection) {
-    MacConnection.macOnline => StatusPill(text: 'Mac online', icon: Icons.cloud_done_rounded, tint: p.success),
+    MacConnection.macOnline => StatusPill(text: host.onlineText, icon: Icons.cloud_done_rounded, tint: p.success),
     MacConnection.macAway => StatusPill(
-      text: lastSeen == null ? 'Mac away' : 'Mac away since ${clockTime(context, lastSeen)}',
+      text: host.awayText(since: lastSeen == null ? null : clockTime(context, lastSeen)),
       icon: Icons.bedtime_rounded,
       tint: p.inkSecondary,
     ),

@@ -47,7 +47,8 @@ void main() {
     for (final scale in [1.0, 2.0]) {
       final variant = '${dark ? 'dark' : 'light'}${scale == 1 ? '' : '-2x'}';
 
-      Future<(PocketModel, FakeRelay)> open(WidgetTester tester, {bool paired = true, double height = 800}) async {
+      // `host`: the computer's platform as the relay lists it (a Mac, or `windows` for a PC).
+      Future<(PocketModel, FakeRelay)> open(WidgetTester tester, {bool paired = true, double height = 800, String host = 'macOS'}) async {
         tester.view.physicalSize = Size(1080, height * 3);
         tester.view.devicePixelRatio = 3;
         tester.view.padding = const FakeViewPadding(top: 120, bottom: 72);
@@ -80,6 +81,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 50));
         if (paired) {
+          relay.devices(platform: host, name: host == 'windows' ? 'DESKTOP-7' : 'BELPL-LT-636');
           relay.presence(macOnline: true);
           relay.fromMac(LinkKey.look, sampleLook().toValue());
           relay.fromMac(LinkKey.claude, const ClaudeMirror(phase: 'working', category: 'edit').toValue());
@@ -163,6 +165,22 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 600));
         await shoot(tester, 'settings');
+        await finish(tester, model);
+      });
+
+      testWidgets('home and settings with a PC ($variant)', (tester) async {
+        final (model, relay) = await open(tester, height: scale == 1 ? 1700 : 3600, host: 'windows');
+        expect(find.text('and Patch, from your PC'), findsOneWidget);
+        expect(find.text('PC online'), findsOneWidget);
+        await shoot(tester, 'home-pc');
+        relay.presence(macOnline: false, lastSeen: 1762243200);
+        await tester.tap(find.byTooltip('Settings'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(find.text('Paired with DESKTOP-7 (PC)'), findsOneWidget);
+        // On the Settings page and on the home page under it.
+        expect(find.textContaining('PC away since'), findsWidgets);
+        await shoot(tester, 'settings-pc');
         await finish(tester, model);
       });
 

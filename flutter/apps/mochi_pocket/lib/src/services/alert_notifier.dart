@@ -65,8 +65,8 @@ class LocalAlertNotifier implements AlertNotifier {
         notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             _channel,
-            'From your Mac',
-            channelDescription: "Claude's finished turns, approvals and what's waiting for you, from Mochi on your Mac.",
+            'From your computer',
+            channelDescription: "Claude's finished turns, approvals and what's waiting for you, from Mochi on your Mac or PC.",
             importance: Importance.high,
             priority: Priority.high,
             color: MochiPalette.light.tint,

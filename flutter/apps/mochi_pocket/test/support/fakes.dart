@@ -129,6 +129,18 @@ class FakeRelay {
     ],
   });
 
+  /// The room's devices as the relay lists them, with names and platforms: the computer (a Mac by default, or
+  /// `windows`), this phone and an iPhone.
+  void devices({String platform = 'macOS', String name = 'Test Mac', bool online = false, double? lastSeen}) => socket.deliver({
+    'v': 1,
+    'op': 'devices',
+    'devices': [
+      {'id': macCredentials.device, 'role': 'host', 'platform': platform, 'name': name, 'online': online, 'lastSeen': ?lastSeen},
+      {'id': phoneCredentials.device, 'role': 'pocket', 'platform': 'android', 'name': 'realme RMX3242', 'online': true},
+      {'id': 'dev_iphone', 'role': 'pocket', 'platform': 'iOS', 'name': 'iPhone', 'online': false},
+    ],
+  });
+
   /// What the phone put or sent, opened: (key, value), oldest first.
   List<(String, Object?)> get fromPhone => [
     for (final socket in sockets)

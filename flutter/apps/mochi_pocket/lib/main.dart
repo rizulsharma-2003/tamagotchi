@@ -38,6 +38,7 @@ Future<void> main() async {
   final model = PocketModel(
     credentialStore: SecureCredentialStore(),
     doneDocument: files == null ? MemoryDocument() : FileDocument(File('$files/done.json')),
+    hostDocument: files == null ? MemoryDocument() : FileDocument(File('$files/link_host.json')),
     notifier: notifier,
     connect: (credentials) => RelayLink(
       credentials,

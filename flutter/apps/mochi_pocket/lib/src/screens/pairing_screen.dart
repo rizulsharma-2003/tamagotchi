@@ -48,12 +48,12 @@ class PairingScreen extends StatelessWidget {
                 const SizedBox(height: Space.l),
                 Semantics(
                   header: true,
-                  child: Text('Pair with your Mac', textAlign: TextAlign.center, style: context.type.largeTitle),
+                  child: Text('Pair with your Mac or PC', textAlign: TextAlign.center, style: context.type.largeTitle),
                 ),
                 const SizedBox(height: Space.s),
                 Text(
-                  'Mochi on this phone talks to Mochi on your Mac through Mochi Link, end-to-end encrypted. '
-                  'What you send reaches your Mac in under a second.',
+                  'Mochi on this phone talks to Mochi on your Mac or PC through Mochi Link, end-to-end encrypted. '
+                  'What you send reaches it in under a second.',
                   textAlign: TextAlign.center,
                   style: context.type.subheadline.copyWith(color: p.inkSecondary),
                 ),
@@ -62,10 +62,10 @@ class PairingScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Semantics(header: true, child: Text('On your Mac', style: context.type.headline)),
+                      Semantics(header: true, child: Text('On your Mac or PC', style: context.type.headline)),
                       const SizedBox(height: Space.m),
-                      _step(context, 1, "Open Mochi's Settings › iPhone › Mochi Link."),
-                      _step(context, 2, 'Click “Pair Another Device…”.'),
+                      _step(context, 1, "Open Mochi's Settings › Phones."),
+                      _step(context, 2, 'Click “Pair a Phone…”.'),
                       _step(context, 3, 'Scan the code it shows, or copy its pairing link and paste it here.'),
                       const SizedBox(height: Space.l),
                       if (model.pairing)
@@ -75,7 +75,9 @@ class PairingScreen extends StatelessWidget {
                             children: [
                               const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5)),
                               const SizedBox(width: Space.m),
-                              Expanded(child: Text('Pairing with ${model.pairingWith ?? 'your Mac'}…', style: context.type.subheadline)),
+                              Expanded(
+                                child: Text('Pairing with ${model.pairingWith ?? 'your computer'}…', style: context.type.subheadline),
+                              ),
                             ],
                           ),
                         )

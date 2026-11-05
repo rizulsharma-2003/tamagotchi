@@ -60,13 +60,16 @@ class ApprovalCard extends StatelessWidget {
   }
 }
 
-/// What you asked your Mac lately and what it said (iOS ContentView `recent`).
+/// What you asked your computer lately and what it said (iOS ContentView `recent`).
 class RecentCard extends StatelessWidget {
-  const RecentCard({super.key, required this.exchanges, required this.macOnline});
+  const RecentCard({super.key, required this.exchanges, required this.macOnline, required this.host});
 
   /// Oldest first.
   final List<Exchange> exchanges;
   final bool macOnline;
+
+  /// The computer the requests went to, by name ("your Mac", "your PC").
+  final LinkHostName host;
 
   /// How long the relay keeps a command for a Mac that's away.
   static const Duration commandLifetime = Duration(minutes: 10);
@@ -142,10 +145,13 @@ class RecentCard extends StatelessWidget {
         };
 
   String _status(Exchange exchange) {
-    if (expired(exchange)) return "Your Mac didn't get this in time (it was away for 10 minutes). Send it again when it's back.";
+    if (expired(exchange)) {
+      return "${host.yoursCapitalized} didn't get this in time (it was away for 10 minutes). Send it again when it's back.";
+    }
     return switch (exchange.state) {
-      ExchangeState.sending => macOnline ? 'Sending to your Mac…' : 'Waiting for your Mac. It gets this when it wakes (within 10 minutes).',
-      ExchangeState.working => 'Your Mac is on it…',
+      ExchangeState.sending =>
+        macOnline ? 'Sending to ${host.yours}…' : 'Waiting for ${host.yours}. It gets this when it wakes (within 10 minutes).',
+      ExchangeState.working => '${host.yoursCapitalized} is on it…',
       ExchangeState.done => 'Done',
       ExchangeState.failed => "Didn't work",
     };

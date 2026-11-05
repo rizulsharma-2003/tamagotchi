@@ -101,7 +101,7 @@ class _MochiAppState extends State<MochiApp> {
         context: context,
         builder: (dialog) => AlertDialog(
           title: Text('Pair with ${code.name}?'),
-          content: Text('This phone is paired with ${model.macName}. Pairing with ${code.name} replaces that pairing.'),
+          content: Text('This phone is paired with ${model.hostList}. Pairing with ${code.name} replaces that pairing.'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Cancel')),
             TextButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('Pair')),

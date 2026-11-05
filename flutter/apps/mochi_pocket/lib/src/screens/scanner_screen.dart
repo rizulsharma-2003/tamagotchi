@@ -39,7 +39,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Colors.black,
     appBar: AppBar(
-      title: const Text('Scan the code on your Mac'),
+      title: const Text('Scan the code on your Mac or PC'),
       foregroundColor: Colors.white,
       backgroundColor: Colors.black,
       titleTextStyle: context.type.headline.copyWith(color: Colors.white),
@@ -81,7 +81,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
           right: Space.xl,
           bottom: Space.xl * 2 + MediaQuery.paddingOf(context).bottom,
           child: Text(
-            "Point the camera at the QR code in Mochi's Settings › iPhone › Mochi Link on your Mac.",
+            "Point the camera at the QR code in Mochi's Settings › Phones on your Mac or PC.",
             textAlign: TextAlign.center,
             style: context.type.subheadline.copyWith(color: Colors.white),
           ),
