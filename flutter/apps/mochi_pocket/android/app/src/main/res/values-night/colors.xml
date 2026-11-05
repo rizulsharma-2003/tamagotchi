@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The dark theme's backdrop (MochiPalette.dark backgroundTop). -->
+    <color name="mochi_background">#1C1511</color>
+</resources>

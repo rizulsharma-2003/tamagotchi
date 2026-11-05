@@ -6,6 +6,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'json.dart';
+import 'link_alert.dart';
 import 'link_credentials.dart';
 import 'link_crypto.dart';
 import 'link_envelope.dart';
@@ -198,6 +199,7 @@ class RelayLink {
   final StreamController<LinkPresence> _presence = StreamController.broadcast();
   final StreamController<LinkIncoming> _incoming = StreamController.broadcast();
   final StreamController<LinkRelayError> _errors = StreamController.broadcast();
+  final StreamController<LinkAlert> _alerts = StreamController.broadcast();
 
   static const int _maxOutbox = 64;
   static const int _maxUnacked = 128;
@@ -243,6 +245,10 @@ class RelayLink {
   /// Frames the relay refused.
   Stream<LinkRelayError> get errors => _errors.stream;
 
+  /// Notifications another device sealed for the phones ([LinkAlert]), once each. iPhones get them as pushes; an app
+  /// that has no push yet (Android) shows these.
+  Stream<LinkAlert> get alerts => _alerts.stream;
+
   /// The latest value of [key]: JSON-compatible (String, num, bool, `Map<String, dynamic>`, List), in the shapes the
   /// Swift apps write (see the models).
   Object? value(LinkKey key) => _values[key];
@@ -267,6 +273,25 @@ class RelayLink {
     }
     _remember(id);
     _send(_Outgoing(id, key.kind == LinkKeyKind.message ? null : key, frame));
+  }
+
+  /// Sends a notification to every phone in the room, sealed with the room key (Swift `RelayLinkStore.sendAlert`):
+  /// [inner] is `{title, subtitle?, body, userInfo}`. For hosts (and test tools); the relay refuses it from a pocket.
+  void sendAlert(Map<String, Object?> inner, {String? category, String? threadId, int priority = 10, String? collapse, int ttl = 3600}) {
+    final id = newId();
+    final frame = LinkAlert.frame(
+      inner,
+      credentials,
+      _key,
+      id: id,
+      priority: priority,
+      collapse: collapse,
+      category: category,
+      threadId: threadId,
+      ttl: ttl,
+    );
+    _remember(id);
+    _send(_Outgoing(id, null, frame));
   }
 
   // MARK: Connection
@@ -303,7 +328,7 @@ class RelayLink {
   /// Stops and closes the streams.
   Future<void> dispose() async {
     await stop();
-    await Future.wait([_changes.close(), _presence.close(), _incoming.close(), _errors.close()]);
+    await Future.wait([_changes.close(), _presence.close(), _incoming.close(), _errors.close(), _alerts.close()]);
   }
 
   void _open() {
@@ -455,6 +480,17 @@ class RelayLink {
     final isMessage = envelope['op'] == 'send' || key?.kind == LinkKeyKind.message;
     // Acked on arrival (as in Swift), so one that can't be opened or used isn't delivered again and again.
     if (isMessage) socket.send(jsonEncode({'v': 1, 'op': 'ack', 'id': id}));
+    if (name == LinkAlert.key) {
+      if (!isMessage || _applied.contains(id)) return;
+      _remember(id);
+      final alert = LinkAlert.open(envelope, room: credentials.room, roomKey: _key);
+      if (alert == null) {
+        _log("couldn't open an alert from the relay");
+      } else {
+        _alerts.add(alert);
+      }
+      return;
+    }
     if (key == null || _applied.contains(id)) return;
     _remember(id);
     final nonce = jsonString(envelope['nonce']), box = jsonString(envelope['box']);

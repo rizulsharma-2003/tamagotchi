@@ -1,0 +1,480 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:mochi_link/mochi_link.dart';
+
+import '../services/alert_notifier.dart';
+import '../services/credential_store.dart';
+import '../services/local_file.dart';
+import 'done_marks.dart';
+
+enum ExchangeState { sending, working, done, failed }
+
+/// Something you asked your Mac, and how it's going (Swift `MacLink.Exchange`).
+class Exchange {
+  Exchange({required this.id, required this.text, this.project, this.state = ExchangeState.sending, this.reply, required this.sentAt});
+
+  final String id;
+  final String text;
+
+  /// The Claude session it was for, when it was a reply to one.
+  final String? project;
+  ExchangeState state;
+  String? reply;
+  final DateTime sentAt;
+}
+
+/// Moments the room reacts to: a pet, play or treat (from here or the Mac), and how a request is going.
+enum PetCue { pet, play, treat, sending, working, replied, failed }
+
+enum PairingPhase { loading, unpaired, paired }
+
+/// How this phone is connected, for the header pill and Settings.
+enum MacConnection { macOnline, macAway, connecting, noConnection, removed }
+
+typedef LinkConnector = RelayLink Function(LinkCredentials credentials);
+typedef LinkJoiner = Future<LinkCredentials> Function(PairingCode code, String deviceName);
+typedef LinkLeaver = Future<void> Function(LinkCredentials credentials);
+
+/// Mochi for Android's state: pairing (Swift `PocketLink`), what the Mac shares and what you send it (`MacLink`,
+/// `PhoneWorld`'s look and interactions), and your done marks (`UpdatesStore`), all over one [RelayLink].
+class PocketModel extends ChangeNotifier {
+  PocketModel({
+    required CredentialStore credentialStore,
+    required LocalDocument doneDocument,
+    required AlertNotifier notifier,
+    required LinkConnector connect,
+    LinkJoiner? join,
+    LinkLeaver? leave,
+    this.deviceName = 'Android phone',
+    DateTime Function()? clock,
+  }) : _store = credentialStore,
+       _doneDocument = doneDocument,
+       _notifier = notifier,
+       _connect = connect,
+       _join = join ?? _relayJoin,
+       _leave = leave ?? _relayLeave,
+       _clock = clock ?? DateTime.now;
+
+  final CredentialStore _store;
+  final LocalDocument _doneDocument;
+  final AlertNotifier _notifier;
+  final LinkConnector _connect;
+  final LinkJoiner _join;
+  final LinkLeaver _leave;
+  final DateTime Function() _clock;
+
+  /// How the Mac lists this phone ("realme RMX3242").
+  final String deviceName;
+
+  static Future<LinkCredentials> _relayJoin(PairingCode code, String name) =>
+      LinkPairing.join(code, role: 'pocket', platform: 'android', name: name);
+
+  static Future<void> _relayLeave(LinkCredentials credentials) => LinkPairing.remove(credentials.device, from: credentials);
+
+  // MARK: State
+
+  PairingPhase _phase = PairingPhase.loading;
+  LinkCredentials? _credentials;
+  RelayLink? _link;
+  final List<StreamSubscription<Object?>> _subscriptions = [];
+
+  bool _pairing = false;
+  String? _pairingWith;
+  String? _problem;
+
+  LinkStatus _status = LinkStatus.offline;
+  List<LinkPeer> _peers = const [];
+
+  PetLook? _look;
+  ClaudeMirror? _claude;
+  PhoneSessions? _sessions;
+  AgentPending? _agent;
+  ApprovalRequest? _approval;
+  final Set<String> _answered = {};
+  final List<Exchange> _exchanges = [];
+  final Set<String> _seenInteractions = {};
+  DoneMarks _done = DoneMarks();
+  DateTime? _lastAlertAt;
+
+  final StreamController<PetCue> _cues = StreamController.broadcast();
+
+  PairingPhase get phase => _phase;
+  bool get paired => _phase == PairingPhase.paired;
+  LinkCredentials? get credentials => _credentials;
+
+  /// Joining a room right now, and whose ([pairingWith]).
+  bool get pairing => _pairing;
+  String? get pairingWith => _pairingWith;
+
+  /// Why the last pairing didn't work.
+  String? get problem => _problem;
+
+  LinkStatus get status => _status;
+  List<LinkPeer> get peers => _peers;
+
+  /// "Rizul's MacBook", from the pairing code.
+  String get macName => _credentials?.peerName ?? 'your Mac';
+
+  /// The computer in the room (an online one first).
+  LinkPeer? get mac {
+    final hosts = _peers.where((peer) => peer.role == 'host' && peer.device != _credentials?.device).toList();
+    return hosts.where((peer) => peer.online).firstOrNull ?? hosts.firstOrNull;
+  }
+
+  bool get macOnline => _status == LinkStatus.online && (mac?.online ?? false);
+
+  MacConnection get connection => switch (_status) {
+    LinkStatus.removed => MacConnection.removed,
+    LinkStatus.online => macOnline ? MacConnection.macOnline : MacConnection.macAway,
+    LinkStatus.connecting => MacConnection.connecting,
+    LinkStatus.offline => MacConnection.noConnection,
+  };
+
+  /// The relay wants a newer app.
+  bool get updateRequired => _link?.updateRequired ?? false;
+
+  PetLook? get look => _look;
+  String get petName => _look?.petName ?? 'Mochi';
+  String get companionName => _look?.companionName ?? 'Patch';
+  int get friendshipLevel => _look?.friendshipLevel ?? 0;
+  ClaudeMirror? get claude => _claude;
+
+  /// Claude's sessions on the Mac, when it shares summaries (at most six, as on the iPhone).
+  List<PhoneSessionCard> get sessions => (_sessions?.enabled ?? false) ? _sessions!.sessions.take(6).toList() : const [];
+
+  /// Null until the Mac has said whether it shares summaries.
+  bool? get summariesShared => _sessions?.enabled;
+  AgentPending? get agent => _agent;
+  ApprovalRequest? get approval => _approval;
+
+  /// Oldest first; at most six.
+  List<Exchange> get exchanges => List.unmodifiable(_exchanges);
+  DateTime? get lastAlertAt => _lastAlertAt;
+
+  /// The room's reactions, as they happen.
+  Stream<PetCue> get cues => _cues.stream;
+
+  bool isDone(String id) => _done.isDone(id);
+
+  /// The agent's items you haven't marked done.
+  List<AgentNote> get waiting => (_agent?.items ?? const <AgentNote>[]).where((note) => !_done.isDone(note.id)).toList();
+
+  double get _now => _clock().millisecondsSinceEpoch / 1000;
+
+  // MARK: Pairing
+
+  /// At launch: the saved pairing, if there is one, and the link to the relay.
+  Future<void> load() async {
+    LinkCredentials? saved;
+    final watch = Stopwatch()..start();
+    try {
+      saved = await _store.load();
+    } on Object catch (error) {
+      _log('the saved pairing could not be read (${error.runtimeType})');
+    }
+    _done = DoneMarks.fromJson(await _doneDocument.read())..prune(now: _now);
+    _log('loaded ${saved == null ? 'no pairing' : 'the pairing'} in ${watch.elapsedMilliseconds} ms');
+    if (saved != null && saved.roomKey != null) {
+      _use(saved);
+      _phase = PairingPhase.paired;
+    } else {
+      _phase = PairingPhase.unpaired;
+    }
+    notifyListeners();
+  }
+
+  /// Joins the room in a `mochi://pair?…` link (scanned, pasted or opened). True when this phone is paired with it.
+  Future<bool> pair(String text) async {
+    final code = PairingCode.parse(text);
+    if (text.trim().isEmpty) {
+      _problem = 'Nothing to paste. Copy the pairing link on your Mac first, or scan its code.';
+      notifyListeners();
+      return false;
+    }
+    if (code == null) {
+      _problem = "That isn't a Mochi pairing link. On your Mac: Mochi's Settings › iPhone › Mochi Link › Pair Another Device…";
+      notifyListeners();
+      return false;
+    }
+    if (_pairing) return false;
+    // Opened again with the code this phone already used (Android redelivers the link after a restart).
+    if (_credentials?.room == code.room && _status != LinkStatus.removed) return true;
+    _pairing = true;
+    _pairingWith = code.name;
+    _problem = null;
+    notifyListeners();
+    try {
+      final joined = await _join(code, deviceName);
+      await _store.save(joined);
+      await _disconnect();
+      _clearRoom();
+      _use(joined);
+      _phase = PairingPhase.paired;
+      _log('paired with ${code.name}');
+      return true;
+    } on LinkPairingException catch (error) {
+      _problem = _explain(error);
+      return false;
+    } on Object catch (error) {
+      _problem = "Couldn't pair (${error.runtimeType}). Check the phone's connection and try again.";
+      return false;
+    } finally {
+      _pairing = false;
+      notifyListeners();
+    }
+  }
+
+  static String _explain(LinkPairingException error) => switch (error.code) {
+    'invite_used' => 'That code was already used. On your Mac, make a new one (Pair Another Device…) and scan it again.',
+    'invite_expired' ||
+    'invite_not_found' ||
+    'invite_invalid' => 'That code has expired (they last 10 minutes). On your Mac, make a new one and scan it again.',
+    'room_full' => "Your Mac's room is full (8 devices). Remove one on your Mac first.",
+    _ => error.message,
+  };
+
+  void clearProblem() {
+    if (_problem == null) return;
+    _problem = null;
+    notifyListeners();
+  }
+
+  /// Forgets the pairing: this phone leaves the room (when the relay can still be told) and starts clean.
+  Future<void> unpair() async {
+    final credentials = _credentials;
+    final stillInRoom = _status != LinkStatus.removed;
+    await _disconnect();
+    _credentials = null;
+    _clearRoom();
+    _done = DoneMarks();
+    _phase = PairingPhase.unpaired;
+    _problem = null;
+    notifyListeners();
+    try {
+      await _store.delete();
+      await _doneDocument.delete();
+    } on Object catch (error) {
+      _log('unpairing could not clear everything (${error.runtimeType})');
+    }
+    if (credentials != null && stillInRoom) {
+      unawaited(_leave(credentials).catchError((Object error) => _log('the relay was not told (${error.runtimeType})')));
+    }
+  }
+
+  // MARK: The link
+
+  void _use(LinkCredentials credentials) {
+    _credentials = credentials;
+    final link = _connect(credentials);
+    _link = link;
+    _status = link.status;
+    _subscriptions.addAll([
+      link.changes.listen((_) => _read()),
+      link.incoming.listen(_received),
+      link.presence.listen(_presenceChanged),
+      link.alerts.listen(_alerted),
+      link.errors.listen(_refused),
+    ]);
+    link.start();
+    _read();
+  }
+
+  Future<void> _disconnect() async {
+    // Cancelling a broadcast subscription takes effect at once; nothing to wait for.
+    for (final subscription in _subscriptions) {
+      unawaited(subscription.cancel());
+    }
+    _subscriptions.clear();
+    final link = _link;
+    _link = null;
+    _status = LinkStatus.offline;
+    _peers = const [];
+    await link?.dispose();
+  }
+
+  void _clearRoom() {
+    _look = null;
+    _claude = null;
+    _sessions = null;
+    _agent = null;
+    _approval = null;
+    _answered.clear();
+    _exchanges.clear();
+    _seenInteractions.clear();
+  }
+
+  /// Back in the foreground: reconnect right away if the socket went while the app was away.
+  void resume() => _link?.reconnectNow();
+
+  void _presenceChanged(LinkPresence presence) {
+    _status = presence.status;
+    _peers = presence.peers;
+    if (presence.status == LinkStatus.removed) _log('the relay ended this pairing');
+    notifyListeners();
+  }
+
+  /// Reads every state value the Mac shares.
+  void _read() {
+    final link = _link;
+    if (link == null) return;
+    _look = PetLook.fromValue(link.value(LinkKey.look)) ?? _look;
+    _claude = ClaudeMirror.fromValue(link.value(LinkKey.claude));
+    final sessions = PhoneSessions.fromValue(link.value(LinkKey.sessions));
+    if (sessions != null) _sessions = sessions;
+    final agent = AgentPending.fromValue(link.value(LinkKey.agent));
+    if (agent != null) _agent = agent;
+    var doneChanged = false;
+    for (final key in [LinkKey.macDone, LinkKey.phoneDone]) {
+      final list = AgentDoneList.fromValue(link.value(key));
+      if (list != null && _done.takeIn(list, now: _now)) doneChanged = true;
+    }
+    if (doneChanged) unawaited(_saveDone());
+    final request = ApprovalRequest.fromValue(link.value(LinkKey.approval));
+    if (request != null && !_answered.contains(request.id) && _now - request.at < 120) {
+      _approval = request;
+    } else if (_approval != null && request?.id != _approval!.id) {
+      _approval = null;
+    }
+    notifyListeners();
+  }
+
+  void _received(LinkIncoming message) {
+    switch (message.key) {
+      case LinkKey.reply:
+        final reply = LinkReply.fromValue(message.value);
+        final exchange = reply == null ? null : _exchanges.where((exchange) => exchange.id == reply.id).firstOrNull;
+        if (reply == null || exchange == null) return;
+        _log('reply ${reply.state} ${_clock().difference(exchange.sentAt).inMilliseconds} ms after sending');
+        switch (reply.state) {
+          case 'working':
+            if (exchange.state == ExchangeState.sending) exchange.state = ExchangeState.working;
+            _cue(PetCue.working);
+          case 'done':
+            exchange.state = ExchangeState.done;
+            _cue(PetCue.replied);
+          case 'failed':
+            exchange.state = ExchangeState.failed;
+            _cue(PetCue.failed);
+        }
+        final text = reply.text;
+        if (text != null && text.isNotEmpty) exchange.reply = text;
+        notifyListeners();
+      case LinkKey.macInteraction:
+        final interaction = LinkInteraction.fromValue(message.value);
+        if (interaction == null || !_seenInteractions.add(interaction.id) || _now - interaction.at >= 90) return;
+        final cue = switch (interaction.kind) {
+          'pet' => PetCue.pet,
+          'play' => PetCue.play,
+          'treat' => PetCue.treat,
+          _ => null,
+        };
+        if (cue != null) _cue(cue);
+      default:
+        break;
+    }
+  }
+
+  /// The relay turned a frame down (rate limit, size, role rules). A refused command says so in Recently instead of
+  /// waiting forever; other refusals are only logged.
+  void _refused(LinkRelayError error) {
+    _log('relay refused ${error.key ?? 'a frame'}: ${error.code}');
+    if (error.key != LinkKey.command.name) return;
+    final exchange = _exchanges.where((exchange) => exchange.state == ExchangeState.sending).lastOrNull;
+    if (exchange == null) return;
+    exchange
+      ..state = ExchangeState.failed
+      ..reply = error.code == 'rate_limited'
+          ? 'Too many messages at once. Wait a moment and send it again.'
+          : "Mochi Link didn't accept this (${error.code}). Send it again in a moment.";
+    _cue(PetCue.failed);
+    notifyListeners();
+  }
+
+  void _alerted(LinkAlert alert) {
+    _lastAlertAt = _clock();
+    unawaited(_notifier.show(alert));
+  }
+
+  // MARK: Things you do
+
+  /// Pet, play or treat here; Mochi on the Mac does the same a moment later.
+  void interact(String kind) {
+    final link = _link;
+    final cue = switch (kind) {
+      'pet' => PetCue.pet,
+      'play' => PetCue.play,
+      _ => PetCue.treat,
+    };
+    _cue(cue);
+    if (link == null) return;
+    final id = RelayLink.newId();
+    _seenInteractions.add(id);
+    link.set(LinkInteraction(id: id, kind: kind, at: _now).toValue(), LinkKey.phoneInteraction);
+  }
+
+  /// Sends a typed request to the Mac: for Mochi, or (with [project] and [session]) for that Claude session. The id,
+  /// or null when there's nothing to send. While the Mac is away it waits on the relay for 10 minutes.
+  String? send(String text, {String? project, String? session}) {
+    final words = text.trim();
+    final link = _link;
+    if (words.isEmpty || link == null) return null;
+    final id = RelayLink.newId();
+    _exchanges.add(Exchange(id: id, text: words, project: project, sentAt: _clock()));
+    if (_exchanges.length > 6) _exchanges.removeRange(0, _exchanges.length - 6);
+    link.set(LinkCommand(id: id, text: words, at: _now, typed: true, project: project, session: session).toValue(), LinkKey.command);
+    _cue(PetCue.sending);
+    notifyListeners();
+    return id;
+  }
+
+  /// Answers the Mac's "Send to Claude?".
+  void answer(ApprovalRequest request, {required bool allow}) {
+    _answered.add(request.id);
+    if (_approval?.id == request.id) _approval = null;
+    _link?.set(LinkVerdict(id: request.id, allow: allow, at: _now).toValue(), LinkKey.verdict);
+    notifyListeners();
+  }
+
+  /// Marks items done here, on the Mac and on your other phones.
+  void markDone(Iterable<String> ids) {
+    _done.mark(ids, now: _now);
+    _shareDone();
+  }
+
+  /// Puts an item back in "Waiting for you".
+  void markNotDone(String id) {
+    _done.unmark(id);
+    _shareDone();
+  }
+
+  void _shareDone() {
+    _link?.set(_done.shared(now: _now).toValue(), LinkKey.phoneDone);
+    unawaited(_saveDone());
+    notifyListeners();
+  }
+
+  Future<void> _saveDone() async {
+    try {
+      await _doneDocument.write(_done.toJson());
+    } on Object catch (error) {
+      _log('done marks could not be saved (${error.runtimeType})');
+    }
+  }
+
+  void _cue(PetCue cue) {
+    if (!_cues.isClosed) _cues.add(cue);
+  }
+
+  /// Development builds only, and never values or secrets.
+  void _log(String message) {
+    if (kDebugMode) debugPrint('Mochi: $message');
+  }
+
+  @override
+  void dispose() {
+    unawaited(_disconnect());
+    unawaited(_cues.close());
+    super.dispose();
+  }
+}
