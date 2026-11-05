@@ -20,7 +20,7 @@ Claude Code ─hooks─▶ MacTamagotchi ─(sealed, WebSocket)─▶ Mochi Link
                                     Mochi Pocket ─(register)──┘  (its push addresses stay on the relay)
 ```
 
-- **Linking through Mochi Link.** You pair once: Settings › iPhone › Mochi Link › Pair Your iPhone on the Mac
+- **Linking through Mochi Link.** You pair once: Settings › Phones › Mochi Link › Pair a Phone… on the Mac
   shows a QR code, and Mochi Pocket scans it. Mochi Pocket registers its push-to-start token and each Live
   Activity's update token with the relay, which holds the push key and does the pushing; it also shares which
   activities are running (`pushToStart`, `updateTokens`, `tokensSavedAt`), so the Mac knows whether it can start
@@ -55,7 +55,7 @@ Claude Code ─hooks─▶ MacTamagotchi ─(sealed, WebSocket)─▶ Mochi Link
 2. The Mac app needs no profile or push key: `scripts/build-app.sh` (ad hoc) is enough. A team-signed build is
    still possible (`TEAM_ID=CZDJF6N2RH MAC_PROFILE=<profile> SIGN_IDENTITY=<Apple Development identity>
    scripts/build-app.sh`; `Signing/MacSigning.xcodeproj` makes the profile), but no feature needs it.
-3. Pair: on the Mac, Settings › iPhone › Mochi Link › Pair Your iPhone; in Mochi Pocket, Settings › Scan the Code.
+3. Pair: on the Mac, Settings › Phones › Mochi Link › Pair a Phone…; in Mochi Pocket, Settings › Scan the Code.
    Development builds of Mochi Pocket register for the APNs sandbox; the relay picks the push host from that.
 
 ## Animation where views can't animate
@@ -88,7 +88,7 @@ On the phone the companion is always at the desk.
 
 ## Claude's summaries and replies
 
-Off by default: Settings › iPhone › *Send Claude's summaries to my iPhone* on the Mac.
+Off by default: Settings › Phones › *Send Claude's summaries to my phones* on the Mac.
 - **Collecting:** while the setting is on and a phone is paired, the hook helper includes Claude's closing message on Stop and the
   name of each file an editing tool changes (`summary`, `file`). `SessionReports` gathers a turn's files
   until Claude stops.

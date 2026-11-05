@@ -68,11 +68,11 @@ struct AgentSettingsView: View {
             Section("Tell me") {
                 Toggle("In \(name)'s speech bubble", isOn: $store.settings.agent.tellInBubble)
                 Toggle("With a badge on the menu bar", isOn: $store.settings.agent.tellWithBadge)
-                Toggle("On my iPhone: notifications and a “Waiting for you” card in Mochi Pocket", isOn: $store.settings.agent.tellPhone)
-                Toggle("Keep newsletters and automated mail off my iPhone", isOn: $store.settings.agent.phoneSkipsLowPriority)
+                Toggle("On my phones: notifications and a “Waiting for you” card in Mochi", isOn: $store.settings.agent.tellPhone)
+                Toggle("Keep newsletters and automated mail off my phones", isOn: $store.settings.agent.phoneSkipsLowPriority)
                     .disabled(!store.settings.agent.tellPhone)
                 if store.settings.agent.tellPhone, !environment.link.paired {
-                    Label("Pair your iPhone in Settings › iPhone › Mochi Link to get these on your phone.", systemImage: "iphone")
+                    Label("Pair a phone in Settings › Phones › Mochi Link to get these on your phones.", systemImage: "iphone")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -98,7 +98,7 @@ struct AgentSettingsView: View {
                 }
                 Text(store.settings.agent.vips.isEmpty
                      ? "Add the people whose mail matters most. Once you have VIPs, only their mail (and meetings) gets the badge "
-                        + "and rings your iPhone; other mail waits quietly on the card and in the briefings."
+                        + "and rings your phones; other mail waits quietly on the card and in the briefings."
                      : "Only mail from these people (and meetings) rings; other mail waits quietly on the card and in the briefings.")
                     .font(.caption).foregroundStyle(.secondary)
                 if vipsChanged, agent.cloudTriggerSaved {
@@ -112,8 +112,8 @@ struct AgentSettingsView: View {
 
             Section("When I mark something done") {
                 Toggle("Mark the email read in Gmail", isOn: $store.settings.agent.markReadWhenDone)
-                Text("Tap ✓ on anything in Mochi Pocket's “Waiting for you” (or Done below) and it leaves the card on both "
-                     + "devices. With this on, \(name) also removes Gmail's unread mark from that thread — the only change "
+                Text("Tap ✓ on anything in “Waiting for you” on your phone (or Done below) and it leaves the card on every "
+                     + "device. With this on, \(name) also removes Gmail's unread mark from that thread — the only change "
                      + "\(name) ever makes to your mail, and only for what you marked.")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -140,7 +140,7 @@ struct AgentSettingsView: View {
                     Button("Open claude.ai/code") { NSWorkspace.shared.open(URL(string: "https://claude.ai/code")!) }
                 }
                 if !environment.link.paired {
-                    Label("Pair your iPhone in Settings › iPhone › Mochi Link first: Mochi Cloud joins the same link.", systemImage: "link")
+                    Label("Pair a phone in Settings › Phones › Mochi Link first: Mochi Cloud joins the same link.", systemImage: "link")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if let cloudMessage {
@@ -149,7 +149,7 @@ struct AgentSettingsView: View {
                 }
                 if agent.cloudTriggerSaved {
                     HStack {
-                        Label("Mochi Pocket's “Check now” can ask the cloud when this Mac doesn't answer", systemImage: "checkmark.circle.fill")
+                        Label("On iPhone, “Check now” can ask the cloud when this Mac doesn't answer", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green).font(.caption)
                         Spacer()
                         Button("Remove") { agent.removeCloudTrigger() }
@@ -175,7 +175,7 @@ struct AgentSettingsView: View {
                             Label(triggerProblem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).font(.caption)
                         }
                     }
-                    Text("The token can only start this one task. It's kept in your Keychain and shared with Mochi Pocket through Mochi "
+                    Text("The token can only start this one task. It's kept in your Keychain and shared with your iPhone through Mochi "
                          + "Link, end-to-end encrypted.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -256,7 +256,7 @@ struct AgentSettingsView: View {
                 if !done {
                     Button("Done") { agent.markDone(note) }
                         .controlSize(.small)
-                        .help("Take it off “Waiting for you” here and on your iPhone")
+                        .help("Take it off “Waiting for you” here and on your phones")
                 }
             }
         }

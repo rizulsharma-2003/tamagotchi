@@ -273,7 +273,7 @@ extension SettingsTab {
     static let groups: [(name: String, tabs: [SettingsTab])] = [
         ("Your pet", [.general, .characters, .desktop, .fun]),
         ("Claude", [.claude, .assistant, .agent]),
-        ("iPhone & alerts", [.iphone, .notifications]),
+        ("Phones & alerts", [.iphone, .notifications]),
         ("App", [.privacy, .developer, .about]),
     ]
 
@@ -283,7 +283,7 @@ extension SettingsTab {
         case .characters: "Characters"
         case .claude: "Claude Code"
         case .assistant: "Assistant"
-        case .iphone: "iPhone"
+        case .iphone: "Phones"
         case .agent: "Agent"
         case .notifications: "Notifications"
         case .desktop: "Desktop Pet"
@@ -358,7 +358,7 @@ extension SettingsTab {
         case .characters: "Names, looks and personalities for your pet and your coding companion."
         case .claude: "Connect Claude Code so your companion joins your sessions and reacts to what they do."
         case .assistant: "Talk to \(pet) with ⌥Space: ask questions, run quick commands and reach your Claude sessions."
-        case .iphone: "Mochi Pocket on your iPhone: the Live Activity, Claude's summaries and replies."
+        case .iphone: "Mochi on your phones: pairing, Claude's summaries and replies, and the iPhone's Live Activity."
         case .agent: "\(pet) keeps an eye on Gmail, Google Calendar and Notion and tells you what matters."
         case .notifications: "Which moments get a notification, and how they sound."
         case .desktop: "Let \(pet) and friends wander on your desktop, above your windows."
@@ -376,7 +376,7 @@ extension SettingsTab {
         case .characters: "pet companion name colour color accessory personality patch mochi look"
         case .claude: "hooks connect sessions integration claude code helper"
         case .assistant: "ask mochi voice talk shortcut option space quick commands brain"
-        case .iphone: "phone mochi pocket live activity push apns summaries replies key"
+        case .iphone: "phones phone iphone android mochi pocket pair pairing link live activity push summaries replies"
         case .agent: "gmail calendar notion mail meetings tasks briefing vip done cloud watcher"
         case .notifications: "alerts sounds banner"
         case .desktop: "desktop pet wander window floor"

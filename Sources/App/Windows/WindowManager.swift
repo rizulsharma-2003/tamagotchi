@@ -77,6 +77,13 @@ final class WindowManager {
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("MacTamagotchiSettingsV3")
         if window.frame.origin == .zero { window.center() }
+        #if DEBUG
+        // Screenshots of a whole pane: `MACTAMAGOTCHI_SETTINGS_HEIGHT=<points>` with MACTAMAGOTCHI_DEBUG_STATE=1.
+        if DebugHooks.isEnabled, let height = ProcessInfo.processInfo.environment["MACTAMAGOTCHI_SETTINGS_HEIGHT"].flatMap(Double.init) {
+            window.setFrameAutosaveName("")
+            window.setContentSize(NSSize(width: 900, height: height))
+        }
+        #endif
         return window
     }
 

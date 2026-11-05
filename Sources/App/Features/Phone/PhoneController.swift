@@ -395,15 +395,15 @@ final class PhoneController {
                                       since: Date().timeIntervalSince1970))
     }
 
-    static let pairFirst = "Pair your iPhone first (Mochi Link, above): nothing reaches your phone until then."
+    static let pairFirst = "Pair a phone first (Mochi Link, above): nothing reaches your phones until then."
 
-    /// Settings › iPhone › Mochi Link: a sealed notification through the relay, to check the whole path.
+    /// Settings › Phones › Mochi Link: a sealed notification through the relay, to check the whole path.
     func sendTestNotification() {
         guard let relay = MochiLink.relay else { return }
         relay.sendAlert(["title": "Hello from \(LinkController.macName)", "subtitle": "Mochi Link test",
                          "body": "This notification came through your relay, end-to-end encrypted: only your phones could read it.",
                          "userInfo": [:] as [String: Any]], category: nil, threadId: nil)
-        lastResult = "Test notification sent through Mochi Link"
+        lastResult = "Test notification sent to \(environment.link.phoneNames) through Mochi Link"
         lastError = nil
     }
 
@@ -468,7 +468,9 @@ final class PhoneController {
         let state = nextFrame(state)
         guard pushToStartToken != nil else {
             Self.linkLog.notice("live activity: can't start, no push-to-start address from the iPhone yet")
-            lastError = "Open Mochi Pocket on your iPhone once, so it can share where to reach it."
+            lastError = environment.link.hasIPhone
+                ? "Open Mochi on your iPhone once, so it can share where to reach it."
+                : "Live Activities need an iPhone, and none is paired."
             return
         }
         let payload = LiveActivityPayload.start(state, petName: environment.settingsStore.settings.petName,

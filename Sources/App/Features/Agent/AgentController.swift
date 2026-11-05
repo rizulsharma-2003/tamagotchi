@@ -330,7 +330,7 @@ final class AgentController {
     /// credential and the room key). It needs no push key and no phone address: the relay pushes for it.
     func copyCloudLinkSettings() async -> (ok: Bool, message: String) {
         guard let host = environment.link.credentials else {
-            return (false, "Pair your iPhone with Mochi Link first (Settings › iPhone › Mochi Link).")
+            return (false, "Pair a phone with Mochi Link first (Settings › Phones › Mochi Link).")
         }
         do {
             let code = try await LinkPairing.invite(host, hostName: LinkController.macName, role: "cloud")

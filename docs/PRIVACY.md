@@ -14,7 +14,7 @@ The app's own traffic is two things you start yourself:
 
 Your Mac, your phones (Mochi Pocket on the iPhone, Mochi on Android) and Mochi Cloud talk only through Mochi
 Link: one small relay that you run (a Cloudflare Worker, `mochi-link.spike01.workers.dev` today). Until you pair a
-phone in Settings › iPhone › Mochi Link, nothing from this Mac goes to it, and Mochi Pocket works on its own.
+phone in Settings › Phones › Mochi Link, nothing from this Mac goes to it, and Mochi Pocket works on its own.
 
 - **Pairing:** the Mac makes a room key and shows it in a QR code; the phone scans it. The key stays in each
   device's Keychain and never goes to the relay.
@@ -104,7 +104,7 @@ Simulated events are never written to history.
   the Ask Mochi shortcut, and audio is never kept.
 - Inspect your documents or source code.
 - Upload anything you haven't turned on. The app's only traffic of its own is your Mochi Link relay, once you
-  pair a phone (Settings › iPhone), and everything it carries is end-to-end encrypted. Ask Mochi requests and the
+  pair a phone (Settings › Phones), and everything it carries is end-to-end encrypted. Ask Mochi requests and the
   agent's checks (Settings › Agent, off by default) travel through your Claude Code; the hook helper has no
   network code.
 - Use iCloud, or hold a push key.
