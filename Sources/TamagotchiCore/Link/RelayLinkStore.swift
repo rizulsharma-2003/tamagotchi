@@ -172,19 +172,35 @@ public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDeleg
                            reason: Data?) {
         if closeCode.rawValue == 4001 || closeCode.rawValue == 4004 {
             // This device was removed from the room, or the room was deleted: retrying can't help.
-            Self.log.notice("relay closed the link for good (\(closeCode.rawValue)): pair again")
-            lock.withLock { running = false }
-            removed = true
+            markRemoved(why: "closed \(closeCode.rawValue)")
         }
         dropped(webSocketTask, why: "closed \(closeCode.rawValue)")
     }
 
     /// The relay removed this device or deleted the room; Settings should offer to pair again.
-    public private(set) var removed = false
+    public var removed: Bool { lock.withLock { _removed } }
+    private var _removed = false
 
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let socket = task as? URLSessionWebSocketTask else { return }
+        // Refused at the door: the credential was revoked (401) or the room no longer exists (404), e.g. the Mac
+        // unpaired while this device was away.
+        if let http = socket.response as? HTTPURLResponse, Self.refusedForGood(status: http.statusCode) {
+            markRemoved(why: "refused \(http.statusCode)")
+        }
         dropped(socket, why: error.map { "\($0.localizedDescription)" } ?? "ended")
+    }
+
+    /// HTTP answers to the socket upgrade that mean this device's link is over.
+    static func refusedForGood(status: Int) -> Bool { status == 401 || status == 404 }
+
+    private func markRemoved(why: String) {
+        Self.log.notice("relay ended the link for good (\(why, privacy: .public)): pair again")
+        lock.withLock {
+            running = false
+            _removed = true
+        }
+        DispatchQueue.main.async { NotificationCenter.default.post(name: .linkPresenceDidChange, object: nil) }
     }
 
     private func dropped(_ task: URLSessionWebSocketTask, why: String) {

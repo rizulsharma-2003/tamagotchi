@@ -196,6 +196,12 @@ struct RelayClientTests {
     private let host = LinkCredentials(relay: "localhost:8787", room: "room_1", device: "dev_mac", secret: "s1",
                                        key: LinkCrypto.base64url(Data(repeating: 3, count: 32)), role: "host")
 
+    @Test func onlyRevokedOrDeletedRoomsEndTheLink() {
+        #expect(RelayLinkStore.refusedForGood(status: 401))
+        #expect(RelayLinkStore.refusedForGood(status: 404))
+        for status in [400, 403, 429, 500, 502, 503] { #expect(!RelayLinkStore.refusedForGood(status: status)) }
+    }
+
     @Test("A frame is sealed for its room, key, id and sender, and carries routing only in the clear")
     func frames() throws {
         let key = SymmetricKey(data: Data(repeating: 3, count: 32))

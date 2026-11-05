@@ -66,11 +66,20 @@ final class PocketLink {
     }
 
     func unpair() {
+        if let credentials {
+            // Leave the room on the relay too, so this phone's credential stops working.
+            Task { try? await LinkPairing.remove(device: credentials.device, from: credentials) }
+        }
+        forget()
+        refresh()
+    }
+
+    /// Drops the pairing on this phone only.
+    private func forget() {
         LinkCredentialStore.delete(accessGroup: LinkSeal.accessGroup)
         LinkSeal.deleteLiveActivityKey()
         credentials = nil
         MochiLink.use(nil)
-        refresh()
     }
 
     /// Tells the relay where to reach this phone: its notification address and the Live Activity addresses. They stay
@@ -101,6 +110,13 @@ final class PocketLink {
     }
 
     private func refresh() {
+        if paired, MochiLink.relay?.removed == true {
+            // The Mac unpaired (deleting the room) or removed this phone: the old pairing can't work again.
+            let mac = credentials?.peerName ?? "Your Mac"
+            forget()
+            problem = "\(mac) unpaired this iPhone. Scan a new code to pair again."
+            MacLink.shared.log("link: removed by the relay; forgot the pairing")
+        }
         status = MochiLink.relay?.status ?? .offline
         peers = MochiLink.relay?.peers ?? []
     }

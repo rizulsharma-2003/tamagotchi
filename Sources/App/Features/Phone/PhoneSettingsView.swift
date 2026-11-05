@@ -172,7 +172,8 @@ struct PhoneSettingsView: View {
         .confirmationDialog("Unpair this Mac from Mochi Link?", isPresented: $confirmUnpair) {
             Button("Unpair", role: .destructive) { link.unpair() }
         } message: {
-            Text("Your iPhone will need to scan a new code to use Mochi Link again. iCloud keeps working meanwhile.")
+            Text("This deletes the room on your relay: your iPhone and Mochi Cloud are cut off, and their old keys stop working. "
+                 + "Pair again with a new code (and copy new cloud settings). iCloud keeps working meanwhile.")
         }
     }
 

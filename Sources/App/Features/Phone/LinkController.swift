@@ -62,8 +62,12 @@ final class LinkController {
         codeExpires = nil
     }
 
-    /// Forgets this Mac's room: the phone has to pair again. iCloud carries on as before.
+    /// Deletes this Mac's room on the relay (every device in it, the cloud included, is cut off and its credentials stop
+    /// working) and forgets it here. The phone has to pair again; iCloud carries on as before.
     func unpair() {
+        if let credentials {
+            Task { try? await LinkPairing.deleteRoom(credentials) }
+        }
         LinkCredentialStore.delete()
         credentials = nil
         hideCode()
