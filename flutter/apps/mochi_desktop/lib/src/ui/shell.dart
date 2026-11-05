@@ -20,7 +20,7 @@ enum Surface { pet, main, hidden }
 enum ShellAction { showMain, closeWindow, pair, settings, quit }
 
 abstract interface class DesktopShell {
-  /// Shows [surface]: the pet at [petPosition] (screen coordinates; null: bottom right of the screen).
+  /// Shows [surface]: the pet at [petPosition] (screen coordinates; null: bottom left, just above the taskbar).
   Future<void> show(Surface surface, {Offset? petPosition});
 
   /// Moves the window with the mouse (call on a drag start).
@@ -114,7 +114,8 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
         if (petPosition != null) {
           await windowManager.setPosition(petPosition);
         } else {
-          await windowManager.setAlignment(Alignment.bottomRight);
+          // Bottom left, just above the taskbar (the work area), where Windows 11 shows its widgets tile.
+          await windowManager.setAlignment(Alignment.bottomLeft);
         }
         // Shown without taking the focus from whatever you're typing in.
         await windowManager.show(inactive: true);
