@@ -229,7 +229,7 @@ void main() {
       'the real helper (dart run) exits 0 with nothing on stdout, and spools while the app is away',
       () async {
         final process = await Process.start(
-          Platform.resolvedExecutable,
+          _dartExecutable(),
           ['run', 'bin/mochi_hook.dart', 'claude-hook', 'SessionStart'],
           // These tests may themselves run inside Claude Code: its project folder mustn't leak in.
           environment: {'MOCHI_DESKTOP_HOME': paths.home, 'CLAUDE_PROJECT_DIR': ''},
@@ -247,4 +247,25 @@ void main() {
       timeout: const Timeout(Duration(minutes: 6)),
     );
   });
+}
+
+/// The `dart` executable. Under `flutter test` the running executable is the Flutter test runner (on Windows it just
+/// waits when given `run`), so use the Dart SDK inside Flutter instead.
+String _dartExecutable() {
+  final current = Platform.resolvedExecutable;
+  final name = current.split(RegExp(r'[\\/]')).last.toLowerCase();
+  if (name == 'dart' || name == 'dart.exe') return current;
+  // The test runner lives at <flutter>/bin/cache/artifacts/…, next to the Dart SDK at <flutter>/bin/cache/dart-sdk.
+  final normalized = current.replaceAll(r'\', '/');
+  final cache = normalized.indexOf('/bin/cache/');
+  if (cache > 0) {
+    final dart = '${normalized.substring(0, cache)}/bin/cache/dart-sdk/bin/dart${Platform.isWindows ? '.exe' : ''}';
+    if (File(dart).existsSync()) return dart;
+  }
+  final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+  if (flutterRoot != null) {
+    final dart = '$flutterRoot/bin/cache/dart-sdk/bin/dart${Platform.isWindows ? '.exe' : ''}';
+    if (File(dart).existsSync()) return dart;
+  }
+  return Platform.isWindows ? 'dart.exe' : 'dart';
 }

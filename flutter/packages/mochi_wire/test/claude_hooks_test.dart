@@ -129,8 +129,8 @@ void main() {
     expect(inspection.outdated, contains('Stop'));
     installer(helperPath: moved).install();
     final text = File(settings).readAsStringSync();
-    expect(text, contains(moved));
-    expect(text, isNot(contains("'$helper'")));
+    expect(text, contains(_jsonText(moved)));
+    expect(text, isNot(contains(_jsonText("'$helper'"))));
     expect(installer(helperPath: moved).inspect().status, HookStatus.installed);
   });
 
@@ -226,4 +226,10 @@ void main() {
       r'C:\Users\J\AppData\Local\Mochi\bin\mochi_hook.exe',
     );
   });
+}
+
+/// How [text] appears inside JSON (backslashes escaped), without the quotes.
+String _jsonText(String text) {
+  final encoded = jsonEncode(text);
+  return encoded.substring(1, encoded.length - 1);
 }

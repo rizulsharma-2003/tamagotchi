@@ -67,7 +67,8 @@ void main() {
       final settings = jsonDecode(File(settingsFile).readAsStringSync()) as Map;
       expect(settings['model'], 'opus');
       expect(jsonEncode(settings['hooks']['Stop']), contains('say done'));
-      expect(jsonEncode(settings['hooks']['Stop']), contains(paths.installedHelper));
+      // Compared as JSON text: a Windows path's backslashes are escaped there.
+      expect(jsonEncode(settings['hooks']['Stop']), contains(_jsonText(paths.installedHelper)));
 
       final text = File(settingsFile).readAsStringSync();
       await hooks.connect();
@@ -205,4 +206,10 @@ void main() {
       expect(DesktopSettings(FileSettingsDocument('${temp.path}/missing.json')).themeMode, ThemeMode.system);
     });
   });
+}
+
+/// How [text] appears inside JSON (backslashes escaped), without the quotes.
+String _jsonText(String text) {
+  final encoded = jsonEncode(text);
+  return encoded.substring(1, encoded.length - 1);
 }
