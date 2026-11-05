@@ -426,4 +426,78 @@ void main() {
     expect(RelayLink.defaultBackoff(3).inMilliseconds, inInclusiveRange(8000, 9000));
     expect(RelayLink.defaultBackoff(20).inMilliseconds, inInclusiveRange(60000, 61000));
   });
+
+  group('alerts', () {
+    const inner = {
+      'title': 'Claude finished',
+      'body': 'mac-Tamagotchi: tests pass.',
+      'userInfo': {'card': 'session-1'},
+    };
+
+    /// An alert the Mac sealed, as the relay forwards it.
+    Map<String, Object?> fromMac(String id, {Map<String, Object?> body = inner, String from = 'dev_mac'}) => {
+      ...(jsonDecode(LinkAlert.frame(body, host, roomKey, id: id, category: 'turn', threadId: 'session-1')) as Map).cast<String, Object?>(),
+      'from': from,
+    };
+
+    test('a sealed alert reaches a phone once, acked, without touching state or messages', () async {
+      await link.dispose();
+      link = makeLink(phone);
+      final alerts = <LinkAlert>[];
+      link.alerts.listen(alerts.add);
+      final socket = await connected();
+      socket.deliver(fromMac('a1'));
+      socket.deliver(fromMac('a1'));
+      socket.deliver({
+        'v': 1,
+        'op': 'sync',
+        'state': <Object?>[],
+        'queue': [
+          fromMac('a2', body: {'body': 'Queued while away'}),
+        ],
+      });
+      await pumpEventQueue();
+      expect(alerts.map((alert) => alert.id), ['a1', 'a2']);
+      expect(alerts.first.from, 'dev_mac');
+      expect(alerts.first.title, 'Claude finished');
+      expect(alerts.first.body, 'mac-Tamagotchi: tests pass.');
+      expect(alerts.first.userInfo, {'card': 'session-1'});
+      expect(alerts.last.title, isNull);
+      expect(alerts.last.body, 'Queued while away');
+      expect([for (final ack in socket.sentOp('ack')) ack['id']], ['a1', 'a1', 'a2']);
+      expect(changes, isEmpty);
+      expect(incoming, isEmpty);
+    });
+
+    test("an alert that doesn't open (another sender in the associated data) is dropped, but acked", () async {
+      await link.dispose();
+      link = makeLink(phone);
+      final alerts = <LinkAlert>[];
+      link.alerts.listen(alerts.add);
+      final socket = await connected();
+      socket.deliver(fromMac('a1', from: 'dev_mallory'));
+      await pumpEventQueue();
+      expect(alerts, isEmpty);
+      expect(socket.sentOp('ack').single['id'], 'a1');
+    });
+
+    test('sendAlert writes the Swift frame: to the pockets, an alert push hint, the inner JSON sealed unwrapped', () async {
+      final socket = await connected();
+      link.sendAlert(inner, category: 'turn', threadId: 'session-1', collapse: 'turn-1');
+      final frame = socket.sentOp('send').single;
+      expect(frame['key'], 'alert');
+      expect(frame['to'], ['pocket']);
+      expect(frame['ttl'], 3600);
+      expect(frame['push'], {'kind': 'alert', 'priority': 10, 'collapse': 'turn-1', 'category': 'turn', 'threadId': 'session-1'});
+      final opened = LinkAlert.open({...frame, 'from': 'dev_mac'}, room: 'room_1', roomKey: roomKey)!;
+      expect(opened.toJson(), inner);
+      // The notification extension's associated data: mochi-link/v1|<room>|alert|<id>|<from>.
+      final plain = LinkCrypto.open(
+        LinkSealed(nonce: frame['nonce']! as String, box: frame['box']! as String),
+        ad: 'mochi-link/v1|room_1|alert|${frame['id']}|dev_mac',
+        key: roomKey,
+      );
+      expect(jsonDecode(utf8.decode(plain!)), inner);
+    });
+  });
 }

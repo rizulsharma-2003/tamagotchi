@@ -10,11 +10,13 @@
 /// - [LinkKey], [LinkEnvelope]: the key names and the frame.
 /// - Models for every value ([PetLook], [ClaudeMirror], [PhoneSessions], [AgentPending], [AgentDoneList],
 ///   [LinkCommand], [LinkReply], …), checked against `link-spec/fixtures`.
+/// - [LinkAlert]: sealed notifications for the phones (4.6.1), on [RelayLink.alerts] and [RelayLink.sendAlert].
 ///
 /// Not here yet (TODO, as the Swift side gets them): `register` (push addresses for the relay's push gateway),
 /// `agentNews` and per-device `done.<device>` keys, and key rotation when a device is removed (4.2).
 library;
 
+export 'src/link_alert.dart';
 export 'src/link_credentials.dart';
 export 'src/link_crypto.dart';
 export 'src/link_envelope.dart';

@@ -1,0 +1,60 @@
+name: mochi_pocket
+description: >-
+  Mochi for Android: the Android twin of the iPhone's Mochi Pocket. It joins your Mochi Link room as a `pocket`
+  device and talks to your Mac through the relay, end-to-end encrypted (docs/MOCHI_LINK_PLAN.md 5.4).
+publish_to: none
+version: 0.1.0+1
+resolution: workspace
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=3.35.0"
+
+# New plugins are pinned to exact versions at least two weeks old, each checked against this Flutter (3.35, Dart 3.9).
+dependencies:
+  flutter:
+    sdk: flutter
+  mochi_art:
+    path: ../../packages/mochi_art
+  mochi_link:
+    path: ../../packages/mochi_link
+  # Alerts from the Mac shown as Android notifications while the app runs (20.1.0: 2026-02; 21+ needs Dart 3.10).
+  flutter_local_notifications: 20.1.0
+  # Credentials in Android Keystore-backed storage (10.3.4: 2026-09-13; 11.x needs Dart 3.10 through its Windows part).
+  flutter_secure_storage: 10.3.4
+  # Scanning the Mac's QR code with the camera (7.4.2: 2026-09-14).
+  mobile_scanner: 7.4.2
+  # Opening mail, meetings and pages in their apps or the browser (6.3.2: 2025-07; 6.3.3 needs Dart 3.11).
+  url_launcher: 6.3.2
+  # Not used directly: flutter_secure_storage's Windows part brings in path_provider, whose Android side from 2.3.0
+  # pulls in `jni` (a native FFI build, newest release days old). 2.2.23 (2026-03-25) keeps that out of the APK.
+  path_provider_android: 2.2.23
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    # Mochi's and Patch's animations recorded from the Swift app (the same file as mochi_gallery's).
+    - assets/pose_tracks.json.deflate
+  # Nunito (SIL OFL 1.1, fonts/OFL.txt; no Reserved Font Name), the open rounded face closest to the iPhone's SF Pro
+  # Rounded, which Apple licenses for Apple platforms only. Bundled, so text works offline. Source: google/fonts
+  # ofl/nunito/Nunito[wght].ttf (v3.602) at commit 8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5. Flutter 3.35 doesn't map
+  # FontWeight onto a variable font's wght axis (everything would draw at its ExtraLight default), so these are static
+  # instances made from that file with fontTools 4.60.1:
+  #   instancer.instantiateVariableFont(TTFont("Nunito[wght].ttf"), {"wght": W}, updateFontNames=True)
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: fonts/Nunito-Regular.ttf
+          weight: 400
+        - asset: fonts/Nunito-Medium.ttf
+          weight: 500
+        - asset: fonts/Nunito-SemiBold.ttf
+          weight: 600
+        - asset: fonts/Nunito-Bold.ttf
+          weight: 700
+        - asset: fonts/Nunito-ExtraBold.ttf
+          weight: 800

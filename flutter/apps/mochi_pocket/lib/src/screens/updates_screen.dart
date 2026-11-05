@@ -1,0 +1,134 @@
+import 'package:flutter/material.dart';
+import 'package:mochi_link/mochi_link.dart';
+
+import '../model/pocket_model.dart';
+import '../services/link_opener.dart';
+import '../theme.dart';
+import '../widgets/agent_card.dart';
+import '../widgets/clay.dart';
+
+/// "Waiting for you" opened up (iOS/MochiPocket/UpdatesView.swift): everything that's waiting, then what you've
+/// marked done from the same card. Pull down to ask your Mac to check again. Each update is its own small clay card,
+/// in a lazily built list.
+class UpdatesScreen extends StatelessWidget {
+  const UpdatesScreen({super.key, required this.model, required this.opener, required this.checkNow});
+
+  final PocketModel model;
+  final LinkOpener opener;
+  final VoidCallback checkNow;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Updates')),
+    body: PocketBackground(
+      child: ListenableBuilder(
+        listenable: model,
+        builder: (context, _) {
+          final rows = _rows(context);
+          return RefreshIndicator(
+            onRefresh: () async => checkNow(),
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(Space.l, Space.s, Space.l, Space.xl + MediaQuery.paddingOf(context).bottom),
+              itemCount: rows.length,
+              itemBuilder: (context, index) => rows[index],
+            ),
+          );
+        },
+      ),
+    ),
+  );
+
+  /// One entry per list row: built lazily by the list, so a long week of updates stays cheap.
+  List<Widget> _rows(BuildContext context) {
+    final p = context.palette;
+    final agent = model.agent;
+    final waiting = model.waiting;
+    final done = (agent?.items ?? const <AgentNote>[]).where((note) => model.isDone(note.id)).toList();
+    final headline = agent?.headline;
+    final looked = agent?.lookedAt;
+    Widget card(Widget child, {Key? key}) => Padding(
+      key: key,
+      padding: const EdgeInsets.only(bottom: Space.s),
+      child: ClayCard(radius: Radii.inner + 4, padding: const EdgeInsets.fromLTRB(Space.m, Space.xs, Space.xs, Space.xs), child: child),
+    );
+    return [
+      if (headline != null && headline.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(bottom: Space.l),
+          child: ClayCard(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                IconTile(icon: Icons.auto_awesome_rounded, tint: p.tint),
+                const SizedBox(width: Space.m),
+                Expanded(child: Text(headline, style: context.type.subheadline)),
+              ],
+            ),
+          ),
+        ),
+      SectionTitle(
+        title: 'Waiting for you',
+        action: waiting.length > 1
+            ? TextButton.icon(
+                onPressed: () => model.markDone(waiting.map((note) => note.id)),
+                icon: const Icon(Icons.done_all_rounded, size: 18),
+                label: Text('Mark all done', semanticsLabel: 'Mark all ${waiting.length} done'),
+              )
+            : null,
+      ),
+      const SizedBox(height: Space.s),
+      if (agent == null)
+        card(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: Space.m),
+            child: Row(
+              children: [
+                const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5)),
+                const SizedBox(width: Space.m),
+                Expanded(child: Text('Waiting to hear from your Mac…', style: context.type.footnote)),
+              ],
+            ),
+          ),
+        )
+      else if (waiting.isEmpty)
+        card(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: Space.m),
+            child: NoteLabel(
+              text: 'Nothing waiting. ${model.petName} will tell you when something comes in.',
+              icon: Icons.verified_rounded,
+              tint: p.success,
+            ),
+          ),
+        ),
+      for (final note in waiting)
+        card(
+          key: ValueKey(note.id),
+          UpdateRow(note: note, opener: opener, onDone: () => model.markDone([note.id])),
+        ),
+      if (looked != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Space.xs, Space.xs, Space.xs, 0),
+          child: Text(
+            'Checked by ${agent?.origin?.startsWith('cloud') == true ? 'Mochi Cloud' : 'your Mac'} ${relativeTime(looked)}. Pull down to check again.',
+            style: context.type.footnote,
+          ),
+        ),
+      if (done.isNotEmpty) ...[
+        const SizedBox(height: Space.l),
+        const SectionTitle(title: 'Done'),
+        const SizedBox(height: Space.s),
+        for (final note in done)
+          card(
+            key: ValueKey('done-${note.id}'),
+            UpdateRow(note: note, opener: opener, done: true, onNotDone: () => model.markNotDone(note.id)),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Space.xs, Space.xs, Space.xs, 0),
+          child: Text('Press and hold one to put it back.', style: context.type.footnote),
+        ),
+      ],
+    ];
+  }
+}

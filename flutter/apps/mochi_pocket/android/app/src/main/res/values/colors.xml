@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The peach of the icon's backdrop. -->
+    <color name="ic_launcher_background">#F7D9C2</color>
+    <!-- The app's backdrop (MochiPalette backgroundTop), behind the launch screen and the first frame. -->
+    <color name="mochi_background">#FFF6EE</color>
+</resources>
