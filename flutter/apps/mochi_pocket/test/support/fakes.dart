@@ -8,6 +8,7 @@ import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_pocket/src/services/alert_notifier.dart';
 import 'package:mochi_pocket/src/services/link_opener.dart';
 import 'package:mochi_pocket/src/services/platform_bridge.dart';
+import 'package:mochi_pocket/src/services/push/push_service.dart';
 
 final List<int> roomKey = List.filled(32, 7);
 
@@ -253,3 +254,57 @@ PhoneSessions sampleSessions() => PhoneSessions(
     ),
   ],
 );
+
+/// Push without Firebase: the test sets the address, rotates it, and delivers foreground pushes.
+class FakePushService implements PushService {
+  FakePushService({this.problem, this.address = 'fcm-token-1', this.failure});
+
+  /// What [start] says (null: push works).
+  String? problem;
+  String? address;
+  PushException? failure;
+  int deletes = 0;
+  final StreamController<String> refreshes = StreamController.broadcast();
+  final StreamController<Map<String, Object?>> pushes = StreamController.broadcast();
+
+  @override
+  Future<String?> start() async => problem;
+
+  @override
+  Future<String?> token() async {
+    final failure = this.failure;
+    if (failure != null) throw failure;
+    return address;
+  }
+
+  @override
+  Stream<String> get tokenRefresh => refreshes.stream;
+
+  @override
+  Stream<Map<String, Object?>> get messages => pushes.stream;
+
+  @override
+  Future<void> deleteToken() async {
+    deletes++;
+    address = null;
+  }
+}
+
+/// The relay's data-only FCM message for an alert the Mac sealed: `kind`, and `mochi` as a JSON string of
+/// `{v, room, key, id, from, nonce, box}`.
+Map<String, Object?> alertPush(String id, Map<String, Object?> inner, {String room = 'room_1'}) {
+  final frame = (jsonDecode(LinkAlert.frame(inner, macCredentials, roomKey, id: id)) as Map).cast<String, Object?>();
+  return {
+    'kind': 'alert',
+    'mochi': jsonEncode({
+      'v': 1,
+      'room': room,
+      'key': 'alert',
+      'id': id,
+      'from': macCredentials.device,
+      'nonce': frame['nonce'],
+      'box': frame['box'],
+    }),
+    'category': 'turn',
+  };
+}

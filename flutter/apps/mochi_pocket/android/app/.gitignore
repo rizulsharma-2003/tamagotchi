@@ -1,0 +1,3 @@
+# Firebase's configuration for this app (from the Firebase console). Kept out of the repository; copy it here to
+# build with push. The service-account key never comes near the app: only the relay has it.
+google-services.json

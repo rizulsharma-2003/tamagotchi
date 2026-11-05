@@ -26,6 +26,13 @@ dependencies:
   mobile_scanner: 7.4.2
   # Opening mail, meetings and pages in their apps or the browser (6.3.2: 2025-07; 6.3.3 needs Dart 3.11).
   url_launcher: 6.3.2
+  # Push through Firebase Cloud Messaging, so alerts arrive while the app is closed: one FlutterFire release
+  # (2026-09-14). 16.7.1/4.15.1+ are under two weeks old; 17/5 are a new major.
+  firebase_core: 4.15.0
+  firebase_messaging: 16.7.0
+  # The app's files folder from any isolate (the push handler runs without an activity, so the platform channel
+  # isn't there). 2.1.5: 2024-10-29, already in the lock through flutter_secure_storage.
+  path_provider: 2.1.5
   # Not used directly: flutter_secure_storage's Windows part brings in path_provider, whose Android side from 2.3.0
   # pulls in `jni` (a native FFI build, newest release days old). 2.2.23 (2026-03-25) keeps that out of the APK.
   path_provider_android: 2.2.23

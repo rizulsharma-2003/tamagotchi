@@ -123,13 +123,18 @@ class LinkRelayError {
 }
 
 class _Outgoing {
-  const _Outgoing(this.id, this.stateKey, this.frame);
+  const _Outgoing(this.id, this.stateKey, this.frame, {this.slot});
 
   final String id;
 
   /// Null for messages.
   final LinkKey? stateKey;
   final String frame;
+
+  /// Frames where only the newest matters (`register`): a newer one replaces any still waiting.
+  final String? slot;
+
+  String? get replaces => stateKey?.name ?? slot;
 }
 
 /// Mochi Link over the relay (docs/MOCHI_LINK_PLAN.md 4.4), the Dart twin of Swift `RelayLinkStore`: one WebSocket
@@ -277,6 +282,27 @@ class RelayLink {
 
   /// Sends a notification to every phone in the room, sealed with the room key (Swift `RelayLinkStore.sendAlert`):
   /// [inner] is `{title, subtitle?, body, userInfo}`. For hosts (and test tools); the relay refuses it from a pocket.
+  /// Tells the relay where to push this device (docs/MOCHI_LINK_PLAN.md 4.6.1): `{"fcm": token}` on Android,
+  /// `{"device", "pushToStart", "updates"}` (with [apnsEnv] and [topic]) on iPhones. Addresses go to the relay only,
+  /// in the clear (they never reach other devices). Only the newest registration waits while offline; it is sent
+  /// again after a reconnect until the relay confirms it. Returns the frame id (a refusal carries it).
+  String register(Map<String, Object?> tokens, {String? apnsEnv, String? topic}) {
+    final id = newId();
+    _send(
+      _Outgoing(
+        id,
+        null,
+        registerFrame(tokens, id: id, apnsEnv: apnsEnv, topic: topic),
+        slot: 'register',
+      ),
+    );
+    return id;
+  }
+
+  /// The `register` frame (Swift `RelayLinkStore.register`): `{v: 1, op: "register", id, tokens, apnsEnv?, topic?}`.
+  static String registerFrame(Map<String, Object?> tokens, {required String id, String? apnsEnv, String? topic}) =>
+      jsonEncode({'v': 1, 'op': 'register', 'id': id, 'tokens': tokens, 'apnsEnv': ?apnsEnv, 'topic': ?topic});
+
   void sendAlert(Map<String, Object?> inner, {String? category, String? threadId, int priority = 10, String? collapse, int ttl = 3600}) {
     final id = newId();
     final frame = LinkAlert.frame(
@@ -398,13 +424,16 @@ class RelayLink {
       socket.send(outgoing.frame);
       return;
     }
-    final stateKey = outgoing.stateKey;
-    if (stateKey != null) _outbox.removeWhere((waiting) => waiting.stateKey == stateKey);
+    final replaces = outgoing.replaces;
+    if (replaces != null) _outbox.removeWhere((waiting) => waiting.replaces == replaces);
     _outbox.add(outgoing);
     if (_outbox.length > _maxOutbox) _outbox.removeRange(0, _outbox.length - _maxOutbox);
   }
 
   void _track(_Outgoing outgoing) {
+    // An older registration the relay never confirmed shouldn't go again after this one.
+    final slot = outgoing.slot;
+    if (slot != null) _unacked.removeWhere((_, waiting) => waiting.slot == slot);
     _unacked[outgoing.id] = outgoing;
     while (_unacked.length > _maxUnacked) {
       _unacked.remove(_unacked.keys.first);

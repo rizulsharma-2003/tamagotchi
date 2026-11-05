@@ -234,6 +234,24 @@ void main() {
     await finish(tester);
   });
 
+  testWidgets('with an FCM address registered, Settings says notifications are on (Firebase)', (tester) async {
+    model = PocketModel(
+      credentialStore: store..saved = phoneCredentials,
+      doneDocument: MemoryDocument(),
+      notifier: notifier,
+      connect: relay.connect,
+      push: FakePushService(),
+      deviceName: 'Test Phone',
+    );
+    await launch(tester);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Notifications: on (Firebase)'), findsOneWidget);
+    expect(relay.socket.sent.where((frame) => frame['op'] == 'register'), hasLength(1));
+    await finish(tester);
+  });
+
   testWidgets('Settings shows the pairing and the push note; Unpair goes back to pairing', (tester) async {
     store.saved = phoneCredentials;
     await launch(tester);
@@ -244,7 +262,9 @@ void main() {
     expect(find.text('Paired with Test Mac'), findsOneWidget);
     expect(find.text('Test Phone'), findsOneWidget);
     expect(find.text('relay.test'), findsOneWidget);
-    expect(find.textContaining('only while Mochi is open'), findsOneWidget);
+    // This model has no push service: Settings says alerts only come while the app is open, and why.
+    expect(find.text('Notifications: only while Mochi is open'), findsOneWidget);
+    expect(find.textContaining('push is not part of this build'), findsOneWidget);
     await tester.tap(find.text('Unpair'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));

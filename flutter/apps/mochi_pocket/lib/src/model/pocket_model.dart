@@ -6,9 +6,27 @@ import 'package:mochi_link/mochi_link.dart';
 import '../services/alert_notifier.dart';
 import '../services/credential_store.dart';
 import '../services/local_file.dart';
+import '../services/push/push_messages.dart';
+import '../services/push/push_service.dart';
+import '../services/push/shown_alerts.dart';
 import 'done_marks.dart';
 
 enum ExchangeState { sending, working, done, failed }
+
+/// Whether Mochi's alerts can reach this phone while the app is closed.
+enum PushStatus {
+  /// Not paired: nothing to receive.
+  off,
+
+  /// Getting a push address.
+  starting,
+
+  /// The relay has this phone's FCM address.
+  registered,
+
+  /// Push doesn't work here ([PocketModel.pushProblem] says why); alerts arrive only while the app runs.
+  unavailable,
+}
 
 /// Something you asked your Mac, and how it's going (Swift `MacLink.Exchange`).
 class Exchange {
@@ -46,9 +64,13 @@ class PocketModel extends ChangeNotifier {
     required LinkConnector connect,
     LinkJoiner? join,
     LinkLeaver? leave,
+    PushService? push,
+    ShownAlerts? shown,
     this.deviceName = 'Android phone',
     DateTime Function()? clock,
-  }) : _store = credentialStore,
+  }) : _push = push,
+       _shown = shown ?? MemoryShownAlerts(),
+       _store = credentialStore,
        _doneDocument = doneDocument,
        _notifier = notifier,
        _connect = connect,
@@ -56,6 +78,10 @@ class PocketModel extends ChangeNotifier {
        _leave = leave ?? _relayLeave,
        _clock = clock ?? DateTime.now;
 
+  final PushService? _push;
+
+  /// Alerts already shown, shared with the push handler: each alert shows once, however it arrives.
+  final ShownAlerts _shown;
   final CredentialStore _store;
   final LocalDocument _doneDocument;
   final AlertNotifier _notifier;
@@ -96,6 +122,14 @@ class PocketModel extends ChangeNotifier {
   final Set<String> _seenInteractions = {};
   DoneMarks _done = DoneMarks();
   DateTime? _lastAlertAt;
+  PushStatus _pushStatus = PushStatus.off;
+  String? _pushProblem;
+  String? _registerId;
+
+  /// The address last registered, and on which link: Firebase also announces a new install's first address through
+  /// onTokenRefresh, which needn't go twice.
+  (RelayLink, String)? _registered;
+  final List<StreamSubscription<Object?>> _pushSubscriptions = [];
 
   final StreamController<PetCue> _cues = StreamController.broadcast();
 
@@ -151,6 +185,10 @@ class PocketModel extends ChangeNotifier {
   /// Oldest first; at most six.
   List<Exchange> get exchanges => List.unmodifiable(_exchanges);
   DateTime? get lastAlertAt => _lastAlertAt;
+  PushStatus get pushStatus => _pushStatus;
+
+  /// Why push doesn't work, when [pushStatus] is [PushStatus.unavailable].
+  String? get pushProblem => _pushProblem;
 
   /// The room's reactions, as they happen.
   Stream<PetCue> get cues => _cues.stream;
@@ -178,6 +216,7 @@ class PocketModel extends ChangeNotifier {
     if (saved != null && saved.roomKey != null) {
       _use(saved);
       _phase = PairingPhase.paired;
+      unawaited(_startPush());
     } else {
       _phase = PairingPhase.unpaired;
     }
@@ -212,6 +251,7 @@ class PocketModel extends ChangeNotifier {
       _use(joined);
       _phase = PairingPhase.paired;
       _log('paired with ${code.name}');
+      unawaited(_startPush());
       return true;
     } on LinkPairingException catch (error) {
       _problem = _explain(error);
@@ -260,6 +300,75 @@ class PocketModel extends ChangeNotifier {
     if (credentials != null && stillInRoom) {
       unawaited(_leave(credentials).catchError((Object error) => _log('the relay was not told (${error.runtimeType})')));
     }
+    // A stale push address must not receive pushes for a room this phone left: Firebase forgets it.
+    _pushStatus = PushStatus.off;
+    _pushProblem = null;
+    _registerId = null;
+    _registered = null;
+    final push = _push;
+    if (push != null) {
+      unawaited(push.deleteToken().catchError((Object error) => _log('the push address was not deleted (${error.runtimeType})')));
+    }
+  }
+
+  // MARK: Push
+
+  /// Gets push going (once per launch), then tells the relay this phone's FCM address: at launch, after pairing, and
+  /// whenever Firebase rotates it.
+  Future<void> _startPush() async {
+    final push = _push;
+    if (push == null) {
+      _setPush(PushStatus.unavailable, 'push is not part of this build');
+      return;
+    }
+    _setPush(PushStatus.starting, null);
+    final problem = await push.start();
+    if (problem != null) {
+      _setPush(PushStatus.unavailable, problem);
+      return;
+    }
+    if (_pushSubscriptions.isEmpty) {
+      _pushSubscriptions.addAll([push.tokenRefresh.listen(_registerPush), push.messages.listen(_pushed)]);
+    }
+    try {
+      final token = await push.token();
+      if (token == null || token.isEmpty) {
+        _setPush(PushStatus.unavailable, "Firebase hasn't given this phone a push address yet");
+      } else {
+        _registerPush(token);
+      }
+    } on PushException catch (error) {
+      _setPush(PushStatus.unavailable, error.reason);
+    } on Object catch (error) {
+      _log('no push address (${error.runtimeType})');
+      _setPush(PushStatus.unavailable, "Firebase couldn't give this phone a push address");
+    }
+  }
+
+  /// Sends `register {tokens: {fcm}}` (the address itself is never logged).
+  void _registerPush(String token) {
+    final link = _link;
+    if (link == null || token.isEmpty) return;
+    final last = _registered;
+    if (last != null && identical(last.$1, link) && last.$2 == token) return;
+    _registered = (link, token);
+    _registerId = link.register({'fcm': token});
+    _log('register frame for push ${link.status == LinkStatus.online ? 'sent' : 'queued until connected'}');
+    _setPush(PushStatus.registered, null);
+  }
+
+  /// A push that arrived while the app is open (the background isolate handles the rest).
+  Future<void> _pushed(Map<String, Object?> data) async {
+    final outcome = await PushMessages.handle(data, credentials: () async => _credentials, notifier: _notifier, shown: _shown);
+    if (outcome == PushOutcome.shown || outcome == PushOutcome.fallback) _lastAlertAt = _clock();
+    _log('push while open: ${outcome.name}');
+  }
+
+  void _setPush(PushStatus status, String? problem) {
+    if (_pushStatus == status && _pushProblem == problem) return;
+    _pushStatus = status;
+    _pushProblem = problem;
+    notifyListeners();
   }
 
   // MARK: The link
@@ -379,6 +488,10 @@ class PocketModel extends ChangeNotifier {
   /// waiting forever; other refusals are only logged.
   void _refused(LinkRelayError error) {
     _log('relay refused ${error.key ?? 'a frame'}: ${error.code}');
+    if (error.id != null && error.id == _registerId) {
+      _setPush(PushStatus.unavailable, "the relay didn't take this phone's push address (${error.code})");
+      return;
+    }
     if (error.key != LinkKey.command.name) return;
     final exchange = _exchanges.where((exchange) => exchange.state == ExchangeState.sending).lastOrNull;
     if (exchange == null) return;
@@ -391,9 +504,11 @@ class PocketModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _alerted(LinkAlert alert) {
+  /// An alert over the relay socket. The same alert also comes as an FCM push: whichever arrives first is shown.
+  Future<void> _alerted(LinkAlert alert) async {
+    if (!await _shown.claim(alert.id)) return;
     _lastAlertAt = _clock();
-    unawaited(_notifier.show(alert));
+    await _notifier.show(alert);
   }
 
   // MARK: Things you do
@@ -473,6 +588,9 @@ class PocketModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    for (final subscription in _pushSubscriptions) {
+      unawaited(subscription.cancel());
+    }
     unawaited(_disconnect());
     unawaited(_cues.close());
     super.dispose();

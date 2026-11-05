@@ -427,6 +427,54 @@ void main() {
     expect(RelayLink.defaultBackoff(20).inMilliseconds, inInclusiveRange(60000, 61000));
   });
 
+  group('register', () {
+    test("the frame is exactly the relay's: {v, op, id, tokens}, with no APNs fields for an FCM token", () async {
+      final socket = await connected();
+      final id = link.register({'fcm': 'token-1'});
+      expect(socket.sentOp('register').single, {
+        'v': 1,
+        'op': 'register',
+        'id': id,
+        'tokens': {'fcm': 'token-1'},
+      });
+      expect(jsonDecode(RelayLink.registerFrame({'device': 'abc'}, id: 'r1', apnsEnv: 'sandbox', topic: 'com.insideedge.mochi')), {
+        'v': 1,
+        'op': 'register',
+        'id': 'r1',
+        'tokens': {'device': 'abc'},
+        'apnsEnv': 'sandbox',
+        'topic': 'com.insideedge.mochi',
+      });
+    });
+
+    test('offline, only the newest registration waits; it goes after hello', () async {
+      link.register({'fcm': 'old'});
+      link.register({'fcm': 'new'});
+      final socket = await connected();
+      expect(socket.ops, ['hello', 'register']);
+      expect(socket.sentOp('register').single['tokens'], {'fcm': 'new'});
+    });
+
+    test("a registration the relay didn't confirm goes again after a reconnect, but not one a newer one replaced", () async {
+      var socket = await connected();
+      link.register({'fcm': 'first'});
+      link.register({'fcm': 'second'});
+      socket.drop();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      socket = sockets.last..open();
+      await pumpEventQueue();
+      expect(socket.ops, ['hello', 'register']);
+      expect(socket.sentOp('register').single['tokens'], {'fcm': 'second'});
+      socket.deliver({'v': 1, 'op': 'ack', 'id': socket.sentOp('register').single['id']});
+      await pumpEventQueue();
+      socket.drop();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      sockets.last.open();
+      await pumpEventQueue();
+      expect(sockets.last.ops, ['hello'], reason: 'confirmed: nothing to resend');
+    });
+  });
+
   group('alerts', () {
     const inner = {
       'title': 'Claude finished',

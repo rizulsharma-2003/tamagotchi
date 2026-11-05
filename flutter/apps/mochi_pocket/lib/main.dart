@@ -22,6 +22,7 @@ import 'src/services/alert_notifier.dart';
 import 'src/services/credential_store.dart';
 import 'src/services/local_file.dart';
 import 'src/services/platform_bridge.dart';
+import 'src/services/push/push_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,6 +42,9 @@ Future<void> main() async {
       // Connection events only: the client never logs values or secrets.
       onLog: kDebugMode ? (message) => debugPrint('Mochi Link: $message') : null,
     ),
+    // FCM: alerts reach the phone while the app is closed (google-services.json at build time; see the Gradle file).
+    push: FirebasePushService(),
+    shown: await openShownAlerts(),
     deviceName: await bridge.deviceName(),
   );
   await notifier.start();

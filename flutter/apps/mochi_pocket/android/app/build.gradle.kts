@@ -5,20 +5,29 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Push (FCM): android/app/google-services.json, downloaded from the Firebase console for com.insideedge.mochi, is kept
+// out of git (.gitignore here). With it, the google-services plugin turns it into the app's Firebase configuration;
+// without it the app still builds and runs, and Settings says push isn't set up in this build.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+} else {
+    logger.warn("Mochi: no android/app/google-services.json, so this build has no push (FCM).")
+}
+
 android {
     namespace = "com.insideedge.mochi"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
         // flutter_local_notifications uses java.time on older Android versions.
         isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     defaultConfig {

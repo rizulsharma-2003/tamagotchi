@@ -3,6 +3,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:mochi_link/mochi_link.dart';
 
 import '../theme.dart';
+import 'push/shown_alerts.dart';
 
 /// Shows the Mac's alerts ([LinkAlert]) as notifications.
 abstract interface class AlertNotifier {
@@ -17,12 +18,12 @@ abstract interface class AlertNotifier {
   Future<void> show(LinkAlert alert);
 }
 
-/// Android notifications through flutter_local_notifications. Until push (FCM) is set up, they only arrive while
-/// the app is open or still running in the background.
+/// Android notifications through flutter_local_notifications: alerts from the relay socket while the app runs, and
+/// from FCM pushes (in the app, or in the background isolate when it's closed). One channel and one style for both.
+/// An alert's notification id comes from its id, so a second copy replaces the first instead of stacking.
 class LocalAlertNotifier implements AlertNotifier {
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _started = false;
-  int _next = 0;
 
   static const String _channel = 'mochi_alerts';
 
@@ -58,7 +59,7 @@ class LocalAlertNotifier implements AlertNotifier {
     final text = [alert.subtitle, alert.body].whereType<String>().where((part) => part.isNotEmpty).join('\n');
     try {
       await _plugin.show(
-        id: _next++ & 0x7fffffff,
+        id: notificationIdFor(alert.id),
         title: title,
         body: text.isEmpty ? 'Mochi has news' : text,
         notificationDetails: NotificationDetails(

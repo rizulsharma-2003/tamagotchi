@@ -184,21 +184,63 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
     );
   }
 
+  /// Whether alerts reach this phone while Mochi is closed, and if not, why.
+  Widget _pushStatus() {
+    final p = context.palette;
+    final (icon, tint, headline, detail) = switch (model.pushStatus) {
+      PushStatus.registered => (
+        Icons.notifications_active_rounded,
+        p.success,
+        'Notifications: on (Firebase)',
+        "Claude's finished turns, approvals and news from your Mac reach this phone even when Mochi is closed. "
+            'They are end-to-end encrypted: only this phone can read them.',
+      ),
+      PushStatus.starting => (
+        Icons.notifications_rounded,
+        p.inkSecondary,
+        'Notifications: setting up…',
+        'Getting a push address from Firebase.',
+      ),
+      PushStatus.unavailable => (
+        Icons.notifications_paused_rounded,
+        p.warning,
+        'Notifications: only while Mochi is open',
+        'Push is off because ${model.pushProblem ?? 'it could not be set up'}. Alerts still arrive while the app is open '
+            'or running in the background.',
+      ),
+      PushStatus.off => (Icons.notifications_off_rounded, p.inkSecondary, 'Notifications: off', 'Pair with your Mac to get its alerts.'),
+    };
+    return MergeSemantics(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: ExcludeSemantics(child: Icon(icon, size: 18, color: tint)),
+          ),
+          const SizedBox(width: Space.s),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(headline, style: context.type.subheadline.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(detail, style: context.type.footnote),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _notifications() => ClayCard(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Semantics(header: true, child: Text('Notifications', style: context.type.headline)),
         const SizedBox(height: Space.m),
-        NoteLabel(
-          text:
-              "Claude's finished turns, approvals and news from your Mac show up as notifications only while Mochi is open "
-              'or still running in the background. Push notifications, which reach you when the app is closed, come in a '
-              'later version.',
-          icon: Icons.notifications_active_rounded,
-          tint: context.palette.tint,
-          textColor: context.palette.ink,
-        ),
+        _pushStatus(),
         if (_notificationsOn == false) ...[
           const SizedBox(height: Space.m),
           NoteLabel(text: 'Notifications are turned off for Mochi.', icon: Icons.notifications_off_rounded, tint: context.palette.warning),
