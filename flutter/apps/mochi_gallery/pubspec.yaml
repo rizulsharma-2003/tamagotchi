@@ -1,0 +1,23 @@
+name: mochi_gallery
+description: A gallery for eyeballing the mochi_art port against the Swift app.
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  mochi_art:
+    path: ../../packages/mochi_art
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/pose_tracks.json.deflate

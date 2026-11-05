@@ -1,0 +1,10 @@
+name: mochi_workspace
+description: Mochi's Flutter code (Android and Windows apps to come) as one pub workspace.
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+workspace:
+  - packages/mochi_art
+  - apps/mochi_gallery
