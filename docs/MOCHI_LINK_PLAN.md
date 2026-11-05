@@ -492,6 +492,13 @@ sealed Live Activity ("Claude finished!" with the summary line) reached the Lock
 Mac still keeps the direct-APNs path with its own key as a fallback while unpaired; that key and iCloud go in phase 6.
 Flutter: Mochi's art (`mochi_art`) and the Dart link client (`mochi_link`, interoperable with Swift, live-tested).
 
+**Phase 5 done (2026-11-05):** Mochi Cloud is the room's `cloud` device (Settings › Agent › Mochi Cloud › Copy Cloud
+Settings gives it MOCHI_LINK_RELAY/ROOM/DEVICE/SECRET/KEY + MOCHI_TIMEZONE). It seals its notification and the "Waiting
+for you" card in pure Python (the cloud image's `cryptography` crashes on import) and posts them over HTTPS; the
+environment's network allowlist must include the relay's domain. Its APNs variables are gone. The Mac's Unpair now
+deletes the room on the relay (every credential in it dies; the iPhone sees 4004/404 and asks to scan again), and the
+iPhone's Unpair removes itself. Rooms nobody touches for 90 days delete themselves.
+
 ## 8. Risks
 
 | Risk | Mitigation |
