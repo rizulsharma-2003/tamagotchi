@@ -222,6 +222,23 @@ struct RelayClientTests {
         #expect(RelayLinkStore.open(cleared, credentials: host, from: "dev_mac", key: key) is NSNull)
     }
 
+    @Test("Frames sealed by the Dart client (flutter/packages/mochi_link) open here, and only from their sender")
+    func dartFrames() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("flutter/packages/mochi_link/test/fixtures/dart_frames.json")
+        let file = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let credentials = try JSONDecoder().decode(LinkCredentials.self, from: JSONSerialization.data(withJSONObject: file["credentials"] ?? [:]))
+        let key = SymmetricKey(data: try #require(LinkCrypto.data(base64url: credentials.key)))
+        let frames = try #require(file["frames"] as? [[String: Any]])
+        #expect(frames.count == 3)
+        for item in frames {
+            let frame = Data(try #require(item["frame"] as? String).utf8)
+            let opened = RelayLinkStore.open(frame, credentials: credentials, from: credentials.device, key: key)
+            #expect(NSDictionary(dictionary: ["v": opened ?? "unopened"]) == NSDictionary(dictionary: ["v": item["value"] ?? NSNull()]))
+            #expect(RelayLinkStore.open(frame, credentials: credentials, from: "dev_other", key: key) == nil)
+        }
+    }
+
     @Test("Messages go to the right role, state to everyone")
     func targets() {
         #expect(LinkKey.command.relayTargets == ["host"] && LinkKey.verdict.relayTargets == ["host"])
