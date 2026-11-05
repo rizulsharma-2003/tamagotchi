@@ -135,7 +135,12 @@ struct AgentSettingsView: View {
                      + "news your Mac already told you arrives quietly, so nothing rings twice.")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
-                    Button("Copy Cloud Settings…") { chooseCloudKey() }
+                    if environment.link.paired {
+                        // Mochi Link: the cloud joins the room as its own device; no push key needed.
+                        Button("Copy Cloud Settings") { Task { cloudMessage = await agent.copyCloudLinkSettings() } }
+                    } else {
+                        Button("Copy Cloud Settings…") { chooseCloudKey() }
+                    }
                     Button("Open claude.ai/code") { NSWorkspace.shared.open(URL(string: "https://claude.ai/code")!) }
                 }
                 if let cloudMessage {

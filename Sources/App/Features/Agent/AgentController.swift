@@ -347,6 +347,24 @@ final class AgentController {
         return (true, "Copied. Paste it into your Mochi Cloud environment's Environment variables on claude.ai/code." + shared)
     }
 
+    /// With Mochi Link paired: makes Mochi Cloud its own `cloud` device in this Mac's room and copies its settings
+    /// (relay, room, its credential and the room key). It then needs no push key and no phone address.
+    func copyCloudLinkSettings() async -> (ok: Bool, message: String) {
+        guard let host = environment.link.credentials else {
+            return (false, "Pair your iPhone with Mochi Link first (Settings › iPhone › Mochi Link).")
+        }
+        do {
+            let code = try await LinkPairing.invite(host, hostName: LinkController.macName, role: "cloud")
+            let cloud = try await LinkPairing.join(code, role: "cloud", platform: "cloud", name: "Mochi Cloud")
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(AgentCloud.linkEnvironmentBlock(cloud), forType: .string)
+            return (true, "Copied. On claude.ai/code, open your Mochi Cloud environment › Environment variables and paste it in. "
+                + "It holds a key to your link, so don't share it.")
+        } catch {
+            return (false, error.localizedDescription)
+        }
+    }
+
     var cloudTriggerSaved: Bool { !settings.cloudFireURL.isEmpty && CloudTokenStore.load() != nil }
 
     /// Stores Mochi Cloud's API trigger (the token in the Keychain) and shares it with Mochi Pocket.

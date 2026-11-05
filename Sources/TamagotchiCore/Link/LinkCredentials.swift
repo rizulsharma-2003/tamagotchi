@@ -90,9 +90,9 @@ public enum LinkPairing {
     }
 
     /// A single-use invitation (10 minutes) for the QR code.
-    public static func invite(_ credentials: LinkCredentials, hostName: String) async throws -> PairingCode {
-        let body = try await call(relay: credentials.relay, path: "/v1/rooms/\(credentials.room)/invites", method: "POST", body: [:],
-                                  bearer: credentials.bearer)
+    public static func invite(_ credentials: LinkCredentials, hostName: String, role: String? = nil) async throws -> PairingCode {
+        let body = try await call(relay: credentials.relay, path: "/v1/rooms/\(credentials.room)/invites", method: "POST",
+                                  body: role.map { ["role": $0] } ?? [:], bearer: credentials.bearer)
         guard let invite = body["invite"] as? String else { throw Problem(message: "The relay didn't make an invitation.") }
         return PairingCode(relay: credentials.relay, room: credentials.room, invite: invite, key: credentials.key, name: hostName)
     }

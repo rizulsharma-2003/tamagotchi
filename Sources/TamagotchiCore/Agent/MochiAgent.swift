@@ -979,6 +979,19 @@ public enum AgentCloud {
         ].joined(separator: "\n")
     }
 
+    /// Mochi Cloud as a `cloud` device in the Mochi Link room (docs/MOCHI_LINK_PLAN.md 4.8): it seals its news with
+    /// the room key and posts it to the relay, which pushes it to the phone. No push key and no phone address.
+    public static func linkEnvironmentBlock(_ credentials: LinkCredentials, timeZone: TimeZone = .current) -> String {
+        [
+            "MOCHI_LINK_RELAY=" + credentials.relay,
+            "MOCHI_LINK_ROOM=" + credentials.room,
+            "MOCHI_LINK_DEVICE=" + credentials.device,
+            "MOCHI_LINK_SECRET=" + credentials.secret,
+            "MOCHI_LINK_KEY=" + credentials.key,
+            "MOCHI_TIMEZONE=" + timeZone.identifier,
+        ].joined(separator: "\n")
+    }
+
     /// "AuthKey_PBGWR4LQA9.p8" → "PBGWR4LQA9".
     public static func keyID(fromFileName name: String) -> String? {
         guard name.hasPrefix("AuthKey_"), name.hasSuffix(".p8") else { return nil }
