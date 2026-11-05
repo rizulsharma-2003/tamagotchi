@@ -584,7 +584,7 @@ public struct AgentPending: Codable, Sendable, Equatable {
         return card
     }
 
-    public var json: String { String(decoding: (try? JSONEncoder().encode(self)) ?? Data(), as: UTF8.self) }
+    public var json: String { JSONEncoder.stableString(self) }
     public static func decode(_ json: String) -> AgentPending? { try? JSONDecoder().decode(AgentPending.self, from: Data(json.utf8)) }
 
     /// The card an agent notification carries.
@@ -901,7 +901,7 @@ public struct AgentDoneList: Codable, Sendable, Equatable {
         return AgentDoneList(ids: Dictionary(uniqueKeysWithValues: kept.map { ($0.key, $0.value) }))
     }
 
-    public var json: String { String(decoding: (try? JSONEncoder().encode(self)) ?? Data(), as: UTF8.self) }
+    public var json: String { JSONEncoder.stableString(self) }
     public static func decode(_ json: String) -> AgentDoneList? { try? JSONDecoder().decode(AgentDoneList.self, from: Data(json.utf8)) }
 }
 

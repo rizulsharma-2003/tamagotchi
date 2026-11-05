@@ -225,6 +225,7 @@ final class PhoneController {
 
     /// Mochi Pocket's Pending card (what's waiting for you), through Mochi Link.
     func publishAgentPending(_ json: String) {
+        guard link.string(.agent) != json else { return }
         link.set(json, for: .agent)
     }
 

@@ -246,6 +246,6 @@ public struct PhoneSessions: Codable, Sendable, Equatable {
         self.updatedAt = updatedAt
     }
 
-    public var json: String { String(decoding: (try? JSONEncoder().encode(self)) ?? Data(), as: UTF8.self) }
+    public var json: String { JSONEncoder.stableString(self) }
     public static func decode(_ json: String) -> PhoneSessions? { try? JSONDecoder().decode(PhoneSessions.self, from: Data(json.utf8)) }
 }

@@ -424,3 +424,16 @@ struct LinkPushTests {
         }
     }
 }
+
+/// What the link compares to decide "changed" must encode the same way every time (JSONEncoder's default key order
+/// isn't stable: unchanged state was resent every tick until the relay rate-limited the Mac).
+struct StableJSONTests {
+    @Test func linkStateEncodesTheSameEveryTime() {
+        var settings = AppSettings()
+        settings.room.items = [PlacedFurniture(kind: "plant", x: 0.2, y: 0.8), PlacedFurniture(kind: "lamp", x: 0.7, y: 0.6)]
+        let look = PetLook(settings: settings, friendshipLevel: 3)
+        #expect(Set((0..<100).map { _ in look.json }).count == 1)
+        let sessions = PhoneSessions(enabled: true)
+        #expect(Set((0..<100).map { _ in sessions.json }).count == 1)
+    }
+}

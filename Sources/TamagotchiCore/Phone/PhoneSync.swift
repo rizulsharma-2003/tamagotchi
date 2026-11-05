@@ -38,7 +38,7 @@ public struct PetLook: Codable, Sendable, Equatable {
         settings.seasonal = seasonal
     }
 
-    public var json: String { String(decoding: (try? JSONEncoder().encode(self)) ?? Data(), as: UTF8.self) }
+    public var json: String { JSONEncoder.stableString(self) }
     public static func decode(_ json: String) -> PetLook? { try? JSONDecoder().decode(PetLook.self, from: Data(json.utf8)) }
 }
 
