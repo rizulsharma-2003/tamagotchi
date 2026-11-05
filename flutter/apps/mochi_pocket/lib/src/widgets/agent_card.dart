@@ -19,6 +19,8 @@ class AgentCard extends StatelessWidget {
     required this.seeAll,
     required this.checkNow,
     this.checking = false,
+    this.speaking = false,
+    this.speak,
   });
 
   final AgentPending pending;
@@ -32,6 +34,12 @@ class AgentCard extends StatelessWidget {
   final VoidCallback checkNow;
   final bool checking;
 
+  /// Mochi is reading the card aloud.
+  final bool speaking;
+
+  /// Reads it aloud, or stops (the iPhone's speaker button).
+  final VoidCallback? speak;
+
   static const int shown = 4;
 
   @override
@@ -44,42 +52,57 @@ class AgentCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Semantics(
-            button: true,
-            hint: 'Opens every update',
-            child: InkWell(
-              onTap: seeAll,
-              borderRadius: BorderRadius.circular(Radii.inner),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: touchTarget),
-                child: Row(
-                  children: [
-                    IconTile(icon: Icons.inbox_rounded, tint: p.tint),
-                    const SizedBox(width: Space.s),
-                    Expanded(
+          Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  button: true,
+                  hint: 'Opens every update',
+                  child: InkWell(
+                    onTap: seeAll,
+                    borderRadius: BorderRadius.circular(Radii.inner),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: touchTarget),
                       child: Row(
                         children: [
-                          Flexible(child: Text('Waiting for you', style: context.type.headline)),
-                          if (waiting.isNotEmpty) ...[
-                            const SizedBox(width: Space.s),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: ShapeDecoration(shape: const StadiumBorder(), color: p.tint),
-                              child: Text(
-                                '${waiting.length}',
-                                semanticsLabel: '${waiting.length} waiting',
-                                style: context.type.footnote.copyWith(color: p.onTint, fontWeight: FontWeight.w700),
-                              ),
+                          IconTile(icon: Icons.inbox_rounded, tint: p.tint),
+                          const SizedBox(width: Space.s),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Flexible(child: Text('Waiting for you', style: context.type.headline)),
+                                if (waiting.isNotEmpty) ...[
+                                  const SizedBox(width: Space.s),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: ShapeDecoration(shape: const StadiumBorder(), color: p.tint),
+                                    child: Text(
+                                      '${waiting.length}',
+                                      semanticsLabel: '${waiting.length} waiting',
+                                      style: context.type.footnote.copyWith(color: p.onTint, fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
-                          ],
+                          ),
+                          ExcludeSemantics(child: Icon(Icons.chevron_right_rounded, color: p.inkSecondary)),
                         ],
                       ),
                     ),
-                    ExcludeSemantics(child: Icon(Icons.chevron_right_rounded, color: p.inkSecondary)),
-                  ],
+                  ),
                 ),
               ),
-            ),
+              if (speak != null) ...[
+                const SizedBox(width: Space.s),
+                RoundIconButton(
+                  icon: speaking ? Icons.stop_rounded : Icons.volume_up_rounded,
+                  label: speaking ? 'Stop reading' : 'Read out loud',
+                  prominent: speaking,
+                  onPressed: speak!,
+                ),
+              ],
+            ],
           ),
           if (headline != null && headline.isNotEmpty) ...[
             const SizedBox(height: Space.s),

@@ -9,6 +9,8 @@ import 'package:mochi_pocket/src/services/alert_notifier.dart';
 import 'package:mochi_pocket/src/services/link_opener.dart';
 import 'package:mochi_pocket/src/services/platform_bridge.dart';
 import 'package:mochi_pocket/src/services/push/push_service.dart';
+import 'package:mochi_pocket/src/voice/mochi_voice.dart';
+import 'package:mochi_pocket/src/voice/speech_engine.dart';
 
 final List<int> roomKey = List.filled(32, 7);
 
@@ -165,11 +167,29 @@ class FakeNotifier implements AlertNotifier {
   Future<void> show(LinkAlert alert) async => shown.add(alert);
 }
 
-class FakeBridge implements PlatformBridge {
+class FakeBridge implements PlatformBridge, AudioFocus {
   FakeBridge({this.initial});
 
   String? initial;
   final StreamController<String> controller = StreamController.broadcast();
+
+  /// Audio focus: granted unless a "call" is on.
+  bool grant = true;
+  int requests = 0;
+  int abandons = 0;
+  final StreamController<void> focusLost = StreamController.broadcast();
+
+  @override
+  Future<bool> request() async {
+    requests++;
+    return grant;
+  }
+
+  @override
+  Future<void> abandon() async => abandons++;
+
+  @override
+  Stream<void> get lost => focusLost.stream;
 
   @override
   Future<String?> initialLink() async {
@@ -254,6 +274,48 @@ PhoneSessions sampleSessions() => PhoneSessions(
     ),
   ],
 );
+
+/// Text-to-speech without a phone: records what's said; with [hold], each sentence lasts until [finish] or [stop].
+class FakeSpeechEngine implements SpeechEngine {
+  FakeSpeechEngine({List<VoiceInfo>? installed, this.hold = false})
+    : installed =
+          installed ??
+          const [
+            VoiceInfo(name: 'en-us-x-sfg-network', locale: 'en-US', quality: 400, network: true),
+            VoiceInfo(name: 'en-us-x-tpf-local', locale: 'en-US', quality: 400),
+            VoiceInfo(name: 'en-in-x-ena-local', locale: 'en-IN', quality: 400),
+            VoiceInfo(name: 'en-gb-x-gbb-local', locale: 'en-GB', quality: 300),
+            VoiceInfo(name: 'en-au-x-aub-local', locale: 'en-AU', quality: 400, installed: false),
+            VoiceInfo(name: 'hi-in-x-hia-local', locale: 'hi-IN', quality: 500),
+          ];
+
+  final List<VoiceInfo> installed;
+  bool hold;
+  final List<({String text, VoiceInfo? voice, double pitch, double pace})> spoken = [];
+  int stops = 0;
+  Completer<void>? _current;
+
+  @override
+  Future<List<VoiceInfo>> voices() async => installed;
+
+  @override
+  Future<void> speak(String text, {VoiceInfo? voice, double pitch = 1, double pace = 1}) async {
+    spoken.add((text: text, voice: voice, pitch: pitch, pace: pace));
+    if (!hold) return;
+    final current = _current = Completer<void>();
+    await current.future;
+  }
+
+  /// The sentence being said ends.
+  void finish() => _current?.complete();
+
+  @override
+  Future<void> stop() async {
+    stops++;
+    final current = _current;
+    if (current != null && !current.isCompleted) current.complete();
+  }
+}
 
 /// Push without Firebase: the test sets the address, rotates it, and delivers foreground pushes.
 class FakePushService implements PushService {

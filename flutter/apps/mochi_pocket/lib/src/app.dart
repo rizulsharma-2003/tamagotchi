@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mochi_link/mochi_link.dart';
 
+import 'model/app_settings.dart';
 import 'model/pocket_model.dart';
 import 'scene/pose_library.dart';
 import 'screens/home_screen.dart';
@@ -12,6 +13,7 @@ import 'services/alert_notifier.dart';
 import 'services/link_opener.dart';
 import 'services/platform_bridge.dart';
 import 'theme.dart';
+import 'voice/updates_reader.dart';
 import 'widgets/clay.dart';
 
 /// Mochi for Android: the pairing screen until this phone joins your Mac's room, then the home screen. Pairing links
@@ -22,6 +24,8 @@ class MochiApp extends StatefulWidget {
     required this.model,
     required this.bridge,
     required this.notifier,
+    required this.settings,
+    required this.reader,
     this.opener = const UrlLinkOpener(),
     this.library,
     this.scan,
@@ -30,6 +34,12 @@ class MochiApp extends StatefulWidget {
   final PocketModel model;
   final PlatformBridge bridge;
   final AlertNotifier notifier;
+
+  /// This phone's appearance and voice choices.
+  final AppSettings settings;
+
+  /// Reads "Waiting for you" aloud.
+  final UpdatesReader reader;
   final LinkOpener opener;
 
   /// The recorded animations; loaded from the assets when not given.
@@ -122,12 +132,17 @@ class _MochiAppState extends State<MochiApp> {
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
+  Widget build(BuildContext context) => ListenableBuilder(listenable: widget.settings, builder: (context, _) => _app(context));
+
+  /// System, Light or Dark (Settings › Appearance) applies at once: the theme, the status and navigation bar icons
+  /// (they follow the theme in use, below) and the room's day or night look.
+  Widget _app(BuildContext context) => MaterialApp(
     title: 'Mochi',
     debugShowCheckedModeBanner: false,
     navigatorKey: _navigator,
     theme: mochiTheme(Brightness.light),
     darkTheme: mochiTheme(Brightness.dark),
+    themeMode: widget.settings.appearance.themeMode,
     home: ListenableBuilder(
       listenable: model,
       builder: (context, _) => AnnotatedRegion<SystemUiOverlayStyle>(
@@ -144,7 +159,14 @@ class _MochiAppState extends State<MochiApp> {
             ),
           ),
           PairingPhase.unpaired => PairingScreen(model: model, library: _library, scan: widget.scan),
-          PairingPhase.paired => HomeScreen(model: model, library: _library, opener: widget.opener, notifier: widget.notifier),
+          PairingPhase.paired => HomeScreen(
+            model: model,
+            library: _library,
+            opener: widget.opener,
+            notifier: widget.notifier,
+            settings: widget.settings,
+            reader: widget.reader,
+          ),
         },
       ),
     ),

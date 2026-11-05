@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
+import '../model/app_settings.dart';
 import '../model/pocket_model.dart';
 import '../scene/pose_library.dart';
 import '../scene/room_view.dart';
 import '../services/alert_notifier.dart';
 import '../services/link_opener.dart';
 import '../theme.dart';
+import '../voice/updates_reader.dart';
 import '../widgets/agent_card.dart';
 import '../widgets/cards.dart';
 import '../widgets/clay.dart';
@@ -20,7 +22,15 @@ import 'updates_screen.dart';
 /// the room, Pet / Play / Treat / Type, the Mac's "Send to Claude?", what's waiting for you, Claude's sessions on the
 /// Mac and what you asked lately.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.model, required this.library, required this.opener, required this.notifier});
+  const HomeScreen({
+    super.key,
+    required this.model,
+    required this.library,
+    required this.opener,
+    required this.notifier,
+    required this.settings,
+    required this.reader,
+  });
 
   final PocketModel model;
   final PoseLibrary? library;
@@ -28,6 +38,8 @@ class HomeScreen extends StatefulWidget {
 
   /// Alerts as notifications (Settings shows whether they are allowed).
   final AlertNotifier notifier;
+  final AppSettings settings;
+  final UpdatesReader reader;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -134,13 +146,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openSettings() => Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) => SettingsScreen(model: model, notifier: widget.notifier),
+      builder: (_) => SettingsScreen(model: model, notifier: widget.notifier, settings: widget.settings, reader: widget.reader),
     ),
   );
 
   void _openUpdates() => Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) => UpdatesScreen(model: model, opener: widget.opener, checkNow: () => model.send(_checkText)),
+      builder: (_) => UpdatesScreen(model: model, opener: widget.opener, reader: widget.reader, checkNow: () => model.send(_checkText)),
     ),
   );
 
@@ -168,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: SafeArea(
           bottom: false,
           child: ListenableBuilder(
-            listenable: model,
+            listenable: Listenable.merge([model, widget.reader]),
             builder: (context, _) => ListView(
               controller: _scroll,
               // Clear of the gesture bar or navigation buttons at the bottom (edge to edge).
@@ -222,6 +234,9 @@ class _HomeScreenState extends State<HomeScreen> {
           seeAll: _openUpdates,
           checkNow: () => model.send(_checkText),
           checking: _checking,
+          speaking: widget.reader.speaking,
+          speak: () =>
+              widget.reader.toggle(model.waiting, talkBack: MediaQuery.accessibleNavigationOf(context), time: spokenTimeFor(context)),
         ),
       ],
       gap,
@@ -426,6 +441,13 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
     ];
   }
+}
+
+/// Times read aloud the way the phone shows them ("4:00 PM" or "16:00"), as the iPhone's short time style.
+String Function(DateTime time) spokenTimeFor(BuildContext context) {
+  final localizations = MaterialLocalizations.of(context);
+  final twentyFour = MediaQuery.alwaysUse24HourFormatOf(context);
+  return (time) => localizations.formatTimeOfDay(TimeOfDay.fromDateTime(time), alwaysUse24HourFormat: twentyFour);
 }
 
 /// "Mac online", "Mac away since 14:02", "Connecting…": the header's pill.

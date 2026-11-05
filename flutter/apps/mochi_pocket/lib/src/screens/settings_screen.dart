@@ -1,22 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:mochi_link/mochi_link.dart';
 
+import '../model/app_settings.dart';
 import '../model/pocket_model.dart';
 import '../services/alert_notifier.dart';
 import '../theme.dart';
+import '../voice/mochi_voice.dart';
+import '../voice/updates_reader.dart';
 import '../widgets/clay.dart';
 import 'home_screen.dart' show connectionPill;
 
 /// The app's version, sent in the relay `hello` and shown here.
 const String appVersion = '0.1.0';
 
-/// Settings: Mochi Link (who this phone is paired with, the relay and the Mac's presence, Unpair) and notifications
-/// (iOS/MochiPocket/PocketLink.swift `LinkCard`, PocketSettingsView).
+/// Settings: Mochi Link (who this phone is paired with, the relay and the Mac's presence, Unpair), notifications,
+/// appearance, and Mochi's voice (iOS/MochiPocket/PocketLink.swift `LinkCard`, PocketSettingsView).
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.model, required this.notifier});
+  const SettingsScreen({super.key, required this.model, required this.notifier, required this.settings, required this.reader});
 
   final PocketModel model;
   final AlertNotifier notifier;
+  final AppSettings settings;
+  final UpdatesReader reader;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -24,8 +29,10 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObserver {
   bool? _notificationsOn;
+  late Future<List<VoiceInfo>> _voices = widget.reader.voices();
 
   PocketModel get model => widget.model;
+  AppSettings get settings => widget.settings;
 
   @override
   void initState() {
@@ -37,13 +44,18 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // A sample still playing stops with the screen, as on the iPhone.
+    widget.reader.stop();
     super.dispose();
   }
 
   /// Back from Android's settings: notifications may have been turned on.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _checkNotifications();
+    if (state != AppLifecycleState.resumed) return;
+    _checkNotifications();
+    // A voice may have been downloaded in Android's settings meanwhile.
+    setState(() => _voices = widget.reader.refreshVoices());
   }
 
   Future<void> _checkNotifications() async {
@@ -79,17 +91,29 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => PopScope(
+    // Leaving stops a sample at once (the iPhone's onDisappear).
+    onPopInvokedWithResult: (didPop, _) {
+      if (didPop) widget.reader.stop();
+    },
+    child: _screen(context),
+  );
+
+  Widget _screen(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Settings')),
     body: PocketBackground(
       child: ListenableBuilder(
-        listenable: model,
+        listenable: Listenable.merge([model, settings, widget.reader]),
         builder: (context, _) => ListView(
           padding: EdgeInsets.fromLTRB(Space.l, Space.s, Space.l, Space.xl + MediaQuery.paddingOf(context).bottom),
           children: [
             _link(),
             const SizedBox(height: Space.l),
             _notifications(),
+            const SizedBox(height: Space.l),
+            _appearance(),
+            const SizedBox(height: Space.l),
+            _voice(),
             const SizedBox(height: Space.l),
             Text(
               'Mochi for Android $appVersion · Mochi Link protocol $linkClientVersion',
@@ -250,4 +274,212 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
       ],
     ),
   );
+
+  // MARK: Appearance
+
+  Widget _appearance() {
+    return ClayCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(header: true, child: Text('Appearance', style: context.type.headline)),
+          const SizedBox(height: Space.m),
+          Wrap(
+            spacing: Space.s,
+            runSpacing: Space.xs,
+            children: [
+              for (final option in Appearance.values)
+                _chip(option.title, selected: settings.appearance == option, onSelected: () => settings.appearance = option),
+            ],
+          ),
+          const SizedBox(height: Space.s),
+          Text(switch (settings.appearance) {
+            Appearance.system => "Follows your phone's dark theme setting.",
+            Appearance.light => 'Always light, whatever the phone is set to.',
+            Appearance.dark => 'Always dark, whatever the phone is set to.',
+          }, style: context.type.footnote),
+        ],
+      ),
+    );
+  }
+
+  /// A choice: terracotta when chosen, a well otherwise, 48 dp to touch (the iPhone's `Chip`).
+  Widget _chip(String title, {required bool selected, required VoidCallback onSelected}) {
+    final p = context.palette;
+    return ChoiceChip(
+      label: Text(title),
+      selected: selected,
+      showCheckmark: false,
+      selectedColor: p.tint,
+      backgroundColor: p.sunken,
+      side: BorderSide(color: p.stroke),
+      labelStyle: context.type.label.copyWith(color: selected ? p.onTint : p.ink),
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      onSelected: (_) => onSelected(),
+    );
+  }
+
+  // MARK: Voice
+
+  /// Plays a sample in the voice as set now; a second tap stops it (the iPhone's "Hear It").
+  void _hear({bool restart = false}) {
+    final reader = widget.reader;
+    if (reader.speaking && !restart) {
+      reader.stop();
+      return;
+    }
+    reader.say(
+      "Hi, I'm ${model.petName}! Two things are waiting for you. Your design review is at 4 pm, "
+      "and Priya needs you: the invoice for October. That's everything.",
+      talkBack: MediaQuery.accessibleNavigationOf(context),
+    );
+  }
+
+  Widget _voice() {
+    final p = context.palette;
+    final speaking = widget.reader.speaking;
+    return ClayCard(
+      child: FutureBuilder<List<VoiceInfo>>(
+        future: _voices,
+        builder: (context, snapshot) {
+          final voices = snapshot.data ?? const <VoiceInfo>[];
+          final best = voices.firstOrNull;
+          final chosen = voices.where((voice) => voice.name == settings.voiceName).firstOrNull;
+          final reading = chosen ?? best;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              OverflowBar(
+                alignment: MainAxisAlignment.spaceBetween,
+                overflowAlignment: OverflowBarAlignment.start,
+                spacing: Space.s,
+                overflowSpacing: Space.s,
+                children: [
+                  Semantics(header: true, child: Text("${model.petName}'s voice", style: context.type.headline)),
+                  FilledButton.icon(
+                    onPressed: snapshot.hasData && voices.isEmpty ? null : _hear,
+                    icon: Icon(speaking ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 18),
+                    label: Text(speaking ? 'Stop' : 'Hear a sample'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: Space.m),
+              Wrap(
+                spacing: Space.s,
+                runSpacing: Space.xs,
+                children: [
+                  for (final option in VoiceCharacter.values)
+                    _chip(
+                      option.title,
+                      selected: settings.character == option,
+                      onSelected: () {
+                        settings.character = option;
+                        _hear(restart: true);
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: Space.xs),
+              Text(settings.character.blurb, style: context.type.footnote),
+              const SizedBox(height: Space.m),
+              Semantics(
+                button: true,
+                label: 'Voice: ${chosen == null ? 'best on this phone' : chosen.label}',
+                excludeSemantics: true,
+                child: InkWell(
+                  onTap: snapshot.hasData ? () => _pickVoice(voices) : null,
+                  borderRadius: BorderRadius.circular(Radii.inner),
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: touchTarget),
+                    padding: const EdgeInsets.symmetric(horizontal: Space.m, vertical: Space.s),
+                    decoration: BoxDecoration(color: p.sunken, borderRadius: BorderRadius.circular(Radii.inner)),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Voice', style: context.type.footnote),
+                              Text(
+                                !snapshot.hasData
+                                    ? 'Looking for voices…'
+                                    : chosen == null
+                                    ? 'Best on this phone${best == null ? '' : ' (${best.label})'}'
+                                    : chosen.label,
+                                style: context.type.subheadline,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.unfold_more_rounded, color: p.inkSecondary),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: Space.s),
+              if (snapshot.hasData && voices.isEmpty)
+                NoteLabel(
+                  text:
+                      'No English voice on this phone yet. In Android Settings, search "Text-to-speech" and install English '
+                      'voice data, then come back.',
+                  icon: Icons.warning_rounded,
+                  tint: p.warning,
+                )
+              else if (reading?.network ?? false)
+                NoteLabel(
+                  text:
+                      "This voice needs the internet: what ${model.petName} reads is sent to your speech engine's servers to be "
+                      'spoken. Pick one marked "on this phone" to keep it all here.',
+                  icon: Icons.cloud_rounded,
+                  tint: p.warning,
+                )
+              else
+                NoteLabel(text: 'Everything is spoken on this phone; nothing is sent anywhere.', icon: Icons.lock_rounded, tint: p.success),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// The phone's English voices, best first; picking one plays the sample in it.
+  Future<void> _pickVoice(List<VoiceInfo> voices) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheet) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheet).height * 0.75),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(Space.xl, 0, Space.xl, Space.s),
+                child: Text('Voice', style: sheet.type.title3),
+              ),
+              _voiceTile(sheet, null, voices.firstOrNull),
+              for (final voice in voices) _voiceTile(sheet, voice, null),
+              ListTile(leading: const Icon(Icons.close_rounded), title: const Text('Close'), onTap: () => Navigator.pop(sheet)),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    settings.voiceName = picked.isEmpty ? null : picked;
+    _hear(restart: true);
+  }
+
+  /// One choice in the voice sheet: [voice], or "Best on this phone" (null) with [best] named.
+  Widget _voiceTile(BuildContext sheet, VoiceInfo? voice, VoiceInfo? best) {
+    final selected = voice == null ? settings.voiceName == null : settings.voiceName == voice.name;
+    return ListTile(
+      leading: Icon(selected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded),
+      title: Text(voice == null ? 'Best on this phone' : voice.label),
+      subtitle: voice == null && best != null ? Text(best.label) : null,
+      selected: selected,
+      onTap: () => Navigator.pop(sheet, voice?.name ?? ''),
+    );
+  }
 }

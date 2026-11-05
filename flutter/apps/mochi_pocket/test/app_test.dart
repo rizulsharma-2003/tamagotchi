@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_pocket/src/app.dart';
+import 'package:mochi_pocket/src/model/app_settings.dart';
 import 'package:mochi_pocket/src/model/pocket_model.dart';
 import 'package:mochi_pocket/src/services/credential_store.dart';
 import 'package:mochi_pocket/src/services/local_file.dart';
+import 'package:mochi_pocket/src/voice/updates_reader.dart';
 
 import 'support/fakes.dart';
 
@@ -15,8 +17,20 @@ void main() {
   late MemoryCredentialStore store;
   late List<LinkCredentials> leaves;
   late PocketModel model;
+  late FakeBridge bridge;
+  late MemoryDocument settingsDocument;
+  late AppSettings settings;
+  late FakeSpeechEngine speech;
+  late UpdatesReader reader;
+  late List<String> announced;
 
   setUp(() {
+    bridge = FakeBridge();
+    settingsDocument = MemoryDocument();
+    settings = AppSettings(settingsDocument);
+    speech = FakeSpeechEngine();
+    announced = [];
+    reader = UpdatesReader(engine: speech, focus: bridge, settings: settings, language: () => 'en-IN', announce: announced.add);
     relay = FakeRelay();
     notifier = FakeNotifier();
     opener = FakeOpener();
@@ -41,8 +55,10 @@ void main() {
     await tester.pumpWidget(
       MochiApp(
         model: model,
-        bridge: FakeBridge(initial: link),
+        bridge: bridge..initial = link,
         notifier: notifier,
+        settings: settings,
+        reader: reader,
         opener: opener,
         library: Future.value(null),
         scan: scan,
@@ -249,6 +265,113 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Notifications: on (Firebase)'), findsOneWidget);
     expect(relay.socket.sent.where((frame) => frame['op'] == 'register'), hasLength(1));
+    await finish(tester);
+  });
+
+  testWidgets('the speaker on Waiting for you reads it aloud, and a second tap stops it', (tester) async {
+    store.saved = phoneCredentials;
+    speech.hold = true;
+    await launch(tester);
+    await macShares(tester);
+    await tester.tap(find.byTooltip('Read out loud'));
+    await tester.pump();
+    expect(speech.spoken.first.text, '2 things are waiting for you.');
+    expect(find.byTooltip('Stop reading'), findsOneWidget);
+    await tester.tap(find.byTooltip('Stop reading'));
+    await tester.pump();
+    expect(reader.speaking, isFalse);
+    expect(speech.stops, 1);
+    expect(find.byTooltip('Read out loud'), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('with TalkBack on, the speaker hands the script to TalkBack', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(accessibleNavigation: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    store.saved = phoneCredentials;
+    await launch(tester);
+    await macShares(tester);
+    await tester.tap(find.byTooltip('Read out loud'));
+    await tester.pump();
+    expect(announced.single, startsWith('2 things are waiting for you.'));
+    expect(speech.spoken, isEmpty);
+    await finish(tester);
+  });
+
+  testWidgets('Updates: Read aloud, and leaving the screen stops it', (tester) async {
+    store.saved = phoneCredentials;
+    speech.hold = true;
+    await launch(tester);
+    await macShares(tester);
+    await tester.tap(find.text('Waiting for you'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.text('Read aloud'));
+    await tester.pump();
+    expect(reader.speaking, isTrue);
+    expect(find.text('Stop'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(reader.speaking, isFalse);
+    expect(speech.stops, 1);
+    await finish(tester);
+  });
+
+  testWidgets('Appearance: Dark and Light apply at once, override the phone, and are saved', (tester) async {
+    store.saved = phoneCredentials;
+    await launch(tester);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    Brightness brightness() => Theme.of(tester.element(find.text('Appearance'))).brightness;
+    expect(brightness(), Brightness.light, reason: 'System, and the test phone is light');
+    await tester.tap(find.text('Dark'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(brightness(), Brightness.dark);
+    expect(settingsDocument.json?['appearance'], 'dark');
+    tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+    addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+    await tester.tap(find.text('Light'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(brightness(), Brightness.light, reason: 'Light, although the phone is dark');
+    await tester.tap(find.text('System'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(brightness(), Brightness.dark, reason: 'System follows the phone again');
+    await finish(tester);
+  });
+
+  testWidgets("Voice: the iPhone's characters, a sample, and the phone's English voices", (tester) async {
+    store.saved = phoneCredentials;
+    await launch(tester);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    for (final title in ['Mochi', 'Tiny', 'Calm', 'Plain']) {
+      expect(find.widgetWithText(ChoiceChip, title), findsOneWidget);
+    }
+    expect(find.textContaining('Best on this phone (English (India) · ENA'), findsOneWidget);
+    expect(find.text('Everything is spoken on this phone; nothing is sent anywhere.'), findsOneWidget);
+    await tester.tap(find.text('Hear a sample'));
+    await tester.pump();
+    expect(speech.spoken.first.text, "Hi, I'm Mochi!");
+    expect(speech.spoken.first.pitch, closeTo(1.224, 0.001));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Tiny'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(settings.character.name, 'tiny');
+    expect(speech.spoken.last.pitch, closeTo(1.498, 0.001));
+    await tester.tap(find.textContaining('Best on this phone'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('English (US) · SFG · High quality · needs the internet'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(settings.voiceName, 'en-us-x-sfg-network');
+    expect(find.textContaining('This voice needs the internet'), findsOneWidget);
     await finish(tester);
   });
 

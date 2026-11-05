@@ -4,22 +4,65 @@ import 'package:mochi_link/mochi_link.dart';
 import '../model/pocket_model.dart';
 import '../services/link_opener.dart';
 import '../theme.dart';
+import '../voice/updates_reader.dart';
 import '../widgets/agent_card.dart';
 import '../widgets/clay.dart';
+import 'home_screen.dart' show spokenTimeFor;
 
 /// "Waiting for you" opened up (iOS/MochiPocket/UpdatesView.swift): everything that's waiting, then what you've
 /// marked done from the same card. Pull down to ask your Mac to check again. Each update is its own small clay card,
-/// in a lazily built list.
-class UpdatesScreen extends StatelessWidget {
-  const UpdatesScreen({super.key, required this.model, required this.opener, required this.checkNow});
+/// in a lazily built list. "Read aloud" reads what's waiting; leaving the screen stops it, as on the iPhone.
+class UpdatesScreen extends StatefulWidget {
+  const UpdatesScreen({super.key, required this.model, required this.opener, required this.reader, required this.checkNow});
 
   final PocketModel model;
   final LinkOpener opener;
+  final UpdatesReader reader;
   final VoidCallback checkNow;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Updates')),
+  State<UpdatesScreen> createState() => _UpdatesScreenState();
+}
+
+class _UpdatesScreenState extends State<UpdatesScreen> {
+  PocketModel get model => widget.model;
+  LinkOpener get opener => widget.opener;
+  VoidCallback get checkNow => widget.checkNow;
+
+  @override
+  void dispose() {
+    widget.reader.stop();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    // Leaving stops the reading at once (the iPhone's onDisappear), not after the page has slid away.
+    onPopInvokedWithResult: (didPop, _) {
+      if (didPop) widget.reader.stop();
+    },
+    child: _screen(context),
+  );
+
+  Widget _screen(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: const Text('Updates'),
+      actions: [
+        ListenableBuilder(
+          listenable: widget.reader,
+          builder: (context, _) {
+            final speaking = widget.reader.speaking;
+            return TextButton.icon(
+              onPressed: () =>
+                  widget.reader.toggle(model.waiting, talkBack: MediaQuery.accessibleNavigationOf(context), time: spokenTimeFor(context)),
+              icon: Icon(speaking ? Icons.stop_circle_rounded : Icons.volume_up_rounded),
+              label: Text(speaking ? 'Stop' : 'Read aloud'),
+            );
+          },
+        ),
+        const SizedBox(width: Space.s),
+      ],
+    ),
     body: PocketBackground(
       child: ListenableBuilder(
         listenable: model,

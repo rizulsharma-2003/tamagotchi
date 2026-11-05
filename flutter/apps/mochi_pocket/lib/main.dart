@@ -11,11 +11,13 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_link/mochi_link.dart';
 
 import 'src/app.dart';
+import 'src/model/app_settings.dart';
 import 'src/model/pocket_model.dart';
 import 'src/screens/settings_screen.dart' show appVersion;
 import 'src/services/alert_notifier.dart';
@@ -23,6 +25,8 @@ import 'src/services/credential_store.dart';
 import 'src/services/local_file.dart';
 import 'src/services/platform_bridge.dart';
 import 'src/services/push/push_service.dart';
+import 'src/voice/speech_engine.dart';
+import 'src/voice/updates_reader.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,7 +52,17 @@ Future<void> main() async {
     deviceName: await bridge.deviceName(),
   );
   await notifier.start();
+  // Appearance and voice, loaded before the first frame so the chosen theme shows straight away.
+  final settings = AppSettings(files == null ? MemoryDocument() : FileDocument(File('$files/settings.json')));
+  await settings.load();
+  final reader = UpdatesReader(
+    engine: FlutterTtsEngine(),
+    focus: bridge,
+    settings: settings,
+    // With TalkBack on, TalkBack reads it in the user's own screen-reader voice.
+    announce: (text) => SemanticsService.announce(text, TextDirection.ltr),
+  );
   // Mochi's in-scene lettering (the sleepy z, ? and !) in the app's rounded face, as the Mac draws it in SF Rounded.
   MochiArtText.family = 'Nunito';
-  runApp(MochiApp(model: model, bridge: bridge, notifier: notifier));
+  runApp(MochiApp(model: model, bridge: bridge, notifier: notifier, settings: settings, reader: reader));
 }

@@ -12,10 +12,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_pocket/src/app.dart';
+import 'package:mochi_pocket/src/model/app_settings.dart';
 import 'package:mochi_pocket/src/model/pocket_model.dart';
 import 'package:mochi_pocket/src/scene/pose_library.dart';
 import 'package:mochi_pocket/src/services/credential_store.dart';
 import 'package:mochi_pocket/src/services/local_file.dart';
+import 'package:mochi_pocket/src/voice/updates_reader.dart';
 
 import 'support/fakes.dart';
 
@@ -55,6 +57,8 @@ void main() {
         addTearDown(tester.view.reset);
         addTearDown(tester.platformDispatcher.clearAllTestValues);
         final relay = FakeRelay();
+        final bridge = FakeBridge();
+        final settings = AppSettings(MemoryDocument());
         final model = PocketModel(
           credentialStore: MemoryCredentialStore(paired ? phoneCredentials : null),
           doneDocument: MemoryDocument(),
@@ -63,7 +67,15 @@ void main() {
           deviceName: 'realme RMX3242',
         );
         await tester.pumpWidget(
-          MochiApp(model: model, bridge: FakeBridge(), notifier: FakeNotifier(), opener: FakeOpener(), library: Future.value(library)),
+          MochiApp(
+            model: model,
+            bridge: bridge,
+            notifier: FakeNotifier(),
+            opener: FakeOpener(),
+            library: Future.value(library),
+            settings: settings,
+            reader: UpdatesReader(engine: FakeSpeechEngine(), focus: bridge, settings: settings, language: () => 'en-IN'),
+          ),
         );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 50));
@@ -146,7 +158,7 @@ void main() {
       });
 
       testWidgets('settings ($variant)', (tester) async {
-        final (model, _) = await open(tester);
+        final (model, _) = await open(tester, height: scale == 1 ? 1700 : 3600);
         await tester.tap(find.byTooltip('Settings'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 600));

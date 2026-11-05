@@ -63,6 +63,10 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Read aloud: the phone's text-to-speech engine (package visibility on Android 11+). -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
         <!-- url_launcher: opening links in the browser and in their apps (Gmail, Meet, Notion). -->
         <intent>
             <action android:name="android.intent.action.VIEW"/>

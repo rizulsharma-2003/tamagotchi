@@ -30,6 +30,9 @@ dependencies:
   # (2026-09-14). 16.7.1/4.15.1+ are under two weeks old; 17/5 are a new major.
   firebase_core: 4.15.0
   firebase_messaging: 16.7.0
+  # Read aloud with the phone's own text-to-speech (4.2.5: 2026-01-05). Kokoro, the iPhone's natural voice, isn't
+  # used on Android: its phonemizer (espeak-ng) is GPL.
+  flutter_tts: 4.2.5
   # The app's files folder from any isolate (the push handler runs without an activity, so the platform channel
   # isn't there). 2.1.5: 2024-10-29, already in the lock through flutter_secure_storage.
   path_provider: 2.1.5
