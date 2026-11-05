@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
+import 'package:mochi_art/mochi_art.dart' show RenderDetail;
 import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 
@@ -11,29 +12,40 @@ import '../../desktop.dart';
 import '../shell.dart';
 import 'mochi_view.dart';
 import 'pet_director.dart';
+import 'taskbar_stroll.dart';
 
 /// The desktop pet: Mochi on a transparent, always-on-top window, with a speech bubble when Claude needs you or
-/// finishes. Click to pet, double-click (or Enter) to open Mochi, drag to move, right-click (or Shift+F10) for the
-/// menu.
+/// finishes. On Windows it strolls inside the taskbar ([stroll]), at the taskbar's size. Click to pet, double-click (or
+/// Enter) to open Mochi, drag to move (off the taskbar: it stays where it's dropped), right-click (or Shift+F10) for
+/// the menu.
+///
+/// Mochi has a fixed box at the bottom of the window and the bubble goes above it, so the window can grow upwards for
+/// the bubble (on the taskbar) without Mochi moving.
 class PetSurface extends StatefulWidget {
   const PetSurface({
     super.key,
     required this.desktop,
+    required this.stroll,
     required this.library,
     required this.lastActivity,
     required this.onAction,
     required this.onDragStart,
-    required this.onDragEnd,
     required this.onHide,
+    this.onNativeMenu,
   });
 
   final MochiDesktop desktop;
+  final TaskbarStroll stroll;
   final PoseLibrary? library;
   final DateTime Function() lastActivity;
   final ValueChanged<ShellAction> onAction;
+
+  /// A drag began (the app moves the window with the mouse until it's dropped).
   final VoidCallback onDragStart;
-  final VoidCallback onDragEnd;
   final VoidCallback onHide;
+
+  /// The tray's menu at the pointer: Mochi's window in the taskbar is too small for its own menu.
+  final VoidCallback? onNativeMenu;
 
   @override
   State<PetSurface> createState() => _PetSurfaceState();
@@ -45,6 +57,7 @@ class _PetSurfaceState extends State<PetSurface> {
   String? _bubble;
   Timer? _bubbleTimer;
   bool _focused = false;
+  bool _bubbleShown = false;
 
   @override
   void initState() {
@@ -81,16 +94,23 @@ class _PetSurfaceState extends State<PetSurface> {
   }
 
   Future<void> _menu(Offset position) async {
+    final native = widget.onNativeMenu;
+    if (widget.stroll.onTaskbar && native != null) return native();
     final action = await showMenu<Object>(
       context: context,
       position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
-      items: const [
-        PopupMenuItem(value: ShellAction.showMain, child: Text('Show Mochi')),
-        PopupMenuItem(value: ShellAction.pair, child: Text('Pair a Phone…')),
-        PopupMenuItem(value: ShellAction.settings, child: Text('Settings')),
-        PopupMenuDivider(),
-        PopupMenuItem(value: 'hide', child: Text('Hide the desktop pet')),
-        PopupMenuItem(value: ShellAction.quit, child: Text('Quit Mochi')),
+      items: [
+        const PopupMenuItem(value: ShellAction.showMain, child: Text('Show Mochi')),
+        const PopupMenuItem(value: ShellAction.pair, child: Text('Pair a Phone…')),
+        const PopupMenuItem(value: ShellAction.settings, child: Text('Settings')),
+        const PopupMenuDivider(),
+        CheckedPopupMenuItem(
+          value: ShellAction.toggleRoaming,
+          checked: widget.desktop.settings.roamTaskbar,
+          child: const Text('Roam along the taskbar'),
+        ),
+        const PopupMenuItem(value: 'hide', child: Text('Hide the desktop pet')),
+        const PopupMenuItem(value: ShellAction.quit, child: Text('Quit Mochi')),
       ],
     );
     if (action is ShellAction) widget.onAction(action);
@@ -102,6 +122,16 @@ class _PetSurfaceState extends State<PetSurface> {
     final needsYou = _mood == PetMood.needsYou;
     final project = widget.desktop.sessions.primary?.project;
     final bubble = needsYou ? (project == null ? 'Claude needs you' : 'Claude needs you in $project') : _bubble;
+    if ((bubble != null) != _bubbleShown) {
+      _bubbleShown = bubble != null;
+      // The taskbar window makes room for it (after this frame: never during a build).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.stroll.bubble = _bubbleShown;
+      });
+    }
+    final onTaskbar = widget.stroll.onTaskbar;
+    // Mochi's box at the bottom of the window: taskbar-sized in the taskbar (the Mac's menu-bar Mochi), the bubble above.
+    final stage = onTaskbar ? widget.stroll.box.height : SurfaceSizes.petStage;
     final p = context.palette;
     return Material(
       type: MaterialType.transparency,
@@ -126,33 +156,27 @@ class _PetSurfaceState extends State<PetSurface> {
           label: 'Mochi. ${_mood.description}.${bubble != null && bubble != _mood.description ? ' $bubble.' : ''}',
           hint: 'Press Enter to open Mochi, Space to pet',
           excludeSemantics: true,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
+          child: Stack(
             children: [
-              SizedBox(
-                height: 56,
-                child: bubble == null
-                    ? null
-                    : Align(
-                        alignment: Alignment.bottomCenter,
-                        child: _Bubble(text: bubble, urgent: needsYou),
-                      ),
-              ),
-              Expanded(
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: stage,
                 child: Tooltip(
-                  message: _mood.description,
+                  // No room for a tooltip in the taskbar's little window (the spoken label says the same).
+                  message: onTaskbar ? '' : _mood.description,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => widget.desktop.interact('pet'),
                     onDoubleTap: () => widget.onAction(ShellAction.showMain),
                     onSecondaryTapUp: (details) => _menu(details.globalPosition),
                     onPanStart: (_) => widget.onDragStart(),
-                    onPanEnd: (_) => widget.onDragEnd(),
                     child: MouseRegion(
                       cursor: SystemMouseCursors.click,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(24),
+                          borderRadius: BorderRadius.circular(onTaskbar ? 8 : 24),
                           border: _focused ? Border.all(color: p.focus, width: 2) : null,
                         ),
                         child: MochiView(
@@ -160,14 +184,32 @@ class _PetSurfaceState extends State<PetSurface> {
                           cues: widget.desktop.cues,
                           library: widget.library,
                           lastActivity: widget.lastActivity,
-                          onMood: (mood) => setState(() => _mood = mood),
-                          fill: 0.78,
+                          onMood: (mood) {
+                            setState(() => _mood = mood);
+                            widget.stroll.mood = mood;
+                          },
+                          fill: onTaskbar ? SurfaceSizes.taskbarFill : SurfaceSizes.standingFill,
+                          // In the taskbar Mochi walks, turns and naps by the stroll, drawn as in the Mac's menu bar.
+                          feet: onTaskbar ? SurfaceSizes.taskbarFeet : SurfaceSizes.standingFeet,
+                          stroll: onTaskbar ? widget.stroll.sample : null,
+                          detail: onTaskbar ? RenderDetail.tiny : RenderDetail.standard,
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
+              if (bubble != null)
+                Positioned(
+                  left: 4,
+                  right: 4,
+                  bottom: stage,
+                  height: SurfaceSizes.bubble,
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: _Bubble(text: bubble, urgent: needsYou),
+                  ),
+                ),
             ],
           ),
         ),

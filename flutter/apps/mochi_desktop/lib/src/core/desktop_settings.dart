@@ -52,6 +52,7 @@ class DesktopSettings extends ChangeNotifier {
     final json = _document.read() ?? const {};
     _themeMode = ThemeMode.values.where((mode) => mode.name == json['theme']).firstOrNull ?? ThemeMode.system;
     _showPet = json['showPet'] is bool ? json['showPet']! as bool : true;
+    _roamTaskbar = json['roamTaskbar'] is bool ? json['roamTaskbar']! as bool : true;
     _shareSummaries = json['shareSummaries'] is bool ? json['shareSummaries']! as bool : false;
     _acceptCommands = json['acceptCommands'] is bool ? json['acceptCommands']! as bool : true;
     _model = json['model'] == 'sonnet' ? 'sonnet' : 'haiku';
@@ -67,6 +68,7 @@ class DesktopSettings extends ChangeNotifier {
 
   ThemeMode _themeMode = ThemeMode.system;
   bool _showPet = true;
+  bool _roamTaskbar = true;
   bool _shareSummaries = false;
   bool _acceptCommands = true;
   String _model = 'haiku';
@@ -80,6 +82,11 @@ class DesktopSettings extends ChangeNotifier {
   /// The desktop pet shows while the main window is closed.
   bool get showPet => _showPet;
   set showPet(bool value) => _set(() => _showPet = value);
+
+  /// The desktop pet strolls along the top of the taskbar (Windows, with the taskbar at the bottom). Dragging Mochi off
+  /// the taskbar turns it off, so Mochi stays where it's dropped; the tray's "Back to the taskbar" turns it on again.
+  bool get roamTaskbar => _roamTaskbar;
+  set roamTaskbar(bool value) => _set(() => _roamTaskbar = value);
 
   /// Send Claude's summaries of finished turns to the paired phones (and let the hook helper read Claude's closing
   /// message). Off by default, as on the Mac.
@@ -118,6 +125,7 @@ class DesktopSettings extends ChangeNotifier {
       _document.write({
         'theme': _themeMode.name,
         'showPet': _showPet,
+        'roamTaskbar': _roamTaskbar,
         'shareSummaries': _shareSummaries,
         'acceptCommands': _acceptCommands,
         'model': _model,
