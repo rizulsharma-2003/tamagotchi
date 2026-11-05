@@ -4,8 +4,8 @@ import os
 
 /// Mochi Link over the relay (docs/MOCHI_LINK_PLAN.md 4.4): one WebSocket to the room; every value sealed with the room
 /// key before it leaves this device and opened (and checked against its room, key, id and sender) when it arrives. The
-/// relay only routes ciphertext. Reads behave like iCloud's: the latest value per key, including this device's own
-/// writes. While offline, writes wait in an outbox; the socket reconnects with backoff.
+/// relay only routes ciphertext. Reads give the latest value per key, including this device's own writes. While
+/// offline, writes wait in an outbox; the socket reconnects with backoff.
 public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDelegate, @unchecked Sendable {
     public struct Peer: Equatable, Sendable {
         public var device: String
@@ -56,17 +56,17 @@ public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDeleg
 
     public func set(_ value: Any?, for key: LinkKey) {
         lock.withLock {
-            if let value { values[key] = value } else { values.removeValue(forKey: key) }
+            if let value { values[key] = value } else { _ = values.removeValue(forKey: key) }
         }
         let id = UUID().uuidString.lowercased()
         guard let frame = Self.frame(value, for: key, credentials: credentials, key: self.key, id: id) else { return }
         send(frame, id: id, replaces: key.kind == .message ? nil : key.rawValue)
     }
 
-    /// Frames go out as soon as they're written.
-    public func flush() {}
-
-    public var hasAnyValue: Bool { lock.withLock { !values.isEmpty } }
+    /// This device's own state and registration as last read or written here (what it carries on when it re-pairs).
+    func ownValues() -> [LinkKey: Any] {
+        lock.withLock { values.filter { $0.key.kind != .message && $0.key.writer == credentials.role } }
+    }
 
     // MARK: Pushes (phase 4)
 
@@ -460,48 +460,42 @@ public extension Notification.Name {
     static let linkPresenceDidChange = Notification.Name("MochiLinkPresenceDidChange")
 }
 
-/// What the apps talk through: with a paired relay, the relay first and iCloud as a backup (both get every write until
-/// iCloud is switched off in phase 6); without one, iCloud alone.
-public final class HybridLinkStore: LinkStore, @unchecked Sendable {
-    public let relay: RelayLinkStore
-    private let backup: LinkStore
-
-    public init(relay: RelayLinkStore, backup: LinkStore = ICloudLinkStore.shared) {
-        self.relay = relay
-        self.backup = backup
-    }
-
-    public func value(_ key: LinkKey) -> Any? { relay.value(key) ?? backup.value(key) }
-
-    public func set(_ value: Any?, for key: LinkKey) {
-        relay.set(value, for: key)
-        backup.set(value, for: key)
-    }
-
-    public func flush() { backup.flush() }
-
-    public var hasAnyValue: Bool { relay.hasAnyValue || backup.hasAnyValue }
-}
-
-/// The link this app uses right now. Starts on iCloud; `use(_:)` switches to the relay once this device is paired.
+/// The link this app uses right now: the relay once this device is paired, else no link (`LocalLinkStore`): the app
+/// works on its own and nothing it writes leaves the device.
 public enum MochiLink {
-    nonisolated(unsafe) public private(set) static var store: LinkStore = ICloudLinkStore.shared
+    nonisolated(unsafe) public private(set) static var store: LinkStore = LocalLinkStore()
 
     /// The relay connection, when paired.
-    public static var relay: RelayLinkStore? { (store as? HybridLinkStore)?.relay }
+    public static var relay: RelayLinkStore? { store as? RelayLinkStore }
 
-    /// Uses the relay with these credentials (keeping iCloud as a backup), or iCloud alone with nil.
+    /// Uses the relay with these credentials, or no link with nil. This device's own state (and a phone's push
+    /// addresses) carries over, so a new pairing starts with the room it already had and an unpaired app keeps reading
+    /// what it wrote.
     public static func use(_ credentials: LinkCredentials?) {
+        let previous = store
         relay?.stop()
         if let credentials, let relay = RelayLinkStore(credentials: credentials) {
-            store = HybridLinkStore(relay: relay)
+            for (key, value) in carriedValues(from: previous, role: credentials.role) { relay.set(value, for: key) }
+            store = relay
             relay.start()
         } else {
-            store = ICloudLinkStore.shared
+            store = LocalLinkStore(carriedValues(from: previous, role: nil))
         }
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .linkStoreDidChange, object: nil)
             NotificationCenter.default.post(name: .linkPresenceDidChange, object: nil)
         }
+    }
+
+    /// What a device takes from one store to the next: its own state and registration, never messages or what other
+    /// devices wrote. A relay knows its own role; an unpaired store holds only this device's writes, filtered by `role`
+    /// when it's given.
+    static func carriedValues(from previous: LinkStore, role: String?) -> [LinkKey: Any] {
+        if let relay = previous as? RelayLinkStore { return relay.ownValues() }
+        var values: [LinkKey: Any] = [:]
+        for key in LinkKey.allCases where key.kind != .message && (role == nil || key.writer == role) {
+            if let value = previous.value(key) { values[key] = value }
+        }
+        return values
     }
 }

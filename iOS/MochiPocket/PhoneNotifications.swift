@@ -3,9 +3,9 @@ import TamagotchiCore
 import UIKit
 import UserNotifications
 
-/// Claude's summaries arrive as notifications, sent by the Mac through Apple's push service. "Reply"
-/// sends that session its next request without opening the app. The phone's push address goes into
-/// iCloud key-value storage for the Mac, like the Live Activity's.
+/// Claude's summaries arrive as notifications, sealed by the Mac and pushed by the Mochi Link relay (the notification
+/// extension opens them). "Reply" sends that session its next request without opening the app. The phone's push
+/// address goes to the relay, like the Live Activity's.
 @MainActor
 @Observable
 final class PhoneNotifications: NSObject, UNUserNotificationCenterDelegate {
@@ -67,16 +67,9 @@ final class PhoneNotifications: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func save(deviceToken: Data) {
-        #if DEBUG
-        // Mochi Link spike 0.1: the push address in a file devicectl can copy (development builds only).
-        if let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-            try? Data(deviceToken.hex.utf8).write(to: documents.appendingPathComponent("push-address.txt"))
-        }
-        #endif
         let linkStore = MochiLink.store
         guard linkStore.string(.deviceToken) != deviceToken.hex else { return }
         linkStore.set(deviceToken.hex, for: .deviceToken)
-        linkStore.flush()
         PocketLink.shared.registerPush()
         MacLink.shared.log("push address saved for summaries")
     }

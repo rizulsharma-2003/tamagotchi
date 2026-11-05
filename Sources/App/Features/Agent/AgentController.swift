@@ -242,7 +242,7 @@ final class AgentController {
         markReadIfNeeded()
     }
 
-    /// Mochi Pocket's done list changed (through iCloud).
+    /// Mochi Pocket's done list changed (through Mochi Link).
     func phoneDoneChanged() {
         guard started, let list = environment.phone.phoneDone else { return }
         guard memory.markDone(list.trimmed().ids) else { return }
@@ -292,7 +292,7 @@ final class AgentController {
         return card
     }
 
-    /// iCloud slows a busy store down, so at most every half minute unless something was just found.
+    /// At most every half minute unless something was just found: the card only changes when Mochi looks.
     private func publishPending(force: Bool = false) {
         let json = pendingCard(stamped: false).json
         guard json != publishedPending, force || Date().timeIntervalSince(pendingPublishedAt) >= 30 else { return }
@@ -326,29 +326,8 @@ final class AgentController {
 
     // MARK: Mochi Cloud
 
-    /// Puts the cloud environment's variables on the clipboard, from Mochi Cloud's own push key. Returns
-    /// what to tell the user.
-    func copyCloudSettings(keyFile: URL) -> (ok: Bool, message: String) {
-        let phone = environment.settingsStore.settings.phone
-        guard let keyID = AgentCloud.keyID(fromFileName: keyFile.lastPathComponent) else {
-            return (false, "Choose the AuthKey_<Key ID>.p8 file you downloaded for Mochi Cloud.")
-        }
-        guard let pem = try? String(contentsOf: keyFile, encoding: .utf8), APNsToken.isValidKey(pem) else {
-            return (false, "That file isn't an Apple push key.")
-        }
-        guard let deviceToken = environment.phone.deviceToken else {
-            return (false, "Open Mochi Pocket on your iPhone once (with notifications allowed) so this Mac learns where to reach it.")
-        }
-        let block = AgentCloud.environmentBlock(keyPEM: pem, keyID: keyID, teamID: phone.teamID, deviceToken: deviceToken,
-                                                topic: phone.topic, sandbox: phone.sandbox)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(block, forType: .string)
-        let shared = keyID == phone.keyID ? " (This is the key your Mac uses; the cloud is better off with its own.)" : ""
-        return (true, "Copied. Paste it into your Mochi Cloud environment's Environment variables on claude.ai/code." + shared)
-    }
-
-    /// With Mochi Link paired: makes Mochi Cloud its own `cloud` device in this Mac's room and copies its settings
-    /// (relay, room, its credential and the room key). It then needs no push key and no phone address.
+    /// Makes Mochi Cloud its own `cloud` device in this Mac's Mochi Link room and copies its settings (relay, room, its
+    /// credential and the room key). It needs no push key and no phone address: the relay pushes for it.
     func copyCloudLinkSettings() async -> (ok: Bool, message: String) {
         guard let host = environment.link.credentials else {
             return (false, "Pair your iPhone with Mochi Link first (Settings › iPhone › Mochi Link).")

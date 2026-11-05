@@ -4,9 +4,9 @@ import TamagotchiCore
 import Observation
 import UIKit
 
-/// Keeps the Mac able to reach this iPhone's Live Activity. The push-to-start token and each
-/// activity's update token go into iCloud key-value storage, which the Mac app (same Apple ID,
-/// same developer team) reads. Nothing else is stored there.
+/// Keeps the Mac able to reach this iPhone's Live Activity. The push-to-start token and each activity's update token
+/// go to the Mochi Link relay (`PocketLink.registerPush`), which pushes to them; the Mac sees that they exist (to know
+/// whether it can start or update one), and which activities are running. Unpaired, they stay on this phone.
 @MainActor
 @Observable
 final class ActivityCoordinator {
@@ -14,7 +14,6 @@ final class ActivityCoordinator {
 
     private(set) var activitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
     private(set) var hasPushToStartToken = false
-    private(set) var iCloudAvailable = FileManager.default.ubiquityIdentityToken != nil
     private(set) var runningPhases: [String] = []
     private(set) var lastSaved: Date?
 
@@ -27,7 +26,6 @@ final class ActivityCoordinator {
     func start() {
         guard !started else { return }
         started = true
-        linkStore.flush()
         Task {
             for await enabled in ActivityAuthorizationInfo().activityEnablementUpdates { activitiesEnabled = enabled }
         }
@@ -88,8 +86,7 @@ final class ActivityCoordinator {
             loggedActivities = described
             MacLink.shared.log("live activities: \(described.isEmpty ? "none" : described)")
         }
-        iCloudAvailable = FileManager.default.ubiquityIdentityToken != nil
-        // Forget tokens of activities that ended, so the Mac never pushes to them.
+        // Forget tokens of activities that ended, so the relay never pushes to them.
         let live = Set(activities.map(\.id))
         var tokens = linkStore.dictionary(.updateTokens) as? [String: String] ?? [:]
         let before = tokens.count
@@ -115,7 +112,6 @@ final class ActivityCoordinator {
 
     private func markSaved() {
         linkStore.set(Date().timeIntervalSince1970, for: .tokensSavedAt)
-        linkStore.flush()
         PocketLink.shared.registerPush()
         lastSaved = Date()
     }

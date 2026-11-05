@@ -5,8 +5,8 @@ import TamagotchiCore
 import UIKit
 import VisionKit
 
-/// Mochi Link on the iPhone: joining the Mac's room by scanning its QR code, and whether the Mac is connected. Once
-/// paired, Mochi Pocket talks to the Mac through the relay in under a second (iCloud stays on as a backup).
+/// Mochi Link on the iPhone: joining the Mac's room by scanning its QR code, and whether the Mac is connected. The
+/// relay is the only way to the Mac: paired, Mochi Pocket talks to it in under a second; unpaired, it works on its own.
 @MainActor
 @Observable
 final class PocketLink {
@@ -83,7 +83,7 @@ final class PocketLink {
     }
 
     /// Tells the relay where to reach this phone: its notification address and the Live Activity addresses. They stay
-    /// on the relay (the Mac no longer needs them once it pushes through Mochi Link).
+    /// on the relay, which does the pushing (the Mac reads them only to know a Live Activity can be reached).
     func registerPush() {
         guard let relay = MochiLink.relay else { return }
         let store = MochiLink.store
@@ -149,8 +149,9 @@ struct LinkCard: View {
                 Button("Unpair", role: .destructive) { confirmUnpair = true }
                     .font(.mochi(.footnote))
             } else {
-                Text("Faster than iCloud: what you say reaches your Mac in under a second, end-to-end encrypted. On your Mac: "
-                     + "Settings › iPhone › Mochi Link › Pair Your iPhone, then scan the code.")
+                Text("Not paired yet, so Mochi lives here on its own. Pair once to bring in your Mac: the room follows it, what you "
+                     + "say reaches it in under a second, and Claude's summaries and the Live Activity arrive here, end-to-end "
+                     + "encrypted. On your Mac: Settings › iPhone › Mochi Link › Pair Your iPhone, then scan the code.")
                     .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
                 HStack(spacing: Theme.Space.s) {
                     Button {
@@ -190,7 +191,7 @@ struct LinkCard: View {
         .confirmationDialog("Unpair from \(link.macName)?", isPresented: $confirmUnpair) {
             Button("Unpair", role: .destructive) { link.unpair() }
         } message: {
-            Text("Mochi Pocket goes back to iCloud until you scan a new code.")
+            Text("Mochi Pocket stops hearing from your Mac until you scan a new code.")
         }
     }
 }

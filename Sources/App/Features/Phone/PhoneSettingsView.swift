@@ -1,13 +1,12 @@
 import AppKit
 import SwiftUI
 import TamagotchiCore
-import UniformTypeIdentifiers
 
-/// Settings › iPhone: Mochi's Live Activity on the user's iPhone.
+/// Settings › iPhone: pairing your phones with Mochi Link, then what goes to them (the Live Activity, Claude's summaries,
+/// talking to Mochi). Nothing reaches a phone until it's paired.
 struct PhoneSettingsView: View {
     let environment: AppEnvironment
     @Bindable private var store: SettingsStore
-    @State private var keyProblem: String?
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -18,52 +17,29 @@ struct PhoneSettingsView: View {
     private var link: LinkController { environment.link }
     @State private var confirmUnpair = false
     private var name: String { store.settings.petName }
-    private var ready: Bool { phone.canPush && phone.pushToStartToken != nil }
+    private var ready: Bool { link.paired && phone.pushToStartToken != nil }
 
     var body: some View {
         Form {
-            Section {
-                Toggle("Show \(name) on my iPhone", isOn: $store.settings.phone.enabled)
-                Text("A Live Activity on your Lock Screen and in the Dynamic Island while Claude works. It lights up when Claude "
-                     + "needs you and celebrates when Claude is done. Needs the Mochi Pocket app on your iPhone.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
             linkSection
 
-            Section("iCloud link") {
-                status("iCloud on this Mac", ok: phone.teamSigned && phone.iCloudSignedIn,
-                       detail: !phone.teamSigned ? "This build isn't signed with your team" : phone.iCloudSignedIn ? "Ready" : "Sign in to iCloud")
-                status("Your iPhone", ok: phone.pushToStartToken != nil,
-                       detail: phone.pushToStartToken == nil ? "Open Mochi Pocket on your iPhone once"
-                           : "Linked" + (phone.tokensSavedAt.map { " · \($0.formatted(.relative(presentation: .named)))" } ?? ""))
-                status("Live Activity", ok: phone.activityRunning,
-                       detail: phone.activityRunning ? "Showing “\(phone.shown?.title ?? "")”" : "Not showing")
-            }
-
-            Section("Apple push key") {
-                TextField("Key ID", text: $store.settings.phone.keyID)
-                    .onChange(of: store.settings.phone.keyID) { _, _ in phone.keyIDChanged() }
-                TextField("Team ID", text: $store.settings.phone.teamID)
-                HStack {
-                    Label(phone.usesBuiltInKey ? "Built into this copy (Key ID \(PhoneController.builtInKey?.keyID ?? ""))"
-                              : phone.hasKey ? "Key saved in your Keychain" : "No key yet",
-                          systemImage: phone.hasKey ? "checkmark.circle.fill" : "key")
-                        .foregroundStyle(phone.hasKey ? Color.green : Color.secondary)
-                    Spacer()
-                    Button("Choose .p8 File…") { chooseKey() }
-                }
-                if let keyProblem {
-                    Label(keyProblem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).font(.caption)
-                }
-                Text("Create one on developer.apple.com › Certificates, Identifiers & Profiles › Keys, with Apple Push "
-                     + "Notifications service turned on. The file is named AuthKey_<Key ID>.p8; it stays in this Mac's Keychain.")
+            Section("Live Activity") {
+                Toggle("Show \(name) on my iPhone", isOn: $store.settings.phone.enabled)
+                Text("A Live Activity on your Lock Screen and in the Dynamic Island while Claude works. It lights up when Claude "
+                     + "needs you and celebrates when Claude is done. Needs the Mochi Pocket app on your iPhone, paired above.")
                     .font(.caption).foregroundStyle(.secondary)
+                if link.paired {
+                    status("Your iPhone", ok: phone.pushToStartToken != nil,
+                           detail: phone.pushToStartToken == nil ? "Open Mochi Pocket on your iPhone once"
+                               : "Ready" + (phone.tokensSavedAt.map { " · \($0.formatted(.relative(presentation: .named)))" } ?? ""))
+                    status("Live Activity", ok: phone.activityRunning,
+                           detail: phone.activityRunning ? "Showing “\(phone.shown?.title ?? "")”" : "Not showing")
+                }
             }
 
             Section("Talking from the iPhone") {
                 Toggle("Run what I tell \(name) on my iPhone", isOn: $store.settings.phone.acceptCommands)
-                Text("Press and hold \(name) in Mochi Pocket's room and talk: your words reach this Mac through your iCloud and run in Ask "
+                Text("Press and hold \(name) in Mochi Pocket's room and talk: your words reach this Mac through Mochi Link and run in Ask "
                      + "\(name) exactly as if you typed them here. Approvals for messages to Claude sessions show on both devices.")
                     .font(.caption).foregroundStyle(.secondary)
                 if let command = phone.lastCommand {
@@ -75,13 +51,19 @@ struct PhoneSettingsView: View {
                 Toggle("Send Claude's summaries to my iPhone", isOn: $store.settings.phone.shareSummaries)
                 Text("When a Claude session finishes, your iPhone gets a notification with the project, the files Claude "
                      + "changed and a short summary of what it said, written by Claude Haiku on this Mac. Reply there, or in "
-                     + "Mochi Pocket, to send that session its next request. While this is off, none of Claude's words leave this Mac.")
+                     + "Mochi Pocket, to send that session its next request. While this is off, or while no phone is paired, "
+                     + "none of Claude's words leave this Mac.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Only notify me when I'm away from this Mac", isOn: $store.settings.phone.notifyOnlyWhenAway)
                     .disabled(!store.settings.phone.shareSummaries)
-                if store.settings.phone.shareSummaries, phone.deviceToken == nil {
-                    Label("Open Mochi Pocket and allow notifications to get them on your iPhone.", systemImage: "bell.badge")
-                        .font(.caption).foregroundStyle(.secondary)
+                if store.settings.phone.shareSummaries {
+                    if !link.paired {
+                        Label("Pair your iPhone (Mochi Link, above) to get them.", systemImage: "link")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else if phone.deviceToken == nil {
+                        Label("Open Mochi Pocket and allow notifications to get them on your iPhone.", systemImage: "bell.badge")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 if let summary = phone.lastSummary {
                     Label(summary, systemImage: "text.bubble").font(.caption).foregroundStyle(.secondary).lineLimit(3)
@@ -91,14 +73,18 @@ struct PhoneSettingsView: View {
             Section("Privacy") {
                 Toggle("Show project names on my iPhone", isOn: $store.settings.phone.shareProjectNames)
                 Text("Otherwise your iPhone only sees “Claude is working”, “needs you” or “finished”, a timer and a tool count. "
-                     + "Updates travel through Apple's push service; nothing else leaves this Mac.")
+                     + "Everything goes through your Mochi Link relay, end-to-end encrypted: the relay, and Apple's push service "
+                     + "that wakes your iPhone, see only the phase and the timer. Only your phones can read the rest.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Try it") {
                 HStack {
                     Button("Send a Test to My iPhone") { phone.sendTest() }.disabled(!ready)
-                    Button("End It") { phone.endNow() }
+                    Button("End It") { phone.endNow() }.disabled(!link.paired)
+                }
+                if !link.paired {
+                    Text(PhoneController.pairFirst).font(.caption).foregroundStyle(.secondary)
                 }
                 if let result = phone.lastResult {
                     Label(result, systemImage: "checkmark.circle").foregroundStyle(.green).font(.caption)
@@ -112,7 +98,7 @@ struct PhoneSettingsView: View {
         .onAppear { phone.readTokens() }
     }
 
-    /// Mochi Link: the fast, end-to-end encrypted link through the relay.
+    /// Mochi Link: the only way between this Mac and your phones, through your own relay, end-to-end encrypted.
     @ViewBuilder
     private var linkSection: some View {
         Section("Mochi Link") {
@@ -135,6 +121,8 @@ struct PhoneSettingsView: View {
                                detail: peer.online ? "Online" : "Away" + (seen.map { " · \($0)" } ?? ""))
                     }
                 }
+            } else {
+                status("Your iPhone", ok: false, detail: "Not paired")
             }
             if let code = link.code {
                 HStack(alignment: .top, spacing: 16) {
@@ -173,15 +161,18 @@ struct PhoneSettingsView: View {
             if let problem = link.problem {
                 Label(problem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).font(.caption)
             }
-            Text("Messages between this Mac and your iPhone go through your own relay in under a second, end-to-end encrypted: "
-                 + "the relay passes them on but can't read them. iCloud stays on as a backup for now.")
+            Text(link.paired
+                 ? "Messages between this Mac and your phones go through your own relay in under a second, end-to-end encrypted: "
+                    + "the relay passes them on, and wakes your phones, but can't read them."
+                 : "Your phones reach this Mac only through Mochi Link, your own end-to-end encrypted relay. Pair once by scanning "
+                    + "a code with Mochi Pocket; until then, nothing from this Mac goes to your phone.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .confirmationDialog("Unpair this Mac from Mochi Link?", isPresented: $confirmUnpair) {
             Button("Unpair", role: .destructive) { link.unpair() }
         } message: {
-            Text("This deletes the room on your relay: your iPhone and Mochi Cloud are cut off, and their old keys stop working. "
-                 + "Pair again with a new code (and copy new cloud settings). iCloud keeps working meanwhile.")
+            Text("This deletes the room on your relay: your phones and Mochi Cloud are cut off, and their old keys stop working. "
+                 + "Nothing reaches your phones until you pair again with a new code (and copy new cloud settings).")
         }
     }
 
@@ -192,14 +183,5 @@ struct PhoneSettingsView: View {
             Spacer()
             Text(detail).foregroundStyle(.secondary).font(.callout)
         }
-    }
-
-    private func chooseKey() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "p8") ?? .data]
-        panel.canChooseDirectories = false
-        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-        panel.message = "Choose the AuthKey_….p8 file you downloaded from developer.apple.com"
-        if panel.runModal() == .OK, let url = panel.url { keyProblem = phone.importKey(from: url) }
     }
 }

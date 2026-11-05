@@ -1,5 +1,4 @@
 {
-  "iCloudName" : "macSessions",
   "key" : "sessions",
   "storedAs" : "json-string",
   "value" : {

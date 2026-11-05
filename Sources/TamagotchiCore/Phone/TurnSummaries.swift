@@ -233,7 +233,7 @@ public struct PhoneSessionCard: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
-/// The `macSessions` value in iCloud: whether the Mac shares summaries, and its sessions if so.
+/// The `sessions` value on Mochi Link: whether the Mac shares summaries, and its sessions if so.
 public struct PhoneSessions: Codable, Sendable, Equatable {
     public var enabled: Bool
     public var sessions: [PhoneSessionCard]

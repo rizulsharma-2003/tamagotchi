@@ -381,24 +381,21 @@ struct AgentCloudTests {
 
 @Suite("Mochi Cloud settings")
 struct AgentCloudSettingsTests {
-    @Test func theSettingsBlockHasEverythingTheScriptReads() {
-        let pem = "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----"
-        let block = AgentCloud.environmentBlock(keyPEM: pem, keyID: "PBGWR4LQA9", teamID: "CZDJF6N2RH", deviceToken: "ab12",
-                                                topic: "com.insideedge.mochi", sandbox: true, timeZone: TimeZone(identifier: "Asia/Kolkata")!)
+    @Test func theSettingsBlockHasEverythingTheScriptReadsAndNoPushKey() {
+        let credentials = LinkCredentials(relay: "link.example.com", room: "room_1", device: "dev_cloud", secret: "s3cret",
+                                          key: LinkCrypto.base64url(Data(repeating: 5, count: 32)), role: "cloud")
+        let block = AgentCloud.linkEnvironmentBlock(credentials, timeZone: TimeZone(identifier: "Asia/Kolkata")!)
         let lines = Dictionary(uniqueKeysWithValues: block.split(separator: "\n").map { line -> (String, String) in
             let parts = line.split(separator: "=", maxSplits: 1)
             return (String(parts[0]), String(parts[1]))
         })
-        #expect(Set(lines.keys) == ["MOCHI_APNS_KEY_B64", "MOCHI_APNS_KEY_ID", "MOCHI_TEAM_ID", "MOCHI_DEVICE_TOKEN", "MOCHI_TOPIC",
-                                     "MOCHI_APNS_HOST", "MOCHI_TIMEZONE"])
-        #expect(Data(base64Encoded: lines["MOCHI_APNS_KEY_B64"]!) == Data(pem.utf8))
-        #expect(lines["MOCHI_APNS_HOST"] == "api.sandbox.push.apple.com")
+        #expect(Set(lines.keys) == ["MOCHI_LINK_RELAY", "MOCHI_LINK_ROOM", "MOCHI_LINK_DEVICE", "MOCHI_LINK_SECRET", "MOCHI_LINK_KEY",
+                                     "MOCHI_TIMEZONE"])
+        #expect(lines["MOCHI_LINK_DEVICE"] == "dev_cloud" && lines["MOCHI_LINK_KEY"] == credentials.key)
         #expect(lines["MOCHI_TIMEZONE"] == "Asia/Kolkata")
     }
 
-    @Test func recognisesKeyFilesAndTriggers() {
-        #expect(AgentCloud.keyID(fromFileName: "AuthKey_PBGWR4LQA9.p8") == "PBGWR4LQA9")
-        #expect(AgentCloud.keyID(fromFileName: "key.p8") == nil)
+    @Test func recognisesTriggers() {
         #expect(AgentCloud.isFireURL("https://api.anthropic.com/v1/claude_code/routines/trig_01ABCDEFGHJKLMNOPQRSTUVW/fire"))
         #expect(!AgentCloud.isFireURL("https://example.com/v1/claude_code/routines/trig_1/fire"))
         #expect(!AgentCloud.isFireURL("https://api.anthropic.com/v1/claude_code/routines/trig_1"))

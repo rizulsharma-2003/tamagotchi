@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var showUpdates = false
     @State private var updates = UpdatesStore.shared
     @State private var reader = UpdatesReader.shared
+    @State private var pairing = PocketLink.shared
     @State private var drafting: AgentNote?
     @FocusState private var fieldFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -112,9 +113,10 @@ struct ContentView: View {
                 RoundIconButton(symbol: "gearshape.fill", label: "Settings", tint: Theme.inkSecondary) { showSettings = true }
             }
             HStack(spacing: Theme.Space.s) {
-                let linked = phone.linkedToMac || (coordinator.iCloudAvailable && coordinator.hasPushToStartToken)
-                StatusPill(text: linked ? "Mac linked" : "Not linked to your Mac",
-                           symbol: linked ? "checkmark.icloud.fill" : "icloud.slash",
+                // Mochi Link is the only way to the Mac: unpaired, the app works on its own.
+                let linked = pairing.paired
+                StatusPill(text: linked ? "Mac linked" : "Not paired with your Mac",
+                           symbol: linked ? "link" : "link.badge.plus",
                            tint: linked ? Theme.success : Theme.inkSecondary)
                 if phone.friendshipLevel > 0 {
                     StatusPill(text: "Friendship \(phone.friendshipLevel)", symbol: "heart.fill", tint: Theme.pet)

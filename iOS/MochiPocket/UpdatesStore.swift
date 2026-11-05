@@ -4,7 +4,7 @@ import TamagotchiCore
 import WidgetKit
 
 /// Everything Mochi has told you on this iPhone in the last week, and what you've marked done. Kept in the
-/// app's own Documents folder; what you mark done also goes to your Mac through your iCloud ("phoneDone"), and
+/// app's own Documents folder; what you mark done also goes to your Mac through Mochi Link ("phoneDone"), and
 /// what you mark done there comes back ("macDone"), so each item is done everywhere.
 @MainActor
 @Observable
@@ -83,7 +83,7 @@ final class UpdatesStore {
         publishSnapshot()
     }
 
-    /// What you marked done on your Mac (through iCloud): done here too, once.
+    /// What you marked done on your Mac (through Mochi Link): done here too, once.
     func applyMacDone(_ list: AgentDoneList) {
         let new = list.trimmed().ids.filter { fromMac[$0.key] == nil }
         guard !new.isEmpty else { return }
@@ -118,7 +118,6 @@ final class UpdatesStore {
     private func shareDone() {
         let linkStore = MochiLink.store
         linkStore.set(AgentDoneList(ids: done).trimmed().json, for: .phoneDone)
-        linkStore.flush()
     }
 
     /// The Lock Screen widget's copy of the card (and the done list the notification extension checks).

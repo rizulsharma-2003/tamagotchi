@@ -1,6 +1,6 @@
 import Foundation
 
-/// The pet's look, shared from the Mac with Mochi Pocket (through iCloud) so both rooms match.
+/// The pet's look, shared from the Mac with Mochi Pocket (through Mochi Link) so both rooms match.
 public struct PetLook: Codable, Sendable, Equatable {
     public var petName: String
     public var companionName: String

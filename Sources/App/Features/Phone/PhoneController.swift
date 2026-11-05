@@ -3,21 +3,21 @@ import CryptoKit
 import Foundation
 import Observation
 import os
-import Security
 import TamagotchiCore
 import TamagotchiWire
 
-/// Mochi on the user's iPhone: a Live Activity in the Mochi Pocket app, started and updated from
-/// this Mac through Apple's push service. The iPhone shares its push addresses through the user's
-/// iCloud (key-value storage shared by the team's apps); the APNs auth key stays in the Keychain.
-/// Only the phase, a short title and, if allowed, the project name and a tool count are sent.
+/// Mochi on the user's phones: a Live Activity in the Mochi Pocket app, summaries and agent news as notifications, and
+/// the room, commands and approvals, all through Mochi Link (docs/MOCHI_LINK_PLAN.md). The relay holds the push key and
+/// the phones' push addresses; what it pushes is sealed with the room key, so only the phones can read it. Unpaired,
+/// nothing leaves this Mac. Only the phase, a short title and, if allowed, the project name and a tool count go into
+/// the Live Activity.
 @MainActor
 @Observable
 final class PhoneController {
+    /// The iPhone's push-to-start address, as it shares it through the link: set once a Live Activity can be started.
     private(set) var pushToStartToken: String?
     private(set) var updateTokens: [String: String] = [:]
     private(set) var tokensSavedAt: Date?
-    private(set) var hasKey = false
     private(set) var lastResult: String?
     private(set) var lastError: String?
     private(set) var activityRunning = false
@@ -25,17 +25,14 @@ final class PhoneController {
 
     @ObservationIgnored private unowned let environment: AppEnvironment
     @ObservationIgnored private var timer: Timer?
-    /// Where the Mac and iPhone meet: the Mochi Link relay once paired (iCloud as its backup), else iCloud.
+    /// Where the Mac and the phones meet: the Mochi Link relay once paired, else nowhere (this Mac keeps its own writes).
     private var link: LinkStore { MochiLink.store }
-    @ObservationIgnored private var bearer: (token: String, at: Date)?
     @ObservationIgnored private var desired: LiveActivityState?
     @ObservationIgnored private var lastSentAt = Date.distantPast
     @ObservationIgnored private var lastTimestamp = 0.0
-    @ObservationIgnored private var sending = false
     @ObservationIgnored private var testUntil: Date?
     /// When you ended it from Settings; it stays away until Claude starts something newer.
     @ObservationIgnored private var endedByHandAt: Date?
-    @ObservationIgnored private let http = URLSession(configuration: .ephemeral)
     @ObservationIgnored private var handledCommands = Set(UserDefaults.standard.stringArray(forKey: "phoneHandledCommands") ?? [])
     @ObservationIgnored private var pendingApprovalID: String?
     private(set) var lastCommand: String?
@@ -54,15 +51,10 @@ final class PhoneController {
 
     private var settings: PhoneSettings { environment.settingsStore.settings.phone }
 
-    /// Signed with the team's profile, so iCloud key-value storage is available to this build.
-    var teamSigned: Bool {
-        FileManager.default.fileExists(atPath: Bundle.main.bundleURL.appendingPathComponent("Contents/embedded.provisionprofile").path)
-    }
-    /// Key-value storage answered (an iCloud account is signed in and the iPhone has written to it).
-    private(set) var iCloudSignedIn = false
+    /// Paired with Mochi Link: the phones can be reached.
+    var paired: Bool { MochiLink.relay != nil }
 
     func start() {
-        hasKey = signingKey != nil
         NotificationCenter.default.addObserver(forName: .linkStoreDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.readTokens() }
         }
@@ -77,10 +69,7 @@ final class PhoneController {
     }
 
     func readTokens() {
-        guard teamSigned else { return }
-        link.flush()
         pushToStartToken = link.string(.pushToStart)
-        iCloudSignedIn = link.hasAnyValue || pushToStartToken != nil
         let tokens = link.value(.updateTokens) as? [String: String] ?? [:]
         let gained = Set(tokens.values).subtracting(updateTokens.values)
         let hadTokens = !updateTokens.isEmpty
@@ -88,8 +77,8 @@ final class PhoneController {
         tokensSavedAt = link.double(.tokensSavedAt).map(Date.init(timeIntervalSince1970:))
         deviceToken = link.string(.deviceToken)
         // The iPhone lists its running activities; follow it rather than guessing. Only a list the phone saved after
-        // this activity started counts: a list that merely looks empty for a moment (a relay reconnect, iCloud
-        // catching up) mustn't read as "you swiped it away".
+        // this activity started counts: a list that merely looks empty for a moment (a relay reconnect, a sync still
+        // on its way) mustn't read as "you swiped it away".
         let reportedSince = (tokensSavedAt?.timeIntervalSince1970 ?? 0) > activityStartedAt
         if activityRunning, hadTokens, tokens.isEmpty, reportedSince {
             // Gone from the phone (swiped away, or the app was reinstalled): back for Claude's next turn.
@@ -117,18 +106,16 @@ final class PhoneController {
 
     /// The look (names, colours, room) and what Claude is doing, so the iPhone's room matches this one.
     private func publishShared() {
-        guard teamSigned else { return }
         let look = PetLook(settings: environment.settingsStore.settings,
                            friendshipLevel: environment.world.progress.friendshipLevel).json
         if look != publishedLook {
             publishedLook = look
             link.set(look, for: .look)
-            link.flush()
         }
         var mirror = ClaudeMirror.from(sessions: environment.world.sessions)
         mirror.resting = environment.world.macResting
-        // iCloud slows a busy store down for minutes, holding up commands and summaries too: a new
-        // phase goes out within seconds, a different tool alone only now and then.
+        // A new phase goes out within seconds, a different tool alone only now and then (it only sets the companion's
+        // mood on the phone).
         let spacing: TimeInterval = mirror.phase == publishedMirror?.phase && mirror.resting == publishedMirror?.resting ? 20 : 4
         if mirror != publishedMirror, Date().timeIntervalSince(mirrorPublishedAt) >= spacing {
             publishedMirror = mirror
@@ -141,7 +128,7 @@ final class PhoneController {
 
     /// Petting, play and treats on the Mac show on the iPhone too.
     func userInteracted(_ kind: PetInteraction) {
-        guard teamSigned, !applyingPhoneInteraction else { return }
+        guard !applyingPhoneInteraction else { return }
         write(["id": UUID().uuidString, "kind": kind.rawValue, "at": Date().timeIntervalSince1970], for: .macInteraction)
     }
 
@@ -197,59 +184,52 @@ final class PhoneController {
         summaries[report.sessionID] = (summary, report.files, report.at)
         lastSummary = "\(report.project): \(summary.done)"
         publishSessions(force: true)
-        guard canPush, MochiLink.relay != nil || deviceToken != nil else { return }
+        guard canPush else { return }
         if settings.notifyOnlyWhenAway, Self.secondsSinceInput() < 180 { return }
         let card = PhoneSessionCard(id: report.sessionID, project: report.project, phase: "done", summary: summary,
                                     files: Array(report.files.prefix(12)), finishedAt: report.at.timeIntervalSince1970.rounded())
-        deliver(PhoneAlertPayload.turnFinished(card), to: deviceToken.map { [$0] } ?? [], priority: 10, label: "Summary sent", pushType: "alert")
+        deliver(PhoneAlertPayload.turnFinished(card), priority: 10, label: "Summary sent", pushType: "alert")
     }
 
     /// Mochi's agent news (new mail, a meeting soon, tasks due) as an ordinary notification.
-    /// Returns false when the iPhone can't be reached yet.
+    /// Returns false when no phone can be reached (this Mac isn't paired).
     @discardableResult
     func sendAgentNews(title: String, body: String, pending: AgentPending?, quietIfKnown: Bool) -> Bool {
-        guard canPush, MochiLink.relay != nil || deviceToken != nil else { return false }
-        deliver(PhoneAlertPayload.agentNews(title: title, body: body, pending: pending, quietIfKnown: quietIfKnown), to: deviceToken.map { [$0] } ?? [],
+        guard canPush else { return false }
+        deliver(PhoneAlertPayload.agentNews(title: title, body: body, pending: pending, quietIfKnown: quietIfKnown),
                 priority: 10, label: "News sent", pushType: "alert")
         return true
     }
 
     /// Mochi Cloud's "check now" link for Mochi Pocket (its token can only start that one task); nil removes it.
     func publishCloudTrigger(url: String?, token: String?) {
-        guard teamSigned else { return }
         if let url, let token {
             link.set(["url": url, "token": token], for: .cloud)
         } else {
             link.set(nil, for: .cloud)
         }
-        link.flush()
     }
 
     /// What you marked done in Mochi Pocket.
     var phoneDone: AgentDoneList? {
-        guard teamSigned, let json = link.string(.phoneDone) else { return nil }
+        guard let json = link.string(.phoneDone) else { return nil }
         return AgentDoneList.decode(json)
     }
 
     /// What's done on this Mac (and everything it heard of), so Mochi Pocket hides it too.
     func publishMacDone(_ list: AgentDoneList) {
-        guard teamSigned else { return }
         let json = list.json
         guard link.string(.macDone) != json else { return }
         link.set(json, for: .macDone)
-        link.flush()
     }
 
-    /// Mochi Pocket's Pending card (what's waiting for you), through your iCloud.
+    /// Mochi Pocket's Pending card (what's waiting for you), through Mochi Link.
     func publishAgentPending(_ json: String) {
-        guard teamSigned else { return }
         link.set(json, for: .agent)
-        link.flush()
     }
 
     /// Mochi Pocket's list of sessions: each live session's phase and the summary of its last turn.
     private func publishSessions(force: Bool = false) {
-        guard teamSigned else { return }
         var payload = PhoneSessions(enabled: settings.shareSummaries)
         if settings.shareSummaries {
             let live = environment.world.sessions.filter { !$0.isSimulated && $0.endedAt == nil && $0.phase != .ended }
@@ -268,12 +248,11 @@ final class PhoneController {
         sessionsPublishedAt = Date()
         payload.updatedAt = Date().timeIntervalSince1970.rounded(.up)
         link.set(payload.json, for: .sessions)
-        link.flush()
     }
 
     /// The hook helper includes Claude's words only while this file exists.
     private func syncSummaryFlag() {
-        let on = settings.shareSummaries && teamSigned
+        let on = settings.shareSummaries && paired
         guard on != summaryFlag else { return }
         summaryFlag = on
         let url = environment.paths.summariesFlagFile
@@ -357,13 +336,10 @@ final class PhoneController {
         guard pendingApprovalID != nil || link.dictionary(.approval) != nil else { return }
         pendingApprovalID = nil
         link.set(nil, for: .approval)
-        link.flush()
     }
 
     private func write(_ value: [String: Any], for key: LinkKey) {
-        guard teamSigned else { return }
         link.set(value, for: key)
-        link.flush()
     }
 
     // MARK: Following Claude
@@ -407,12 +383,18 @@ final class PhoneController {
     /// A one-off check from Settings: always starts a fresh Live Activity on the iPhone, so it works
     /// even when this Mac's idea of what's showing there is out of date.
     func sendTest() {
+        guard paired else {
+            lastResult = nil
+            lastError = Self.pairFirst
+            return
+        }
         testUntil = Date().addingTimeInterval(60)
         endedByHandAt = nil
-        send(start: LiveActivityState(phase: "working", title: "Hello from your Mac!",
-                                      detail: MochiLink.relay != nil ? "Through Mochi Link, end-to-end encrypted" : "Mochi is linked through iCloud",
+        send(start: LiveActivityState(phase: "working", title: "Hello from your Mac!", detail: "Through Mochi Link, end-to-end encrypted",
                                       since: Date().timeIntervalSince1970))
     }
+
+    static let pairFirst = "Pair your iPhone first (Mochi Link, above): nothing reaches your phone until then."
 
     /// Settings › iPhone › Mochi Link: a sealed notification through the relay, to check the whole path.
     func sendTestNotification() {
@@ -429,7 +411,10 @@ final class PhoneController {
         testUntil = nil
         endedByHandAt = Date()
         send(end: shown ?? LiveActivityState(phase: "idle", title: "See you soon", since: Date().timeIntervalSince1970), dismissAfter: -60)
-        if updateTokens.isEmpty {
+        if !paired {
+            lastResult = nil
+            lastError = Self.pairFirst
+        } else if updateTokens.isEmpty {
             lastResult = nil
             lastError = "Your iPhone hasn't shared this Live Activity's address yet, so it closes when Mochi Pocket next opens."
         }
@@ -437,10 +422,17 @@ final class PhoneController {
 
     // MARK: Pushes
 
+    /// Pushes can go out: this Mac is paired with Mochi Link. The relay holds the push key and the phones' addresses.
+    var canPush: Bool { paired }
+
     /// Mochi Link (docs/MOCHI_LINK_PLAN.md 4.6.1): alerts sealed with the room key for the phone's notification extension,
-    /// Live Activities with their title and detail sealed for the widget; the relay holds the push key and the phone's
-    /// addresses.
-    private func deliverThroughRelay(_ payload: Data, relay: RelayLinkStore, priority: Int, label: String, pushType: String) {
+    /// Live Activities with their title and detail sealed for the widget. Unpaired, nothing is sent.
+    private func deliver(_ payload: Data, priority: Int, label: String, pushType: String = "liveactivity") {
+        guard let relay = MochiLink.relay else {
+            lastResult = nil
+            lastError = Self.pairFirst
+            return
+        }
         if pushType == "liveactivity" {
             lastSentAt = Date()
             guard let raw = LinkCrypto.data(base64url: relay.credentials.key),
@@ -473,7 +465,7 @@ final class PhoneController {
 
     private func send(start state: LiveActivityState) {
         let state = nextFrame(state)
-        guard let token = pushToStartToken else {
+        guard pushToStartToken != nil else {
             Self.linkLog.notice("live activity: can't start, no push-to-start address from the iPhone yet")
             lastError = "Open Mochi Pocket on your iPhone once, so it can share where to reach it."
             return
@@ -484,7 +476,7 @@ final class PhoneController {
         activityStartedAt = Date().timeIntervalSince1970
         shown = state
         Self.linkLog.notice("live activity: start (\(state.phase, privacy: .public))")
-        deliver(payload, to: [token], priority: 10, label: "Started on your iPhone")
+        deliver(payload, priority: 10, label: "Started on your iPhone")
     }
 
     private func send(update state: LiveActivityState, urgent: Bool, force: Bool) {
@@ -493,8 +485,7 @@ final class PhoneController {
         shown = state
         guard !updateTokens.isEmpty else { return }   // sent once the iPhone shares the activity's address
         let payload = LiveActivityPayload.update(state, timestamp: nextTimestamp(), alert: urgent)
-        deliver(payload, to: Array(Set(updateTokens.values)), priority: urgent || state.phase != "working" ? 10 : 5,
-                label: "Updated: \(state.title)")
+        deliver(payload, priority: urgent || state.phase != "working" ? 10 : 5, label: "Updated: \(state.title)")
     }
 
     /// Claude's own finish stays on the Lock Screen a few minutes; the Settings button removes it at once.
@@ -506,120 +497,7 @@ final class PhoneController {
         let now = Date().timeIntervalSince1970
         write(["at": now, "since": state.since, "dismissAt": now + max(0, dismissAfter)], for: .activityEnded)
         guard !updateTokens.isEmpty else { return }
-        deliver(LiveActivityPayload.end(state, timestamp: nextTimestamp(), dismissAfter: dismissAfter),
-                to: Array(Set(updateTokens.values)), priority: 10, label: "Ended")
-    }
-
-    /// Pushes can go out: through the Mochi Link relay once paired (no key needed on this Mac), else straight to Apple
-    /// with the key in the Keychain.
-    var canPush: Bool { teamSigned && (MochiLink.relay != nil || hasKey) }
-
-    private func deliver(_ payload: Data, to tokens: [String], priority: Int, label: String, pushType: String = "liveactivity") {
-        if let relay = MochiLink.relay {
-            deliverThroughRelay(payload, relay: relay, priority: priority, label: label, pushType: pushType)
-            return
-        }
-        guard let bearer = currentBearer() else { return }
-        if pushType == "liveactivity" { lastSentAt = Date() }
-        let topic = pushType == "liveactivity" ? settings.topic + ".push-type.liveactivity" : settings.topic
-        let host = settings.sandbox ? "api.sandbox.push.apple.com" : "api.push.apple.com"
-        let http = http
-        Task {
-            var failures: [String] = []
-            for token in tokens {
-                guard let url = URL(string: "https://\(host)/3/device/\(token)") else { continue }
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.httpBody = payload
-                request.setValue("bearer \(bearer)", forHTTPHeaderField: "authorization")
-                request.setValue(pushType, forHTTPHeaderField: "apns-push-type")
-                request.setValue(topic, forHTTPHeaderField: "apns-topic")
-                request.setValue("\(priority)", forHTTPHeaderField: "apns-priority")
-                do {
-                    let (data, response) = try await http.data(for: request)
-                    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                    if status != 200 {
-                        let reason = AnyJSON.parse(data)?["reason"]?.stringValue ?? "HTTP \(status)"
-                        failures.append(reason)
-                        if status == 403 { self.bearer = nil }
-                    }
-                } catch {
-                    failures.append(error.localizedDescription)
-                }
-            }
-            if failures.isEmpty {
-                self.lastResult = "\(label) · \(Date().formatted(date: .omitted, time: .shortened))"
-                self.lastError = nil
-            } else {
-                self.lastError = Self.explain(failures.first ?? "")
-            }
-        }
-    }
-
-    private func currentBearer() -> String? {
-        if let bearer, Date().timeIntervalSince(bearer.at) < 40 * 60 { return bearer.token }
-        guard let key = signingKey else {
-            lastError = "Add your APNs key in Settings › iPhone."
-            return nil
-        }
-        do {
-            let token = try APNsToken.make(keyPEM: key.pem, keyID: key.keyID, teamID: settings.teamID, issuedAt: Date())
-            bearer = (token, Date())
-            return token
-        } catch {
-            lastError = "The APNs key couldn't be used (\(error))."
-            return nil
-        }
-    }
-
-    static func explain(_ reason: String) -> String {
-        switch reason {
-        case "InvalidProviderToken": return "Apple rejected the key: check the Key ID and Team ID."
-        case "BadDeviceToken": return "The iPhone's address is for the other push environment (sandbox vs production)."
-        case "TopicDisallowed", "BadTopic": return "This key can't send to com.insideedge.mochi."
-        case "ExpiredProviderToken", "TooManyProviderTokenUpdates": return "Apple asked for a fresh login token; it will retry."
-        default: return reason
-        }
-    }
-
-    // MARK: The key
-
-    /// A push key built into this copy (`APNS_KEY_FILE` at build time), used when the Keychain has none.
-    static let builtInKey: (pem: String, keyID: String)? = {
-        guard let url = Bundle.main.url(forResource: "APNsAuthKey", withExtension: "p8"),
-              let pem = try? String(contentsOf: url, encoding: .utf8), APNsToken.isValidKey(pem),
-              let keyID = Bundle.main.object(forInfoDictionaryKey: "MochiAPNsKeyID") as? String, !keyID.isEmpty else { return nil }
-        return (pem, keyID)
-    }()
-
-    /// The key pushes are signed with: one you added, else the one built into this copy.
-    private var signingKey: (pem: String, keyID: String)? {
-        if let pem = APNsKeyStore.load(keyID: settings.keyID) { return (pem, settings.keyID) }
-        return Self.builtInKey
-    }
-
-    /// Whether the key in use is the built-in one (Settings shows it instead of asking for one).
-    var usesBuiltInKey: Bool { APNsKeyStore.load(keyID: settings.keyID) == nil && Self.builtInKey != nil }
-
-    /// Stores the key from an `AuthKey_<KEYID>.p8` file; returns a problem to show, if any.
-    func importKey(from url: URL) -> String? {
-        guard let pem = try? String(contentsOf: url, encoding: .utf8), APNsToken.isValidKey(pem) else {
-            return "That file isn't an APNs auth key (.p8)."
-        }
-        let name = url.deletingPathExtension().lastPathComponent
-        if name.hasPrefix("AuthKey_") {
-            environment.settingsStore.settings.phone.keyID = String(name.dropFirst("AuthKey_".count))
-        }
-        guard !settings.keyID.isEmpty else { return "Enter the Key ID shown next to the key on developer.apple.com." }
-        guard APNsKeyStore.save(pem, keyID: settings.keyID) else { return "The key couldn't be saved in the Keychain." }
-        hasKey = true
-        bearer = nil
-        return nil
-    }
-
-    func keyIDChanged() {
-        hasKey = signingKey != nil
-        bearer = nil
+        deliver(LiveActivityPayload.end(state, timestamp: nextTimestamp(), dismissAfter: dismissAfter), priority: 10, label: "Ended")
     }
 
     // MARK: Development
@@ -636,43 +514,10 @@ final class PhoneController {
         environment.debug.registerState("phone") { [weak self] in
             guard let self else { return NSNull() }
             return [
-                "enabled": self.settings.enabled, "hasKey": self.hasKey, "teamSigned": self.teamSigned,
-                "iCloud": self.iCloudSignedIn, "pushToStart": self.pushToStartToken != nil, "updateTokens": self.updateTokens.count,
-                "running": self.activityRunning, "shown": self.shown?.phase ?? "", "lastResult": self.lastResult ?? "",
-                "lastError": self.lastError ?? "",
+                "enabled": self.settings.enabled, "paired": self.paired, "pushToStart": self.pushToStartToken != nil,
+                "updateTokens": self.updateTokens.count, "running": self.activityRunning, "shown": self.shown?.phase ?? "",
+                "lastResult": self.lastResult ?? "", "lastError": self.lastError ?? "",
             ]
         }
-    }
-}
-
-/// The APNs auth key in the login Keychain.
-enum APNsKeyStore {
-    private static let service = "dev.mactamagotchi.apns-auth-key"
-
-    static func save(_ pem: String, keyID: String) -> Bool {
-        delete(keyID: keyID)
-        let item: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: keyID,
-            kSecAttrLabel as String: "MacTamagotchi APNs key", kSecValueData as String: Data(pem.utf8),
-        ]
-        return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
-    }
-
-    static func load(keyID: String) -> String? {
-        guard !keyID.isEmpty else { return nil }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: keyID,
-            kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    @discardableResult
-    static func delete(keyID: String) -> Bool {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-                                    kSecAttrAccount as String: keyID]
-        return SecItemDelete(query as CFDictionary) == errSecSuccess
     }
 }

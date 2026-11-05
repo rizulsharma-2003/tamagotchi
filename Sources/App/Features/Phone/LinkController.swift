@@ -5,7 +5,7 @@ import Observation
 import TamagotchiCore
 
 /// Mochi Link on the Mac (docs/MOCHI_LINK_PLAN.md): the room this Mac hosts on the relay, the QR code that lets a phone
-/// join it, and who's connected. Once paired, the Mac and iPhone talk through the relay (iCloud stays on as a backup).
+/// join it, and who's connected. The relay is the only way between this Mac and the phones: unpaired, nothing goes out.
 @MainActor
 @Observable
 final class LinkController {
@@ -63,7 +63,7 @@ final class LinkController {
     }
 
     /// Deletes this Mac's room on the relay (every device in it, the cloud included, is cut off and its credentials stop
-    /// working) and forgets it here. The phone has to pair again; iCloud carries on as before.
+    /// working) and forgets it here. The phones have to pair again; until then nothing reaches them.
     func unpair() {
         if let credentials {
             Task { try? await LinkPairing.deleteRoom(credentials) }

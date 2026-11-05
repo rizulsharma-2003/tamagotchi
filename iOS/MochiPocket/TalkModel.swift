@@ -103,6 +103,11 @@ final class TalkModel {
     }
 
     private func send(_ text: String, project: String? = nil, session: String? = nil, typed: Bool = false) {
+        // Unpaired, there's no way to the Mac at all: say so now rather than wait for an answer that can't come.
+        guard PocketLink.shared.paired else {
+            fail("Pair me with your Mac first: Settings › Mochi Link.")
+            return
+        }
         set(.sending, bubble: .some(project.map { "To Claude in \($0): “\(text)”" } ?? "“\(text)”"))
         waitingFor = link.send(text, project: project, session: session, typed: typed)
         timeoutTask = Task {

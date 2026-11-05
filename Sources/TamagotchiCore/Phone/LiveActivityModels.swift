@@ -1,19 +1,12 @@
-import CryptoKit
 import Foundation
 
-/// Settings for Mochi's Live Activity on the user's iPhone (the Mochi Pocket app).
+/// Settings for Mochi on the user's phones (the Mochi Pocket app), reached through Mochi Link. Older copies also stored
+/// an APNs key id, team, topic and sandbox flag for pushing straight to Apple; those are ignored now.
 public struct PhoneSettings: Codable, Sendable, Equatable {
     public var enabled = false
-    /// The APNs auth key's id; the key itself is kept in the Keychain.
-    public var keyID = ""
-    public var teamID = "CZDJF6N2RH"
-    /// The iPhone app's bundle id; Live Activity pushes go to "<topic>.push-type.liveactivity".
-    public var topic = "com.insideedge.mochi"
     /// Show project names on the iPhone. Off: only "Claude is working" and counts.
     public var shareProjectNames = false
-    /// Development builds of the iPhone app use APNs' sandbox.
-    public var sandbox = true
-    /// Run what you tell Mochi on the iPhone (it arrives through your iCloud).
+    /// Run what you tell Mochi on the iPhone (it arrives through Mochi Link).
     public var acceptCommands = true
     /// When Claude finishes a turn, send the iPhone the project, the changed files and a short summary.
     public var shareSummaries = false
@@ -26,11 +19,7 @@ public struct PhoneSettings: Codable, Sendable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = PhoneSettings()
         enabled = (try? container.decodeIfPresent(Bool.self, forKey: .enabled)) ?? defaults.enabled
-        keyID = (try? container.decodeIfPresent(String.self, forKey: .keyID)) ?? defaults.keyID
-        teamID = (try? container.decodeIfPresent(String.self, forKey: .teamID)) ?? defaults.teamID
-        topic = (try? container.decodeIfPresent(String.self, forKey: .topic)) ?? defaults.topic
         shareProjectNames = (try? container.decodeIfPresent(Bool.self, forKey: .shareProjectNames)) ?? defaults.shareProjectNames
-        sandbox = (try? container.decodeIfPresent(Bool.self, forKey: .sandbox)) ?? defaults.sandbox
         acceptCommands = (try? container.decodeIfPresent(Bool.self, forKey: .acceptCommands)) ?? defaults.acceptCommands
         shareSummaries = (try? container.decodeIfPresent(Bool.self, forKey: .shareSummaries)) ?? defaults.shareSummaries
         notifyOnlyWhenAway = (try? container.decodeIfPresent(Bool.self, forKey: .notifyOnlyWhenAway)) ?? defaults.notifyOnlyWhenAway
@@ -140,13 +129,12 @@ extension LiveActivityPlanner {
     }
 }
 
-/// A regular notification (`apns-push-type: alert`) when Claude finishes a turn. Mochi Pocket gives
-/// it a Reply action that sends the session its next request.
+/// A regular notification (`apns-push-type: alert`) when Claude finishes a turn, sealed by `LinkPush.alert` and
+/// pushed by the Mochi Link relay. Mochi Pocket gives it a Reply action that sends the session its next request.
 public enum PhoneAlertPayload {
     public static let turnCategory = "claude-turn"
 
-    /// The card rides along, so Mochi Pocket can show it as soon as the notification lands (iCloud can
-    /// take minutes).
+    /// The card rides along, so Mochi Pocket can show it as soon as the notification lands, even before the app opens.
     public static func turnFinished(_ card: PhoneSessionCard) -> Data {
         let aps: [String: AnyJSON] = [
             "alert": ["title": .string(card.project), "subtitle": "Claude finished", "body": .string(card.summary?.done ?? "Claude finished.")],
@@ -160,7 +148,8 @@ public enum PhoneAlertPayload {
     }
 }
 
-/// ActivityKit push payloads (`apns-push-type: liveactivity`).
+/// ActivityKit push payloads (`apns-push-type: liveactivity`), turned by `LinkPush.liveActivity` into what the relay
+/// pushes.
 public enum LiveActivityPayload {
     public static let attributesType = "MochiActivityAttributes"
 
@@ -199,30 +188,5 @@ public enum LiveActivityPayload {
 
     private static func encode(_ aps: [String: AnyJSON]) -> Data {
         Data(AnyJSON.object(["aps": .object(aps)]).jsonText.utf8)
-    }
-}
-
-/// The token APNs wants in `authorization: bearer …`: an ES256 JWT signed with the team's auth key.
-public enum APNsToken {
-    public enum Failure: Error, Equatable { case invalidKey, missingIdentifiers }
-
-    public static func make(keyPEM: String, keyID: String, teamID: String, issuedAt: Date) throws -> String {
-        guard !keyID.isEmpty, !teamID.isEmpty else { throw Failure.missingIdentifiers }
-        guard let key = try? P256.Signing.PrivateKey(pemRepresentation: keyPEM) else { throw Failure.invalidKey }
-        let header = base64URL(Data(#"{"alg":"ES256","kid":"\#(keyID)"}"#.utf8))
-        let claims = base64URL(Data(#"{"iss":"\#(teamID)","iat":\#(Int(issuedAt.timeIntervalSince1970))}"#.utf8))
-        let signingInput = "\(header).\(claims)"
-        let signature = try key.signature(for: Data(signingInput.utf8))
-        return "\(signingInput).\(base64URL(signature.rawRepresentation))"
-    }
-
-    /// Whether the text is a usable APNs auth key (a P-256 private key in PEM).
-    public static func isValidKey(_ pem: String) -> Bool {
-        (try? P256.Signing.PrivateKey(pemRepresentation: pem)) != nil
-    }
-
-    static func base64URL(_ data: Data) -> String {
-        data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
     }
 }

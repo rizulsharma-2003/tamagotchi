@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 import TamagotchiCore
-import UniformTypeIdentifiers
 
 /// Settings › Agent: Mochi keeps an eye on Gmail, Google Calendar and Notion.
 struct AgentSettingsView: View {
@@ -72,8 +71,8 @@ struct AgentSettingsView: View {
                 Toggle("On my iPhone: notifications and a “Waiting for you” card in Mochi Pocket", isOn: $store.settings.agent.tellPhone)
                 Toggle("Keep newsletters and automated mail off my iPhone", isOn: $store.settings.agent.phoneSkipsLowPriority)
                     .disabled(!store.settings.agent.tellPhone)
-                if store.settings.agent.tellPhone, !phoneReady {
-                    Label("Set up Settings › iPhone and open Mochi Pocket once to get these on your iPhone.", systemImage: "iphone")
+                if store.settings.agent.tellPhone, !environment.link.paired {
+                    Label("Pair your iPhone in Settings › iPhone › Mochi Link to get these on your phone.", systemImage: "iphone")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -131,17 +130,18 @@ struct AgentSettingsView: View {
 
             Section {
                 Text("An hourly Claude task in Anthropic's cloud does the same check while this Mac is off or offline and "
-                     + "notifies your iPhone directly. Set it up once at claude.ai/code with the mochi-cloud repository; "
+                     + "notifies your phones through Mochi Link. Set it up once at claude.ai/code with the mochi-cloud repository; "
                      + "news your Mac already told you arrives quietly, so nothing rings twice.")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
-                    if environment.link.paired {
-                        // Mochi Link: the cloud joins the room as its own device; no push key needed.
-                        Button("Copy Cloud Settings") { Task { cloudMessage = await agent.copyCloudLinkSettings() } }
-                    } else {
-                        Button("Copy Cloud Settings…") { chooseCloudKey() }
-                    }
+                    // Mochi Link: the cloud joins the room as its own device; no push key needed.
+                    Button("Copy Cloud Settings") { Task { cloudMessage = await agent.copyCloudLinkSettings() } }
+                        .disabled(!environment.link.paired)
                     Button("Open claude.ai/code") { NSWorkspace.shared.open(URL(string: "https://claude.ai/code")!) }
+                }
+                if !environment.link.paired {
+                    Label("Pair your iPhone in Settings › iPhone › Mochi Link first: Mochi Cloud joins the same link.", systemImage: "link")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 if let cloudMessage {
                     Label(cloudMessage.message, systemImage: cloudMessage.ok ? "doc.on.clipboard" : "exclamationmark.triangle")
@@ -175,7 +175,8 @@ struct AgentSettingsView: View {
                             Label(triggerProblem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).font(.caption)
                         }
                     }
-                    Text("The token can only start this one task. It's kept in your Keychain and shared with Mochi Pocket through your iCloud.")
+                    Text("The token can only start this one task. It's kept in your Keychain and shared with Mochi Pocket through Mochi "
+                         + "Link, end-to-end encrypted.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             } header: {
@@ -212,8 +213,6 @@ struct AgentSettingsView: View {
             if agent.connections.isEmpty, !agent.checkingConnections { Task { await agent.refreshConnections() } }
         }
     }
-
-    private var phoneReady: Bool { environment.phone.hasKey && environment.phone.teamSigned && environment.phone.deviceToken != nil }
 
     private func sourceRow(_ source: AgentSource) -> some View {
         let state = agent.connections[source]
@@ -272,15 +271,6 @@ struct AgentSettingsView: View {
         store.settings.agent.vips.append(vip)
         newVIP = ""
         vipsChanged = true
-    }
-
-    private func chooseCloudKey() {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "p8") ?? .data]
-        panel.canChooseDirectories = false
-        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-        panel.message = "Choose the AuthKey_….p8 file you made for Mochi Cloud"
-        if panel.runModal() == .OK, let url = panel.url { cloudMessage = agent.copyCloudSettings(keyFile: url) }
     }
 
     private func minuteBinding(_ keyPath: WritableKeyPath<AgentSettings, Int>) -> Binding<Date> {

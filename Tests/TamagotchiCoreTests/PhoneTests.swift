@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Testing
 @testable import TamagotchiCore
@@ -85,26 +84,6 @@ struct PhoneTests {
         #expect(now?["dismissal-date"]?.numberValue == 40)
     }
 
-    @Test func signsAValidES256Token() throws {
-        let key = P256.Signing.PrivateKey()
-        let jwt = try APNsToken.make(keyPEM: key.pemRepresentation, keyID: "ABC123DEFG", teamID: "CZDJF6N2RH",
-                                     issuedAt: Date(timeIntervalSince1970: 1_800_000_000))
-        let parts = jwt.split(separator: ".").map(String.init)
-        #expect(parts.count == 3)
-        func decode(_ part: String) -> Data {
-            var text = part.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-            while text.count % 4 != 0 { text += "=" }
-            return Data(base64Encoded: text)!
-        }
-        #expect(AnyJSON.parse(decode(parts[0])) == ["alg": "ES256", "kid": "ABC123DEFG"])
-        #expect(AnyJSON.parse(decode(parts[1])) == ["iss": "CZDJF6N2RH", "iat": .number(1_800_000_000)])
-        let signature = try P256.Signing.ECDSASignature(rawRepresentation: decode(parts[2]))
-        #expect(key.publicKey.isValidSignature(signature, for: Data("\(parts[0]).\(parts[1])".utf8)))
-        #expect(APNsToken.isValidKey(key.pemRepresentation))
-        #expect(!APNsToken.isValidKey("not a key"))
-        #expect(throws: APNsToken.Failure.invalidKey) { try APNsToken.make(keyPEM: "x", keyID: "K", teamID: "T", issuedAt: Date()) }
-    }
-
     @Test func lookRoundTripsAndApplies() {
         var mac = AppSettings()
         mac.petName = "Biscuit"
@@ -133,10 +112,11 @@ struct PhoneTests {
     }
 
     @Test func settingsDefaultToOffAndDecodeTolerantly() {
-        let settings = AppSettings.decodeTolerantly(Data(#"{"phone":{"enabled":true,"keyID":"K1"}}"#.utf8))
+        // Older settings also held an APNs key id, team, topic and sandbox flag: they're ignored now.
+        let settings = AppSettings.decodeTolerantly(Data(#"{"phone":{"enabled":true,"keyID":"K1","teamID":"T1","sandbox":false,"shareSummaries":true}}"#.utf8))
         #expect(settings.phone.enabled)
-        #expect(settings.phone.keyID == "K1")
-        #expect(settings.phone.teamID == "CZDJF6N2RH")
+        #expect(settings.phone.shareSummaries)
+        #expect(settings.phone.acceptCommands)
         #expect(!AppSettings().phone.enabled)
         #expect(!AppSettings().phone.shareProjectNames)
     }

@@ -104,17 +104,20 @@ struct LinkTests {
 
     // MARK: Keys
 
-    @Test("Every key keeps its iCloud name, and names don't collide")
-    func iCloudNames() {
-        let names = LinkKey.allCases.map(\.iCloudName)
-        #expect(Set(names).count == names.count)
-        #expect(LinkKey.command.iCloudName == "phoneCommand")
-        #expect(LinkKey.verdict.iCloudName == "phoneApproval")
-        #expect(LinkKey.activityEnded.iCloudName == "macEnded")
-        #expect(LinkKey.tokensSavedAt.iCloudName == "savedAt")
-        for key in LinkKey.allCases { #expect(LinkKey(iCloudName: key.iCloudName) == key) }
-        #expect(LinkKey(iCloudName: "somethingElse") == nil)
+    @Test("Key names are the relay's, and each key has one writer")
+    func keys() {
+        // The relay's room keeps state under these names: they never change.
+        #expect(LinkKey.allCases.map(\.rawValue) == ["look", "claude", "sessions", "agent", "cloud", "approval", "macDone",
+                                                    "phoneDone", "activityEnded", "macInteraction", "phoneInteraction",
+                                                    "command", "reply", "verdict", "pushToStart", "updateTokens",
+                                                    "deviceToken", "tokensSavedAt"])
         #expect(LinkKey.command.kind == .message && LinkKey.look.kind == .state && LinkKey.deviceToken.kind == .registration)
+        #expect(LinkKey.look.writer == "host" && LinkKey.cloud.writer == "host" && LinkKey.reply.writer == "host")
+        #expect(LinkKey.phoneDone.writer == "pocket" && LinkKey.command.writer == "pocket" && LinkKey.pushToStart.writer == "pocket")
+        // Every message goes to the other side.
+        for key in LinkKey.allCases where key.kind == .message {
+            #expect(key.relayTargets == [key.writer == "host" ? "pocket" : "host"], "\(key)")
+        }
     }
 
     // MARK: Fixtures
@@ -161,7 +164,7 @@ struct LinkTests {
             for (key, value) in samples {
                 // JSON strings are stored as their JSON; dictionaries as an object.
                 let object: Any = (value as? String).flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) } ?? value
-                let data = try JSONSerialization.data(withJSONObject: ["key": key.rawValue, "iCloudName": key.iCloudName,
+                let data = try JSONSerialization.data(withJSONObject: ["key": key.rawValue,
                                                                        "storedAs": value is String ? "json-string" : "dictionary",
                                                                        "value": object],
                                                       options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
@@ -264,23 +267,51 @@ struct RelayClientTests {
         #expect(RelayLinkStore(credentials: broken) == nil)
     }
 
-    @Test("The hybrid store prefers the relay and writes to both")
-    func hybrid() {
-        final class Memory: LinkStore, @unchecked Sendable {
-            var values: [LinkKey: Any] = [:]
-            func value(_ key: LinkKey) -> Any? { values[key] }
-            func set(_ value: Any?, for key: LinkKey) { values[key] = value }
-            func flush() {}
-            var hasAnyValue: Bool { !values.isEmpty }
+    @Test("Unpaired, a device keeps its own writes and nothing goes anywhere")
+    func local() {
+        let local = LocalLinkStore()
+        local.set("hello", for: .look)
+        local.set(["id": "cmd-1"], for: .command)
+        #expect(local.string(.look) == "hello" && local.dictionary(.command)?["id"] as? String == "cmd-1")
+        local.set(nil, for: .look)
+        #expect(local.value(.look) == nil)
+    }
+
+    @Test("Pairing carries a device's own state and push addresses over, never messages or another device's keys")
+    func carryOver() throws {
+        let phone = LocalLinkStore([.pushToStart: "ab12", .updateTokens: ["act-1": "cd34"], .phoneDone: "{}",
+                                    .command: ["id": "cmd-1"], .look: "a look"])
+        #expect(Set(MochiLink.carriedValues(from: phone, role: "pocket").keys) == [.pushToStart, .updateTokens, .phoneDone])
+        // No role given: everything but messages (an unpaired store holds only its own writes).
+        #expect(Set(MochiLink.carriedValues(from: phone, role: nil).keys) == [.pushToStart, .updateTokens, .phoneDone, .look])
+
+        // Unpairing from the relay: only what this device's role writes.
+        let relay = try #require(RelayLinkStore(credentials: host))
+        relay.set(#"{"petName":"Mochi"}"#, for: .look)
+        relay.set(["url": "https://api.anthropic.com/x/fire", "token": "t"], for: .cloud)
+        relay.set(["id": "r-1", "state": "done"], for: .reply)
+        relay.set("the phone's list", for: .phoneDone)
+        let fromRelay = MochiLink.carriedValues(from: relay, role: nil)
+        #expect(Set(fromRelay.keys) == [.look, .cloud])
+        #expect(fromRelay[.look] as? String == #"{"petName":"Mochi"}"#)
+    }
+
+    @Test("Switching the link announces a change and a presence change") @MainActor
+    func switchingAnnounces() async {
+        final class Heard: @unchecked Sendable {
+            var change = false
+            var presence = false
         }
-        let backup = Memory()
-        backup.values[.agent] = "from iCloud"
-        let relay = RelayLinkStore(credentials: host)!
-        let hybrid = HybridLinkStore(relay: relay, backup: backup)
-        #expect(hybrid.string(.agent) == "from iCloud")
-        hybrid.set("both", for: .agent)
-        #expect(relay.string(.agent) == "both" && backup.values[.agent] as? String == "both")
-        #expect(hybrid.string(.agent) == "both")
+        let heard = Heard()
+        let observers = [
+            NotificationCenter.default.addObserver(forName: .linkStoreDidChange, object: nil, queue: .main) { _ in heard.change = true },
+            NotificationCenter.default.addObserver(forName: .linkPresenceDidChange, object: nil, queue: .main) { _ in heard.presence = true },
+        ]
+        defer { observers.forEach { NotificationCenter.default.removeObserver($0) } }
+        MochiLink.use(nil)
+        #expect(MochiLink.relay == nil && MochiLink.store is LocalLinkStore)
+        for _ in 0..<100 where !(heard.change && heard.presence) { try? await Task.sleep(for: .milliseconds(20)) }
+        #expect(heard.change && heard.presence)
     }
 }
 
@@ -347,6 +378,9 @@ struct LiveRelayTests {
         #expect(await wait { (laterMac.dictionary(.command)?["id"] as? String) == "cmd-queued" })
         #expect(laterMac.string(.look) == #"{"petName":"Mochi"}"#, "the Mac gets its own state back after a restart")
         print("live relay: command \(Int(commandTime * 1000)) ms, reply \(Int(replyTime * 1000)) ms")
+        // Delete the throwaway room now, before the test run ends (the deferred delete covers a failed run).
+        laterMac.stop()
+        try await LinkPairing.deleteRoom(hostCredentials)
     }
 }
 

@@ -313,13 +313,13 @@ struct PocketSettingsView: View {
     private var macCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Your Mac").font(.mochi(.headline)).foregroundStyle(Theme.ink)
-            row("iCloud", ok: coordinator.iCloudAvailable, detail: coordinator.iCloudAvailable ? "Signed in" : "Sign in to iCloud")
+            row("Mochi Link", ok: PocketLink.shared.paired, detail: PocketLink.shared.paired ? "Paired" : "Not paired yet")
             row("Room and pet", ok: phone.linkedToMac, detail: phone.linkedToMac ? "Following your Mac" : "Waiting for your Mac")
             row("Live Activity address", ok: coordinator.hasPushToStartToken,
                 detail: coordinator.hasPushToStartToken
                     ? "Shared" + (coordinator.lastSaved.map { " · \($0.formatted(.relative(presentation: .named)))" } ?? "")
                     : "Not shared yet")
-            Text("Your iPhone and Mac find each other through your iCloud: same Apple ID, no account or server.")
+            Text("Your iPhone and Mac talk through Mochi Link (above): your own relay, end-to-end encrypted, no account.")
                 .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         }
         .mochiCard()

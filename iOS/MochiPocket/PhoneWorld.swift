@@ -4,7 +4,7 @@ import TamagotchiCore
 import TamagotchiWire
 
 /// Mochi's world on the iPhone: the same characters, animations, play and treats as the Mac's panel.
-/// It follows the Mac through iCloud: the look (names, colours, room), what Claude is doing (so the
+/// It follows the Mac through Mochi Link: the look (names, colours, room), what Claude is doing (so the
 /// companion works when Claude works there), and petting, play and treats in both directions.
 @MainActor
 @Observable
@@ -47,7 +47,6 @@ final class PhoneWorld: WorldEffects {
         NotificationCenter.default.addObserver(forName: .linkStoreDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.followMac() }
         }
-        linkStore.flush()
         followMac()
     }
 
@@ -59,7 +58,6 @@ final class PhoneWorld: WorldEffects {
         let id = UUID().uuidString
         seenInteractions.insert(id)
         linkStore.set(["id": id, "kind": kind.rawValue, "at": Date().timeIntervalSince1970], for: .phoneInteraction)
-        linkStore.flush()
     }
 
     // MARK: Following the Mac

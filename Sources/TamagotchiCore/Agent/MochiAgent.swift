@@ -541,7 +541,7 @@ public enum AgentVIP {
 }
 
 /// The Pending card in Mochi Pocket: what's waiting for you as of the Mac's last look. It travels
-/// through your iCloud (`macAgent`) and inside each agent notification, which lands sooner.
+/// through Mochi Link (`agent`) and inside each agent notification, which lands even while the app is closed.
 public struct AgentPending: Codable, Sendable, Equatable {
     /// The Mac shares it (the agent is on, with "On my iPhone").
     public var enabled: Bool
@@ -549,7 +549,7 @@ public struct AgentPending: Codable, Sendable, Equatable {
     public var items: [AgentNote]
     /// When the Mac last looked (Unix time).
     public var lookedAt: Double?
-    /// When the Mac wrote this, so the phone keeps the newest of iCloud and a notification.
+    /// When the Mac wrote this, so the phone keeps the newest of the link and a notification.
     public var updatedAt: Double?
     /// nil from the Mac; "cloud" from an hourly Mochi Cloud run (only what's new that hour), "cloud-manual"
     /// from "Check now" answered in the cloud (the whole day).
@@ -883,7 +883,7 @@ public struct AgentMemory: Codable, Sendable, Equatable {
     }
 }
 
-/// What one device marked done, shared through iCloud ("phoneDone" from Mochi Pocket, "macDone" from the Mac);
+/// What one device marked done, shared through Mochi Link ("phoneDone" from Mochi Pocket, "macDone" from the Mac);
 /// each side keeps the union.
 public struct AgentDoneList: Codable, Sendable, Equatable {
     public var ids: [String: Double]
@@ -894,7 +894,7 @@ public struct AgentDoneList: Codable, Sendable, Equatable {
         self.ids = ids
     }
 
-    /// The newest marks from the last week, few enough for one iCloud value.
+    /// The newest marks from the last week, few enough for one link value.
     public func trimmed(now: Date = Date()) -> AgentDoneList {
         let cutoff = now.timeIntervalSince1970 - 7 * 86_400
         let kept = ids.filter { $0.value >= cutoff }.sorted { $0.value > $1.value }.prefix(Self.maxItems)
@@ -960,24 +960,10 @@ public enum AgentSchedule {
 // MARK: Mochi Cloud
 
 /// Mochi Cloud: a Claude Code scheduled task (claude.ai/code/routines) that does the agent's check hourly in
-/// Anthropic's cloud while this Mac is off, and pushes straight to Mochi Pocket (see the mochi-cloud repository).
+/// Anthropic's cloud while this Mac is off, and reaches the phones through Mochi Link (see the mochi-cloud repository).
 public enum AgentCloud {
     /// Where scheduled tasks' API triggers live.
     public static let fireURLPrefix = "https://api.anthropic.com/v1/claude_code/routines/"
-
-    /// The cloud environment's variables, ready to paste: the push key (base64), where to push and the time zone.
-    public static func environmentBlock(keyPEM: String, keyID: String, teamID: String, deviceToken: String, topic: String,
-                                        sandbox: Bool, timeZone: TimeZone = .current) -> String {
-        [
-            "MOCHI_APNS_KEY_B64=" + Data(keyPEM.utf8).base64EncodedString(),
-            "MOCHI_APNS_KEY_ID=" + keyID,
-            "MOCHI_TEAM_ID=" + teamID,
-            "MOCHI_DEVICE_TOKEN=" + deviceToken,
-            "MOCHI_TOPIC=" + topic,
-            "MOCHI_APNS_HOST=" + (sandbox ? "api.sandbox.push.apple.com" : "api.push.apple.com"),
-            "MOCHI_TIMEZONE=" + timeZone.identifier,
-        ].joined(separator: "\n")
-    }
 
     /// Mochi Cloud as a `cloud` device in the Mochi Link room (docs/MOCHI_LINK_PLAN.md 4.8): it seals its news with
     /// the room key and posts it to the relay, which pushes it to the phone. No push key and no phone address.
@@ -992,13 +978,6 @@ public enum AgentCloud {
         ].joined(separator: "\n")
     }
 
-    /// "AuthKey_PBGWR4LQA9.p8" → "PBGWR4LQA9".
-    public static func keyID(fromFileName name: String) -> String? {
-        guard name.hasPrefix("AuthKey_"), name.hasSuffix(".p8") else { return nil }
-        let id = String(name.dropFirst("AuthKey_".count).dropLast(".p8".count))
-        return id.count == 10 && id.allSatisfy({ $0.isLetter || $0.isNumber }) ? id : nil
-    }
-
     public static func isFireURL(_ text: String) -> Bool {
         guard text.hasPrefix(fireURLPrefix), text.hasSuffix("/fire"), let url = URL(string: text) else { return false }
         return url.host == "api.anthropic.com"
@@ -1010,7 +989,7 @@ public enum AgentCloud {
 extension PhoneAlertPayload {
     public static let agentCategory = "mochi-agent"
 
-    /// Mochi's news as an ordinary notification, with the Pending card riding along (iCloud can take minutes).
+    /// Mochi's news as an ordinary notification, with the Pending card riding along (it lands before the app opens).
     /// Mochi Pocket's notification extension sees each one (`mutable-content`); with `quietIfKnown`, one that
     /// brings nothing already told (by this Mac or Mochi Cloud) arrives without a sound or banner.
     public static func agentNews(title: String, body: String, pending: AgentPending? = nil, quietIfKnown: Bool = false) -> Data {

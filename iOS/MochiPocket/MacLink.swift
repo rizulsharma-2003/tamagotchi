@@ -2,9 +2,9 @@ import Foundation
 import Observation
 import TamagotchiCore
 
-/// Talks to MacTamagotchi through iCloud key-value storage (same Apple ID, same developer team):
-/// spoken commands go to the Mac, its answers and approval requests come back. Only the words you
-/// said and Mochi's short answers travel; the store holds the latest of each and nothing else.
+/// Talks to MacTamagotchi through Mochi Link (the relay, end-to-end encrypted; `PocketLink` pairs it): spoken
+/// commands go to the Mac, its answers and approval requests come back. Only the words you said and Mochi's short
+/// answers travel. Unpaired, nothing goes anywhere and the app works on its own.
 @MainActor
 @Observable
 final class MacLink {
@@ -35,8 +35,8 @@ final class MacLink {
     private(set) var sessions: [PhoneSessionCard] = []
     /// nil until the Mac has said whether it shares summaries.
     private(set) var summariesShared: Bool?
-    /// The Mac's list from iCloud, and finished turns that came with notifications: those arrive in
-    /// seconds, where iCloud can take minutes.
+    /// The Mac's list from the link, and finished turns that came with notifications: those arrive even while the
+    /// app is closed, before it reconnects.
     private var listedJSON: String?
     private var listed = PhoneSessions(enabled: false)
     private var listedKnown = false
@@ -83,7 +83,6 @@ final class MacLink {
         NotificationCenter.default.addObserver(forName: .linkStoreDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.read() }
         }
-        linkStore.flush()
         read()
     }
 
@@ -97,12 +96,11 @@ final class MacLink {
         if let project { command["project"] = project }
         if let session { command["session"] = session }
         linkStore.set(command, for: .command)
-        linkStore.flush()
         log("sent \(id.prefix(8))\(project.map { " to \($0)" } ?? ""): \(text)")
         return id
     }
 
-    /// A finished turn from a notification, shown before iCloud catches up.
+    /// A finished turn from a notification, shown before the link catches up.
     func merge(_ card: PhoneSessionCard) {
         guard let finished = card.finishedAt, finished > (pushed[card.id]?.finishedAt ?? 0) else { return }
         pushed[card.id] = card
@@ -110,7 +108,7 @@ final class MacLink {
         rebuildSessions()
     }
 
-    /// The newest Pending card, whether it came through iCloud or with a notification. An hourly Mochi Cloud
+    /// The newest Pending card, whether it came through the link or with a notification. An hourly Mochi Cloud
     /// card only adds what it found that hour.
     func mergeAgent(_ pending: AgentPending) {
         guard agent == nil || (pending.updatedAt ?? 0) > (agent?.updatedAt ?? 0) else { return }
@@ -270,7 +268,6 @@ final class MacLink {
         answeredApprovals.insert(approval.id)
         self.approval = nil
         linkStore.set(["id": approval.id, "allow": allow, "at": Date().timeIntervalSince1970], for: .verdict)
-        linkStore.flush()
     }
 
     func read() {

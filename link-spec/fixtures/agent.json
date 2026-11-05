@@ -1,5 +1,4 @@
 {
-  "iCloudName" : "macAgent",
   "key" : "agent",
   "storedAs" : "json-string",
   "value" : {

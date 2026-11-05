@@ -6,11 +6,11 @@
 #   UNIVERSAL=1 scripts/build-app.sh     # arm64 + x86_64
 #   SIGN_IDENTITY="Developer ID Application: …" scripts/build-app.sh
 #   TEAM_ID=… MAC_PROFILE=….provisionprofile SIGN_IDENTITY="Apple Development: …" scripts/build-app.sh
-#                                        # team-signed: iCloud key-value storage shared with Mochi Pocket (iPhone)
-#   APNS_KEY_FILE=~/keys/AuthKey_<KEYID>.p8 scripts/build-app.sh
-#                                        # builds the iPhone push key in, so nobody has to add it in Settings.
-#                                        # Anyone with the app can read it: use a key limited to Mochi Pocket
-#                                        # (com.insideedge.mochi) and the sandbox, never a team-wide one.
+#                                        # optional: team-signed with the team's development profile embedded.
+#
+# No signing option is needed for any feature: the phones link through Mochi Link (pairing by QR code), and the
+# relay holds the push key, so the app carries no iCloud entitlement, no provisioning profile and no push key.
+# Without SIGN_IDENTITY the build is signed ad hoc ("-").
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,7 +21,6 @@ BUNDLE_ID="${BUNDLE_ID:-dev.mactamagotchi.MacTamagotchi}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 TEAM_ID="${TEAM_ID:-}"
 MAC_PROFILE="${MAC_PROFILE:-}"
-KVSTORE_ID="${KVSTORE_ID:-com.insideedge.mochi}"
 OUT="$ROOT/build"
 APP="$OUT/MacTamagotchi.app"
 
@@ -122,23 +121,17 @@ cat > "$OUT/widget.entitlements" <<PLIST
 </plist>
 PLIST
 
-if [[ -n "${APNS_KEY_FILE:-}" ]]; then
-    KEY_FILE="${APNS_KEY_FILE/#\~/$HOME}"
-    [[ -f "$KEY_FILE" ]] || { echo "APNS_KEY_FILE not found: $KEY_FILE" >&2; exit 1; }
-    KEY_NAME="$(basename "$KEY_FILE" .p8)"
-    KEY_ID="${APNS_KEY_ID:-${KEY_NAME#AuthKey_}}"
-    cp "$KEY_FILE" "$APP/Contents/Resources/APNsAuthKey.p8"
-    chmod 0644 "$APP/Contents/Resources/APNsAuthKey.p8"
-    /usr/libexec/PlistBuddy -c "Add :MochiAPNsKeyID string $KEY_ID" "$APP/Contents/Info.plist"
-    echo "==> Built-in iPhone push key $KEY_ID"
-fi
-
+# The app and team identifiers are restricted entitlements: claimed only with a profile that allows them, or macOS
+# refuses to launch the app. Nothing in the app needs them; they keep the team-signed build like the ones before.
 TEAM_ENTITLEMENTS=""
 if [[ -n "$TEAM_ID" && -n "$MAC_PROFILE" ]]; then
+    [[ -f "$MAC_PROFILE" ]] || { echo "MAC_PROFILE not found: $MAC_PROFILE" >&2; exit 1; }
     cp "$MAC_PROFILE" "$APP/Contents/embedded.provisionprofile"
     TEAM_ENTITLEMENTS="<key>com.apple.application-identifier</key><string>${TEAM_ID}.${BUNDLE_ID}</string>
-    <key>com.apple.developer.team-identifier</key><string>${TEAM_ID}</string>
-    <key>com.apple.developer.ubiquity-kvstore-identifier</key><string>${TEAM_ID}.${KVSTORE_ID}</string>"
+    <key>com.apple.developer.team-identifier</key><string>${TEAM_ID}</string>"
+    echo "==> Team-signed with $(basename "$MAC_PROFILE")"
+elif [[ -n "$TEAM_ID" || -n "$MAC_PROFILE" ]]; then
+    echo "==> TEAM_ID and MAC_PROFILE go together; signing without a profile"
 fi
 cat > "$OUT/app.entitlements" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
