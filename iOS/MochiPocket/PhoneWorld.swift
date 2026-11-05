@@ -17,7 +17,7 @@ final class PhoneWorld: WorldEffects {
 
     @ObservationIgnored private let settingsStore: SettingsStore
     @ObservationIgnored private var timer: Timer?
-    @ObservationIgnored private let store = NSUbiquitousKeyValueStore.default
+    private var linkStore: LinkStore { MochiLink.store }
     @ObservationIgnored private var mirror = ClaudeMirror(phase: "none")
     @ObservationIgnored private var mirrorSession: String?
     @ObservationIgnored private var inTurn = false
@@ -44,11 +44,10 @@ final class PhoneWorld: WorldEffects {
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
-        NotificationCenter.default.addObserver(forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification, object: store,
-                                               queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: .linkStoreDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.followMac() }
         }
-        store.synchronize()
+        linkStore.flush()
         followMac()
     }
 
@@ -59,14 +58,14 @@ final class PhoneWorld: WorldEffects {
         world.interact(kind)
         let id = UUID().uuidString
         seenInteractions.insert(id)
-        store.set(["id": id, "kind": kind.rawValue, "at": Date().timeIntervalSince1970], forKey: "phoneInteraction")
-        store.synchronize()
+        linkStore.set(["id": id, "kind": kind.rawValue, "at": Date().timeIntervalSince1970], for: .phoneInteraction)
+        linkStore.flush()
     }
 
     // MARK: Following the Mac
 
     func followMac() {
-        if let json = store.string(forKey: "macLook"), let look = PetLook.decode(json) {
+        if let json = linkStore.string(.look), let look = PetLook.decode(json) {
             var settings = settingsStore.settings
             look.apply(to: &settings)
             if settings != settingsStore.settings {
@@ -76,7 +75,7 @@ final class PhoneWorld: WorldEffects {
             friendshipLevel = look.friendshipLevel
             linkedToMac = true
         }
-        if let data = store.dictionary(forKey: "macClaude"), let phase = data["phase"] as? String {
+        if let data = linkStore.dictionary(.claude), let phase = data["phase"] as? String {
             let next = ClaudeMirror(phase: phase, category: data["category"] as? String, resting: data["resting"] as? Bool ?? false)
             if next != mirror {
                 if next.resting != mirror.resting { MacLink.shared.log(next.resting ? "the Mac is resting" : "the Mac is in use") }
@@ -92,7 +91,7 @@ final class PhoneWorld: WorldEffects {
                 world.updateSystem(next.resting ? SystemActivity(idleSeconds: 86_400) : SystemActivity(idleSeconds: 0))
             }
         }
-        if let data = store.dictionary(forKey: "macInteraction"), let id = data["id"] as? String, !seenInteractions.contains(id),
+        if let data = linkStore.dictionary(.macInteraction), let id = data["id"] as? String, !seenInteractions.contains(id),
            let at = data["at"] as? Double, Date().timeIntervalSince1970 - at < 90,
            let raw = data["kind"] as? String, let kind = PetInteraction(rawValue: raw) {
             seenInteractions.insert(id)

@@ -1,0 +1,37 @@
+{
+  "about" : "Mochi Link v1 AES-256-GCM vectors. key, nonce and box are base64url without padding; box = ciphertext || 16-byte tag; ad and plaintext are UTF-8. Every client (Swift, TypeScript, Python, Dart) must produce box from the rest and open it again. Made with CryptoKit.",
+  "vectors" : [
+    {
+      "ad" : "mochi-link/v1|room_5TQ9xg2Wm1kq7HfR4cZp8A|command|01JC0Z8Y3Q9V7R2K5T6M1N4P8D|dev_8fK2mQ7sXc1Lw9Rb",
+      "box" : "nToISD2_IIVAMu-yc12z_gDJN3T72SVTviIE8gbbEGXwTDON2kd_Hz7oJvI4TbXLdS91elLgZx6qSfJMx0RcGMaOxU7EAh0",
+      "key" : "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "name" : "command",
+      "nonce" : "oKGio6Slpqeoqaqr",
+      "plaintext" : "{\"text\":\"What's pending?\",\"typed\":true,\"at\":1762243200}"
+    },
+    {
+      "ad" : "mochi-link/v1|room_A|ack|01JC0Z8Y3Q9V7R2K5T6M1N4P8E|dev_B",
+      "box" : "117MGUJAK7DFcbn9n_zf_w",
+      "key" : "_-7dzLuqmYh3ZlVEMyIRAP_u3cy7qpmId2ZVRDMiEQA",
+      "name" : "empty",
+      "nonce" : "AAAAAAAAAAAAAAAB",
+      "plaintext" : ""
+    },
+    {
+      "ad" : "mochi-link/v1|room_5TQ9xg2Wm1kq7HfR4cZp8A|look|01JC0Z8Y3Q9V7R2K5T6M1N4P8F|dev_8fK2mQ7sXc1Lw9Rb",
+      "box" : "il1dV6GXRTtGwYO5ZhxNvgPV8yqUspY4oHk-KRPEKG4J-kUH1pf62TPtpl3jl89--HU_-hqL0GTYv92VpSbNSOt_MEFCu6K00YQqHT7YwT7MPPazGVvTSc9e4C5wtJJGXu0",
+      "key" : "Hx4dHBsaGRgXFhUUExIREA8ODQwLCgkIBwYFBAMCAQA",
+      "name" : "unicode",
+      "nonce" : "AQIDBAUGBwgJCgsM",
+      "plaintext" : "{\"petName\":\"मोची\",\"companion\":\"Patch 🐾\",\"note\":\"Ça va? — 日本語\"}"
+    },
+    {
+      "ad" : "mochi-link/v1|room_5TQ9xg2Wm1kq7HfR4cZp8A|sessions|01JC0Z8Y3Q9V7R2K5T6M1N4P8G|dev_host1",
+      "box" : "Iv_oJB4-N90UlJ0kIXXgR2ZgPi0YU1QMGysJaHNj3X5uBTy0cmVdtrkQUPLZX04b4uGJYjmQlVkDN1bnvwR4g7gSGqqz4m05qZ3ifigLT-RnroFS3DNZPCG0YBOwh-qPFG53cxmGPp5Jb-dYdKFaixtpr-ppZFIU9sHhpojjOa4j6cqAOPp6_3K72tFklyyoeuA2e584ynDImtoRTbwWRRAICBZnoM_B6ltbZJkG87EkLv56y4cKjmYFf2NGcKXawxJOaQczyTKXoJmtcNiDghVKuhSerpA9ufd35yZbLb_zl62dQhj7AT3EtjiBEuhs7ktO1rP1rLJ9ew089CVCX1rW8tuC7hd5VU8vWtm2nBdUKrDWRcDAmGtOeIZCm4WILbjoZvWRG6mvoPDQ1swhaYaXUHhvWFkvM9sv8Y_UTwLaiH7hnraGoCk2DDTL8PCudQWcpjGO8P9AJ9IjQWeVaapx8TWFvjqOpOpJmjQXuHxuNBVEy11-y3fb_2xH9IB7XI0gzyxoVbol54Kbv8WP3faPGYbCGhAdcQPyHOttmK0rGxWigzIosyYEswcBAgwadctiWS8dNOH_zVXm3PLsNvY8GJJXubO_w0ihXhAVNYn2Z5DiXGYUsYfmo8PPuoYYn5mn5d2f-Xp7ByhMTyA-N9T1vJrx4tCIaOIG3gCw9AEBLaNZ6_ZaWKZfhAjA9MhxrBGDqC5KtmKXo2cuv5aTvg_FmvR_3McCNYXNvjw02LcNTar4-lh4NgAqi55nBw3xKVudPojw_knN-WCehopQFiopnYN6rZxUPvo9cC_xyaBILNCYWzEl0TalSnShjx0gnyXFzgdigJBkhI_TjYZWJJYN3EFB0MzoMUHdqbAD3q5x0ophjaGUYAS8ZfY4igeFk-3zlaDbnNbkHBbkbRjcmb9fHex6PjZZqSo9dODOLXRe3Gwn7-yd-wrJO2dBkaZhvlGEj3aqSQA-o1Kxo-V9dEU4RZtCGZQHaUFPl5FH6qw-5ko7YDu-kaV8D717JMGzJ6G8ZgSgr3SeFfMcxPLsFyQU89FP4htqyNbN2fOKGabQgp7JosJNYoExmXAc0hPFr_1cXz2arDeDx7RZTFBeGqvvWrKu0wL52nufVTyuzj1ywWoJ_cPCcZl-cMvaf4Ld0ntqrPRQgagz7Uuwpgs6WTt74JTtIY5cVsUcA5sokn8zvqODDtVV69K4eXEgqbA5bj5dXDcc3kxErgBFX9PFzNa44WgDQe8Jb01i-bnGqdCFPLM9iMs45w0LjVi25a7CVLyPTmo9wWS8hSqZb1QzwJU-nSfeigihQxxII4vPTdw-MIc35K0rrYV-qX116Mx7vcfewbmS2Sw0hSquGMgKtlLVNn0UIQrdi98j_wX5Fd5R08EiSSUYt5htdiaf99Y0ksjjB3jfoCpR2IckYmm8NUHiXxcotmtjtKr-HTzcU1ws5yALmqSUYQMNb9remK0A95gCX_dT0zpZL-Md3u-4I35d2YCNFcQ9TcGPQ6kJSHT8gqRwzF18-_t9R3fsxgmX_flNTnU1r8KnesgxOVwC_q1Gwo-mv8rcd1hF8qlaW8ZvUGQhZS8YlaKk-yX5HoFlYnDuKVN-XOoNOo4KUfZgg1Dl7oomBk-nEglRcNVfGAYlVtf0qVyImpiRzLpDwWmPBYMPdsuWf1q8FgVb60iyTEdJOtVXGqVy0-rZgYcQqJDQyWnDRT_YymkJtgBP85-BCyGpot5-8aSaWja3zupOI90ixr6lCHydr438aGxNmLbcikaETbnNQOPuJxCTkjQJijd4gA0Ux8_OXfP2piqsREAFG1bf7r7iVc_WN6keS9FzIIeFnjTV9u64iu17Zuw4KYmVjijqRyktc0Bq23ugp7k8dZydWIHoZM38-Gms6UoJyKIu711iQ2YtyKd6_BDH3ULtY33KZI2V78Gy5jhFX2BdPXopTu5G9n5LcnKDIaFWuZTg_I6bpt6USJH0xqiO1NCK0zNfBr-WD1ahmez4LQdWkHI64AjM11nx_3DErbJR01UaH4GiWQLDPnjHbXJgZUb_cZ_UgkYWljwANBtAGg",
+      "key" : "bW9jaGktbGluay10ZXN0LWtleS0zMi1ieXRlcy0tLSE",
+      "name" : "large",
+      "nonce" : "bW9jaGktbm9uY2Uh",
+      "plaintext" : "{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},{\"project\":\"mac-Tamagotchi\",\"done\":\"Gave Mochi its own voice.\"},"
+    }
+  ]
+}

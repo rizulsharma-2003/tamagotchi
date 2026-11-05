@@ -12,6 +12,8 @@ struct MochiPocketApp: App {
         // background to hand over a Live Activity's update address after the Mac starts one.
         // Simulator screenshots (`-demoContent 1`) skip Live Activities: their push setup asks for notifications.
         if !UserDefaults.standard.bool(forKey: "demoContent") { ActivityCoordinator.shared.start() }
+        // Mochi Link first, so everything below talks through the relay when this phone is paired.
+        PocketLink.shared.start()
         MacLink.shared.start()
         PhoneWorld.shared.start()
     }
@@ -26,6 +28,7 @@ struct MochiPocketApp: App {
             case .active:
                 coordinator.stopDemoAnimation()
                 coordinator.followMacEnd()
+                PocketLink.shared.resume()
                 link.read()
                 Task { await PhoneNotifications.shared.refresh() }
                 PhoneNotifications.shared.catchUp()

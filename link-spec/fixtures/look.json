@@ -1,0 +1,22 @@
+{
+  "iCloudName" : "macLook",
+  "key" : "look",
+  "storedAs" : "json-string",
+  "value" : {
+    "companionName" : "Patch",
+    "deskAccessory" : "plant",
+    "friendshipLevel" : 3,
+    "petColor" : "cream",
+    "petName" : "Mochi",
+    "room" : {
+      "items" : [
+
+      ]
+    },
+    "seasonal" : {
+      "decorateMenuBar" : true,
+      "enabled" : true
+    },
+    "theme" : "cozyDesk"
+  }
+}

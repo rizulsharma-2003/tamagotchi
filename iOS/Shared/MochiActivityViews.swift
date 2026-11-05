@@ -90,6 +90,20 @@ struct MochiLockScreenView: View {
     let attributes: MochiActivityAttributes
     let state: MochiActivityAttributes.ContentState
 
+    /// The detail line: opened from `sealed` with the room key when the update is sealed (Mochi Link).
+    private var shownDetail: String? {
+        guard let sealed = state.sealed else { return state.detail }
+        let keychainKey = LinkSeal.loadKey()
+        let keychainStatus = LinkSeal.lastStatus
+        let fileKey = LinkSeal.loadFileKey()
+        let viaKeychain = LinkSeal.open(sealed, ad: LinkSeal.liveActivityAD, key: keychainKey)
+        let viaFile = LinkSeal.open(sealed, ad: LinkSeal.liveActivityAD, key: fileKey)
+        LinkSeal.note("widget: keychain status \(keychainStatus) opened \(viaKeychain != nil); app-group file key \(fileKey != nil) opened \(viaFile != nil)")
+        if let viaKeychain { return viaKeychain }
+        if let viaFile { return "📁 " + viaFile }
+        return "🔒 \(keychainStatus)"
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             PhaseArt(kind: .scene, phase: state.art, frame: state.frame, height: 76)
@@ -99,7 +113,7 @@ struct MochiLockScreenView: View {
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                if let detail = state.detail, !detail.isEmpty {
+                if let detail = shownDetail, !detail.isEmpty {
                     Text(detail)
                         .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.7))

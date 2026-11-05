@@ -22,3 +22,6 @@ film/out/
 .vscode/
 .DS_Store
 __pycache__/
+# Claude Code working copies (agent worktrees) and local settings
+.claude/worktrees/
+.claude/settings.local.json

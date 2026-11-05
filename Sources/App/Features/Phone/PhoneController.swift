@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import os
 import Security
 import TamagotchiCore
 import TamagotchiWire
@@ -23,7 +24,8 @@ final class PhoneController {
 
     @ObservationIgnored private unowned let environment: AppEnvironment
     @ObservationIgnored private var timer: Timer?
-    @ObservationIgnored private let store = NSUbiquitousKeyValueStore.default
+    /// Where the Mac and iPhone meet: the Mochi Link relay once paired (iCloud as its backup), else iCloud.
+    private var link: LinkStore { MochiLink.store }
     @ObservationIgnored private var bearer: (token: String, at: Date)?
     @ObservationIgnored private var desired: LiveActivityState?
     @ObservationIgnored private var lastSentAt = Date.distantPast
@@ -38,6 +40,7 @@ final class PhoneController {
     private(set) var lastCommand: String?
 
     private static let quietUpdateInterval: TimeInterval = 8
+    private static let linkLog = Logger(subsystem: "com.mochi.link", category: "mac")
     /// While Claude works, a quiet update this often moves Mochi and Patch to their next pose.
     private static let motionInterval: TimeInterval = 6
     @ObservationIgnored private var frameCounter = 0
@@ -57,8 +60,7 @@ final class PhoneController {
 
     func start() {
         hasKey = signingKey != nil
-        NotificationCenter.default.addObserver(forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification, object: store,
-                                               queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: .linkStoreDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.readTokens() }
         }
         readTokens()
@@ -73,15 +75,15 @@ final class PhoneController {
 
     func readTokens() {
         guard teamSigned else { return }
-        store.synchronize()
-        pushToStartToken = store.string(forKey: "pushToStart")
-        iCloudSignedIn = store.dictionaryRepresentation.isEmpty == false || pushToStartToken != nil
-        let tokens = store.dictionary(forKey: "updateTokens") as? [String: String] ?? [:]
+        link.flush()
+        pushToStartToken = link.string(.pushToStart)
+        iCloudSignedIn = link.hasAnyValue || pushToStartToken != nil
+        let tokens = link.value(.updateTokens) as? [String: String] ?? [:]
         let gained = Set(tokens.values).subtracting(updateTokens.values)
         let hadTokens = !updateTokens.isEmpty
         updateTokens = tokens
-        tokensSavedAt = (store.object(forKey: "savedAt") as? Double).map(Date.init(timeIntervalSince1970:))
-        deviceToken = store.string(forKey: "deviceToken")
+        tokensSavedAt = link.double(.tokensSavedAt).map(Date.init(timeIntervalSince1970:))
+        deviceToken = link.string(.deviceToken)
         // The iPhone lists its running activities; follow it rather than guessing.
         if activityRunning, hadTokens, tokens.isEmpty {
             // Gone from the phone (swiped away, or the app was reinstalled): back for Claude's next turn.
@@ -113,8 +115,8 @@ final class PhoneController {
                            friendshipLevel: environment.world.progress.friendshipLevel).json
         if look != publishedLook {
             publishedLook = look
-            store.set(look, forKey: "macLook")
-            store.synchronize()
+            link.set(look, for: .look)
+            link.flush()
         }
         var mirror = ClaudeMirror.from(sessions: environment.world.sessions)
         mirror.resting = environment.world.macResting
@@ -126,18 +128,18 @@ final class PhoneController {
             mirrorPublishedAt = Date()
             var value: [String: Any] = ["phase": mirror.phase, "resting": mirror.resting, "at": Date().timeIntervalSince1970]
             if let category = mirror.category { value["category"] = category }
-            write(value, forKey: "macClaude")
+            write(value, for: .claude)
         }
     }
 
     /// Petting, play and treats on the Mac show on the iPhone too.
     func userInteracted(_ kind: PetInteraction) {
         guard teamSigned, !applyingPhoneInteraction else { return }
-        write(["id": UUID().uuidString, "kind": kind.rawValue, "at": Date().timeIntervalSince1970], forKey: "macInteraction")
+        write(["id": UUID().uuidString, "kind": kind.rawValue, "at": Date().timeIntervalSince1970], for: .macInteraction)
     }
 
     private func readPhoneInteraction() {
-        guard let data = store.dictionary(forKey: "phoneInteraction"), let id = data["id"] as? String, !handledInteractions.contains(id),
+        guard let data = link.dictionary(.phoneInteraction), let id = data["id"] as? String, !handledInteractions.contains(id),
               let at = data["at"] as? Double, Date().timeIntervalSince1970 - at < 90,
               let raw = data["kind"] as? String, let kind = PetInteraction(rawValue: raw) else { return }
         handledInteractions.insert(id)
@@ -209,16 +211,16 @@ final class PhoneController {
     func publishCloudTrigger(url: String?, token: String?) {
         guard teamSigned else { return }
         if let url, let token {
-            store.set(["url": url, "token": token], forKey: "macCloud")
+            link.set(["url": url, "token": token], for: .cloud)
         } else {
-            store.removeObject(forKey: "macCloud")
+            link.set(nil, for: .cloud)
         }
-        store.synchronize()
+        link.flush()
     }
 
     /// What you marked done in Mochi Pocket.
     var phoneDone: AgentDoneList? {
-        guard teamSigned, let json = store.string(forKey: "phoneDone") else { return nil }
+        guard teamSigned, let json = link.string(.phoneDone) else { return nil }
         return AgentDoneList.decode(json)
     }
 
@@ -226,16 +228,16 @@ final class PhoneController {
     func publishMacDone(_ list: AgentDoneList) {
         guard teamSigned else { return }
         let json = list.json
-        guard store.string(forKey: "macDone") != json else { return }
-        store.set(json, forKey: "macDone")
-        store.synchronize()
+        guard link.string(.macDone) != json else { return }
+        link.set(json, for: .macDone)
+        link.flush()
     }
 
     /// Mochi Pocket's Pending card (what's waiting for you), through your iCloud.
     func publishAgentPending(_ json: String) {
         guard teamSigned else { return }
-        store.set(json, forKey: "macAgent")
-        store.synchronize()
+        link.set(json, for: .agent)
+        link.flush()
     }
 
     /// Mochi Pocket's list of sessions: each live session's phase and the summary of its last turn.
@@ -258,8 +260,8 @@ final class PhoneController {
         publishedSessions = json
         sessionsPublishedAt = Date()
         payload.updatedAt = Date().timeIntervalSince1970.rounded(.up)
-        store.set(payload.json, forKey: "macSessions")
-        store.synchronize()
+        link.set(payload.json, for: .sessions)
+        link.flush()
     }
 
     /// The hook helper includes Claude's words only while this file exists.
@@ -308,18 +310,22 @@ final class PhoneController {
     private func readCommands() {
         readPhoneInteraction()
         guard settings.acceptCommands else { return }
-        if let command = store.dictionary(forKey: "phoneCommand"), let id = command["id"] as? String,
+        if let command = link.dictionary(.command), let id = command["id"] as? String, !handledCommands.contains(id) {
+            let age = Date().timeIntervalSince1970 - ((command["at"] as? Double) ?? 0)
+            Self.linkLog.notice("phone command \(id.prefix(8), privacy: .public), \(Int(age))s old\(age >= 180 ? " (too old, ignored)" : "", privacy: .public)")
+        }
+        if let command = link.dictionary(.command), let id = command["id"] as? String,
            let text = (command["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty,
            let at = command["at"] as? Double, Date().timeIntervalSince1970 - at < 180, !handledCommands.contains(id) {
             handledCommands.insert(id)
             UserDefaults.standard.set(Array(handledCommands.suffix(30)), forKey: "phoneHandledCommands")
             lastCommand = text
-            write(["id": id, "state": "working", "at": Date().timeIntervalSince1970], forKey: "macReply")
+            write(["id": id, "state": "working", "at": Date().timeIntervalSince1970], for: .reply)
             // A reply from a session card or a notification goes to that session.
             let target = (command["project"] as? String).map { AssistantController.Target(project: $0, sessionID: command["session"] as? String) }
             environment.assistant.run(text, headless: true, spoken: (command["typed"] as? Bool) != true, origin: .phone(id), target: target)
         }
-        if let verdict = store.dictionary(forKey: "phoneApproval"), let id = verdict["id"] as? String, id == pendingApprovalID,
+        if let verdict = link.dictionary(.verdict), let id = verdict["id"] as? String, id == pendingApprovalID,
            let allow = verdict["allow"] as? Bool {
             pendingApprovalID = nil
             environment.assistant.answerFromPhone(approvalID: id, allow: allow)
@@ -328,7 +334,7 @@ final class PhoneController {
 
     /// Mochi's answer to a command from the iPhone.
     func reply(to commandID: String, text: String, ok: Bool) {
-        write(["id": commandID, "state": ok ? "done" : "failed", "text": text, "at": Date().timeIntervalSince1970], forKey: "macReply")
+        write(["id": commandID, "state": ok ? "done" : "failed", "text": text, "at": Date().timeIntervalSince1970], for: .reply)
     }
 
     /// Shows the approval card on the iPhone too; the first answer (Mac or iPhone) wins.
@@ -337,20 +343,20 @@ final class PhoneController {
         var request: [String: Any] = ["id": id, "command": commandID, "target": target, "message": message,
                                       "at": Date().timeIntervalSince1970]
         if let project { request["project"] = project }
-        write(request, forKey: "macApproval")
+        write(request, for: .approval)
     }
 
     func clearApproval() {
-        guard pendingApprovalID != nil || store.dictionary(forKey: "macApproval") != nil else { return }
+        guard pendingApprovalID != nil || link.dictionary(.approval) != nil else { return }
         pendingApprovalID = nil
-        store.removeObject(forKey: "macApproval")
-        store.synchronize()
+        link.set(nil, for: .approval)
+        link.flush()
     }
 
-    private func write(_ value: [String: Any], forKey key: String) {
+    private func write(_ value: [String: Any], for key: LinkKey) {
         guard teamSigned else { return }
-        store.set(value, forKey: key)
-        store.synchronize()
+        link.set(value, for: key)
+        link.flush()
     }
 
     // MARK: Following Claude
@@ -455,7 +461,7 @@ final class PhoneController {
         shown = nil
         // Mochi Pocket also closes it the next time it runs, in case the push can't reach it.
         let now = Date().timeIntervalSince1970
-        write(["at": now, "since": state.since, "dismissAt": now + max(0, dismissAfter)], forKey: "macEnded")
+        write(["at": now, "since": state.since, "dismissAt": now + max(0, dismissAfter)], for: .activityEnded)
         guard !updateTokens.isEmpty else { return }
         deliver(LiveActivityPayload.end(state, timestamp: nextTimestamp(), dismissAfter: dismissAfter),
                 to: Array(Set(updateTokens.values)), priority: 10, label: "Ended")

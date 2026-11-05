@@ -29,6 +29,7 @@ struct PocketSettingsView: View {
                 PocketBackground()
                 ScrollView {
                     VStack(spacing: 14) {
+                        LinkCard()
                         liveActivityCard
                         voiceCard
                         summariesCard

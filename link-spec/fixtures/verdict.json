@@ -1,0 +1,10 @@
+{
+  "iCloudName" : "phoneApproval",
+  "key" : "verdict",
+  "storedAs" : "dictionary",
+  "value" : {
+    "allow" : true,
+    "at" : 1762243220,
+    "id" : "approval-1"
+  }
+}

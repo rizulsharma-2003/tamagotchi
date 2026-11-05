@@ -65,6 +65,7 @@ app = {
     "CODE_SIGN_ENTITLEMENTS": "Config/MochiPocket.entitlements", "GENERATE_INFOPLIST_FILE": "YES",
     "INFOPLIST_FILE": '"Config/MochiPocket-Info.plist"', "INFOPLIST_KEY_CFBundleDisplayName": "Mochi",
     "INFOPLIST_KEY_NSMicrophoneUsageDescription": '"Mochi listens while you hold its ear, then sends what you said to your Mac."',
+    "INFOPLIST_KEY_NSCameraUsageDescription": '"Mochi uses the camera to scan the pairing code your Mac shows."',
     "INFOPLIST_KEY_NSSpeechRecognitionUsageDescription": '"Your words are turned into text on this iPhone."',
     "INFOPLIST_KEY_UIApplicationSceneManifest_Generation": "YES", "INFOPLIST_KEY_UILaunchScreen_Generation": "YES",
     "INFOPLIST_KEY_UISupportedInterfaceOrientations": "UIInterfaceOrientationPortrait",

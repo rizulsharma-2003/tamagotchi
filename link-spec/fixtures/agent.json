@@ -1,0 +1,24 @@
+{
+  "iCloudName" : "macAgent",
+  "key" : "agent",
+  "storedAs" : "json-string",
+  "value" : {
+    "enabled" : true,
+    "headline" : "Priya is waiting on the invoice.",
+    "items" : [
+      {
+        "at" : 1762243000,
+        "detail" : "Can you send the October invoice?",
+        "id" : "mail:18c2",
+        "important" : true,
+        "link" : "https://mail.google.com/mail/u/0/#inbox/18c2",
+        "source" : "gmail",
+        "subject" : "Invoice for October",
+        "title" : "Priya Sharma",
+        "vip" : true
+      }
+    ],
+    "lookedAt" : 1762243000,
+    "updatedAt" : 1762243000
+  }
+}

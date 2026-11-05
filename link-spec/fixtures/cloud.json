@@ -1,0 +1,9 @@
+{
+  "iCloudName" : "macCloud",
+  "key" : "cloud",
+  "storedAs" : "dictionary",
+  "value" : {
+    "token" : "example-token",
+    "url" : "https://api.anthropic.com/v1/claude_code/routines/trig_example/fire"
+  }
+}

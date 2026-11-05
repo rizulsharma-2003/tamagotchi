@@ -1,6 +1,7 @@
 # Mochi Link: plan
 
-**Status:** proposal, 2026-11-04. Nothing in this document is built yet.
+**Status:** proposal, 2026-11-04; updated the same day: **Android and Windows will be built in Flutter** (5.4).
+Nothing in this document is built yet.
 **What it is:** a replacement for the iCloud key-value link between MacTamagotchi and Mochi Pocket. One small,
 end-to-end encrypted relay that connects every Mochi app (Mac, iPhone, later Windows and Android) and Mochi Cloud,
 built so the apps can be distributed to anyone, not just to devices on the InsideEdge team.
@@ -61,6 +62,7 @@ Every KVS key the apps use. In Link, each one becomes either **state** (the rela
 | `phoneCommand` | phone → Mac | `{id, text, at, typed, project?, session?}` | message `command` → host (TTL 10 min) |
 | `macReply` | Mac → phone | `{id, state, text?, at}` | message `reply` → the device that asked |
 | `macApproval` | Mac → phone | pending approval request | state `approval` (cleared when answered) + alert push |
+| `macDone` / `phoneDone` | both | AgentDoneList: what each side marked done (merged as a union) | state `done.<device>`: each device puts its own list; everyone merges them |
 | `phoneApproval` | phone → Mac | verdict `{id, …}` | message `verdict` → host |
 | `pushToStart`, `updateTokens`, `deviceToken`, `savedAt` | phone → Mac | APNs addresses | **device registration with the relay.** They never go to the Mac again. |
 
@@ -74,7 +76,10 @@ Push paths today:
   for decrypting pushes (4.6).
 
 Code that touches KVS: `Sources/App/Features/Phone/PhoneController.swift`, `iOS/MochiPocket/MacLink.swift`,
-`PhoneWorld.swift`, `ActivityCoordinator.swift`, `PhoneNotifications.swift`. Entitlement:
+`PhoneWorld.swift`, `ActivityCoordinator.swift`, `PhoneNotifications.swift`, `UpdatesStore.swift`.
+
+Not on KVS and staying that way: the phone fires Mochi Cloud directly (Check now, Draft reply) with the trigger URL
+and token it gets in `macCloud`. Only that state moves into Link; the call itself still goes straight to Anthropic. Entitlement:
 `com.apple.developer.ubiquity-kvstore-identifier` (`Signing/MacTamagotchi.entitlements`,
 `iOS/Config/MochiPocket.entitlements`, `scripts/build-app.sh` `KVSTORE_ID`).
 
@@ -99,6 +104,9 @@ Code that touches KVS: `Sources/App/Features/Phone/PhoneController.swift`, `iOS/
 - Each device has a **role**: `host` (Mac, Windows: runs Claude Code, Ask Mochi, the agent), `pocket` (iPhone,
   Android) or `cloud` (Mochi Cloud: can only post agent news and `agent` state).
 - Everything that runs Claude (Ask Mochi, approvals, the agent) **stays on the host**. Link only moves messages.
+- **More than one host** (a Mac and a Windows PC in one room): commands are addressed to a device, not just to the
+  `host` role. A pocket picks its default computer in Settings and can choose another per message; summaries and
+  agent news say which computer they came from.
 
 ### 4.2 Pairing
 
@@ -135,7 +143,10 @@ random values; guessing them isn't feasible.
 - **Authenticity:** only devices holding K can produce a valid message, so a compromised relay can drop or delay
   messages but can't forge a `command`.
 - **Shared test vectors:** `link-vectors.json` holds key, nonce, AD, plaintext and expected ciphertext. Every client
-  (Swift, TypeScript, Python, Kotlin, C#) has a test that must reproduce them.
+  (Swift, TypeScript, Python, Dart) has a test that must reproduce them.
+- **Shared fixtures:** `link-fixtures/` holds a sample of every state and message body (`look`, `claude`, `sessions`,
+  `agent`, `done`, `command`, …), written by the Swift tests. The Dart models must decode them, so the Swift and Flutter
+  apps can't drift apart silently.
 
 ### 4.4 Protocol (v1)
 
@@ -201,8 +212,8 @@ The relay holds the push credentials as Worker secrets. **No app ships a push ke
 
 - **`PushGateway` interface** in the relay, with two implementations:
   - **APNs direct:** ES256 JWT, the same scheme as `APNsToken` in TamagotchiCore today. The community library
-    `@fivesheepco/cloudflare-apns2` suggests this works from Workers, but **APNs requires HTTP/2, and we haven't
-    confirmed that Workers' outbound `fetch` provides it.** That's spike 0.1.
+    `@fivesheepco/cloudflare-apns2` suggested this works from Workers; **spike 0.1 confirmed it** (APNs answered 200
+    to a plain `fetch` from a Worker; see "Spike results").
   - **FCM HTTP v1:** needed for Android anyway. FCM can also deliver to iOS, including Live Activity start, update
     and end via `apns.live_activity_token`, so it's the fallback if direct APNs from Workers doesn't work. The cost
     is adding the Firebase SDK to Mochi Pocket.
@@ -215,9 +226,9 @@ The relay holds the push credentials as Worker secrets. **No app ships a push ke
   posts the notification.
 - **Live Activity pushes are the one exception.** ActivityKit hands `content-state` straight to the system, and no
   extension runs first. For v1, the content state stays minimal: phase, pose frame, timer start, tool count, and
-  the project name only if the existing "show project names" setting allows it. **Spike 0.2:** put ciphertext in
-  `content-state` and decrypt it inside the widget view with the key from the shared Keychain group. If that works,
-  this exception goes away.
+  the project name only if the existing "show project names" setting allows it. **Spike 0.2 (done):** ciphertext in
+  `content-state` opens inside the widget view, with a derived key from the app group (the Keychain isn't readable
+  there), so this exception goes away. See "Spike results".
 - **Rate:** the Mac sends a quiet Live Activity update every 6 s while Claude works. Through the relay, that's
   ~600 pushes per working hour per user. The relay collapses Live Activity updates per activity (send the newest,
   at most one every 5 s), and distributed builds should use 10–15 s.
@@ -290,19 +301,43 @@ remains the source of truth for queues and pushes. This is optional and comes af
   linked to identity, no tracking). Answer the export-compliance questions (we use standard AES-GCM) and check
   whether a self-classification report applies.
 
-### 5.4 Android and Windows
+### 5.4 Android and Windows: Flutter (decided 2026-11-04)
 
-- **Android:** Kotlin + Jetpack Compose; FCM for wake-ups; Play Console ($25 one-time); notification permission
-  on Android 13+. Roles: `pocket`.
-- **Windows:** a tray app that does what the Mac app does (Claude Code hooks, Ask Mochi, agent). Claude Code runs
-  on Windows, so the hook helper needs a Windows port. Sign it with a code-signing certificate or ship through the
-  Microsoft Store. Role: `host`.
-- **Shared code:** TamagotchiCore and the renderers are Swift and CoreGraphics. The options are Swift on Windows
-  and Android (Swift has official Windows support and an Android SDK effort), Kotlin Multiplatform, or per-platform
-  code. The protocol and the next point keep every option open, so **decide when Phase 8 starts.**
-- **Art:** export sprite sheets from the Mac renderer (it already renders poses to files, e.g.
-  `MacTamagotchi --render-listening <dir>`) so Android and Windows can show the same Mochi on day one without
-  porting the drawing code.
+The Apple apps stay native Swift: Live Activities, App Intents (Siri), widgets, FluidAudio (Kokoro) and SwiftUI are
+all Apple-only and already built. **Android and Windows are one Flutter codebase** (Dart), with Link as the contract
+between the two worlds.
+
+**Why Flutter:** one codebase covers an Android `pocket` and a Windows `host` (and Linux later for little extra).
+Its desktop support on Windows is stable; the plugins we need exist (tray, window management, hotkeys, notifications,
+FCM, QR scanning, speech-to-text, `cryptography` for AES-GCM); and `CustomPainter` maps closely onto the CoreGraphics
+drawing the pet renderers use, so the real Mochi can be ported rather than approximated.
+
+**What it costs, honestly:**
+
+- **The core logic exists twice.** TamagotchiCore (~18.6k lines of Swift: pet world, moods, poses, agent models,
+  speech script) has no Dart equivalent. A pocket needs only a small part of it (models, room view state); a Windows
+  host needs much more. The shared fixtures (4.3) and per-feature parity tests keep the two honest.
+- **Some native code is still needed:** Android's ongoing "Claude is working" notification and home screen widget
+  (Kotlin via platform channels); Windows' transparent always-on-top pet window and tray details (Win32 through
+  `dart:ffi`/plugins).
+- **Builds and testing need the real platforms.** Windows apps build only on Windows: a Windows PC (or a Windows 11
+  ARM VM on this Mac, plus a GitHub Actions Windows runner for release builds). Android needs the Android SDK here and
+  an Android phone for pushes and the camera.
+- **Mochi's voice:** FluidAudio is Apple-only. Kokoro on Android/Windows would go through ONNX (e.g. sherpa-onnx),
+  whose English phonemizer uses espeak-ng (GPL-3.0), a problem for a closed-source release. v1 uses the system voice
+  (Android TextToSpeech, Windows SAPI); a licence-clean Kokoro path is decided later.
+
+**Layout:** a `flutter/` folder in this repository, as a Dart workspace:
+
+| Package | Contents |
+|---|---|
+| `mochi_link` | Link client (WebSocket + HTTPS, outbox, backoff, `hello`/`sync`, presence), AES-GCM with the shared vectors, envelope and payload models checked against `link-fixtures/` |
+| `mochi_art` | Mochi, Patch and the room as `CustomPainter`s ported from the Swift renderers (sprite sheets from `MacTamagotchi --render-…` as a stopgap) |
+| `mochi_pocket` | the Android app (`pocket`): pairing scanner, room and pet, talk, Claude session cards, Waiting for you with done sync, FCM pushes decrypted in the app, ongoing notification, home widget |
+| `mochi_desktop` | the Windows app (`host`): tray and desktop pet, Claude Code hook helper (a `dart compile exe` CLI), session tracking, Link host (commands, replies, approvals, summaries through `claude -p`), Ask Mochi; the agent comes in a later version |
+
+**Store and signing:** Play Console ($25 once, notification permission on Android 13+); Windows through the
+Microsoft Store (MSIX, no certificate to buy) or a code-signing certificate for a direct download.
 
 ### 5.5 Privacy and legal
 
@@ -365,6 +400,8 @@ A user with Claude working for an hour generates ~600 Live Activity messages, wh
 | `scripts/build-app.sh` | notarization step; later drop `KVSTORE_ID` and the provisioning-profile path |
 | `mochi-cloud/mochi_cloud.py` | `send` posts to Link instead of APNs |
 | `mochi-link/` (new repo) | the Worker, Durable Object, push gateway, tests |
+| `link-fixtures/`, `link-vectors.json` | written by the Swift tests; read by the Worker, Python and Dart tests |
+| `flutter/` (new) | the Dart workspace from 5.4: `mochi_link`, `mochi_art`, `mochi_pocket`, `mochi_desktop` |
 | Docs | ARCHITECTURE.md, LIVE_ACTIVITY.md, PRIVACY.md, SETUP.md, TROUBLESHOOTING.md, README |
 
 ## 7. Phases
@@ -374,20 +411,49 @@ app installed and tried on the real Mac and iPhone.
 
 | # | Phase | Effort | Done when |
 |---|---|---|---|
-| 0 | **Spikes:** (0.1) APNs from a Worker over HTTP/2, else FCM → iOS incl. Live Activity; (0.2) decrypting Live Activity state in the widget; (0.3) AES-GCM test vectors matching in Swift, TypeScript and Python; (0.4) `cryptography` in the Mochi Cloud environment | ½–1 | each spike has a yes/no answer written into this file |
+| 0 | **Spikes:** (0.1) APNs from a Worker over HTTP/2, else FCM → iOS incl. Live Activity; (0.2) decrypting Live Activity state in the widget; (0.3) AES-GCM test vectors matching in Swift, TypeScript, Python and Dart; (0.4) `cryptography` in the Mochi Cloud environment | ½–1 | each spike has a yes/no answer written into this file |
 | 1 | **`LinkStore` refactor** with `ICloudLinkStore`, no behaviour change | 1 | 360+ tests pass; Mac ↔ iPhone works exactly as before |
 | 2 | **Relay MVP:** rooms, invites, join, socket, state, queue, presence, HTTP send, limits, alarms; deployed to `workers.dev` | 1–2 | Worker tests pass; two scripted clients exchange encrypted messages |
 | 3 | **Pairing + E2E in the apps:** Settings › Devices, QR, Pocket scanner, `RelayLinkStore`; iCloud and Link both on behind a setting (Link wins, iCloud is the fallback) | 1–2 | you scan once; commands and replies arrive in < 1 s; presence shows "Mac asleep" |
 | 4 | **Push through the relay:** `register`, encrypted alerts + MochiNotifications decrypt, Live Activity start/update/end, collapse; remove `.p8` from the Mac app | 1–2 | summaries, approvals, agent news and Live Activity work with no key on the Mac |
 | 5 | **Mochi Cloud on Link** | ½ | a test fire reaches the phone and the Mac via Link; APNs vars removed from the cloud env |
 | 6 | **Turn off iCloud:** remove `ICloudLinkStore`, KVS entitlement and the profile requirement; revoke old push keys; update docs | ½ | the Mac app builds and links with only a Developer ID (or ad-hoc) signature |
-| 7 | **Apple distribution:** name + bundle IDs, Developer ID + notarization + Sparkle, TestFlight, privacy policy page, App Store submission | 1–2 of work + Apple review time | a stranger can download the DMG, install Pocket from TestFlight/App Store, scan, and it works |
-| 8 | **Android app** (`pocket`): Link client, FCM, sprite-sheet Mochi, room, talk, cards | several | Android pairs with a Mac and does what Pocket does |
-| 9 | **Windows app** (`host`): tray app, hook helper port, Ask Mochi, agent, Link host | several | Windows PC pairs with iPhone/Android |
-| 10 | **Same-Wi-Fi fast path** (optional) | 1 | room sync is instant on one network |
+| 7 | **Parked by the user (2026-11-04), to revisit later. Apple distribution:** name + bundle IDs, Developer ID + notarization + Sparkle, TestFlight, privacy policy page, App Store submission | 1–2 of work + Apple review time | a stranger can download the DMG, install Pocket from TestFlight/App Store, scan, and it works |
+| 8 | **Flutter foundation:** workspace, `mochi_link` (passes the vectors and fixtures, talks to the real relay), `mochi_art` (Mochi and the room ported to `CustomPainter`), CI builds for Android and Windows | 2–3 | a Dart test client pairs with the Mac and exchanges messages; Mochi renders in Flutter like on the Mac |
+| 9 | **Android app** (`pocket`): pairing, room and pet, talk, cards, Waiting for you + done sync, FCM pushes, ongoing notification, widget | 3–4 | an Android phone pairs with the Mac and does what Pocket does |
+| 10 | **Windows app v1** (`host`): tray + desktop pet, hook helper and Claude Code hooks, sessions, Link host, Ask Mochi; then Play Store and Microsoft Store releases | 4–6 | a Windows PC runs Claude Code with Mochi, and an iPhone or Android phone pairs with it |
+| 11 | **Windows app v2:** the agent (mail, calendar, Notion), games and the rest of the Mac's features | later | |
+| 12 | **Same-Wi-Fi fast path** (optional) | 1 | room sync is instant on one network |
 
 **Mac + iPhone on Link and ready to distribute is about 7–10 sessions** (phases 0–7), plus waiting on Apple
-(certificates, TestFlight review, App Review).
+(certificates, TestFlight review, App Review). **Android and Windows v1 add about 9–13** (phases 8–10). Phase 8 can
+start while Apple reviews phase 7.
+
+### Two tracks in parallel (agreed 2026-11-04)
+
+Phase 7 is parked, so the Apple apps stay on the team's own devices for now. Store releases for Android and Windows
+wait too: they're tested by direct install. The work runs as two tracks that meet at fixed points:
+
+| Step | Track A: Link, Mac and iPhone | Track B: Flutter | B needs from A |
+|---|---|---|---|
+| 1 | Phase 0 spikes | Workspace; Mochi and the room in `CustomPainter`; Android screens on sample data | nothing |
+| 2 | Phase 1 refactor + `link-fixtures/` | `mochi_link` models and AES-GCM pass the vectors and fixtures | 0.3 vectors, phase 1 fixtures |
+| 3 | Phase 2 relay | the Dart client talks to the deployed relay | phase 2 |
+| 4 | Phase 3 pairing | Android pairs by QR; live room and cards | phase 3 (QR format, `RelayLinkStore` behaviour) |
+| 5 | Phase 4 push | Android pushes (FCM), ongoing notification | phase 4 (FCM in the push gateway) |
+| 6 | Phases 5–6 | Windows app v1 (UI developed as a macOS Flutter build, Windows parts tested on a Windows PC) | phase 3; a Windows machine |
+
+Within a working session, track B's self-contained tasks (the art port, screens on sample data) can run as a
+background agent in its own git worktree while track A goes on; everything is reviewed and tried before it's merged.
+
+### Spike results
+
+| Spike | Answer | Notes |
+|---|---|---|
+| 0.3 AES-GCM everywhere | **Yes** (2026-11-04) | `link-spec/vectors.json` (4 vectors, made with CryptoKit) reproduced byte-for-byte by WebCrypto in Node (the Workers API), Python `cryptography` 50 and Dart `cryptography` 2.7; all reject a changed AD. |
+| 0.2 Live Activity content end-to-end | **Yes, with a file key** (2026-11-04) | On the iPhone 14 Pro (iOS 27.0.1) the Live Activity view can't read the Keychain while it renders (shared access group, after-first-unlock item: not found), but it can read a key file in the app group (`completeFileProtectionUntilFirstUserAuthentication`) and open AES-GCM content with CryptoKit. Design: keep K in the Keychain; give the widget only a derived key, `K_la = HKDF-SHA256(K, info "mochi-link/v1 live-activity")`, in the app-group file, so a leaked file reveals Live Activity text but can't open or forge messages. The Live Activity `content-state` carries `sealed` ("nonce.box") instead of the readable title/detail. Spike code: `iOS/SharedData/LinkSeal.swift`, `-sealSpike 1`. |
+| 0.1 APNs from a Worker | **Yes** (2026-11-04) | A Worker on the free plan (`mochi-link-spike`, wrangler 4.151.3) signed an ES256 JWT with WebCrypto and `fetch`ed `api.sandbox.push.apple.com/3/device/<token>` directly: APNs answered 200 with an `apns-id` in ~1 s including signing. So the relay's push gateway can talk to APNs itself; FCM is only needed for Android. |
+| 0.4 `cryptography` in Mochi Cloud | pending | |
 
 ## 8. Risks
 
@@ -412,7 +478,9 @@ app installed and tried on the real Mac and iPhone.
 - [ ] **Mochi Cloud for others:** optional bring-your-own guide (recommended) or keep it personal.
 - [ ] **Open-source the relay?**
 - [ ] **Free or paid?** (paid would need accounts and billing, which changes phase 7).
-- [ ] **Android and Windows technology** (decide at phase 8).
+- [x] **Android and Windows technology:** Flutter (decided 2026-11-04, see 5.4).
+- [ ] **Test hardware:** a Windows PC (or a Windows 11 ARM VM on this Mac) and an Android phone, by phase 8.
+- [ ] **Firebase project** for Android pushes (free; needs a Google account), by phase 9.
 
 ## Sources checked
 

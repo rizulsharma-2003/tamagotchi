@@ -1,0 +1,10 @@
+{
+  "iCloudName" : "phoneDone",
+  "key" : "phoneDone",
+  "storedAs" : "json-string",
+  "value" : {
+    "ids" : {
+      "mail:18c2" : 1762243150
+    }
+  }
+}

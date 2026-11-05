@@ -70,28 +70,20 @@ final class MacLink {
         Task { await fireCloud(trigger) }
     }
 
-    private let store = NSUbiquitousKeyValueStore.default
+    private var linkStore: LinkStore { MochiLink.store }
     private var started = false
     private var answeredApprovals = Set<String>()
 
-    static let commandKey = "phoneCommand"
-    static let replyKey = "macReply"
-    static let approvalKey = "macApproval"
-    static let verdictKey = "phoneApproval"
-    static let sessionsKey = "macSessions"
-    static let agentKey = "macAgent"
-    static let cloudKey = "macCloud"
 
     var current: Exchange? { exchanges.last }
 
     func start() {
         guard !started else { return }
         started = true
-        NotificationCenter.default.addObserver(forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification, object: store,
-                                               queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: .linkStoreDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.read() }
         }
-        store.synchronize()
+        linkStore.flush()
         read()
     }
 
@@ -104,8 +96,8 @@ final class MacLink {
         var command: [String: Any] = ["id": id, "text": text, "at": Date().timeIntervalSince1970, "typed": typed]
         if let project { command["project"] = project }
         if let session { command["session"] = session }
-        store.set(command, forKey: Self.commandKey)
-        store.synchronize()
+        linkStore.set(command, for: .command)
+        linkStore.flush()
         log("sent \(id.prefix(8))\(project.map { " to \($0)" } ?? ""): \(text)")
         return id
     }
@@ -277,30 +269,30 @@ final class MacLink {
     func answer(_ approval: Approval, allow: Bool) {
         answeredApprovals.insert(approval.id)
         self.approval = nil
-        store.set(["id": approval.id, "allow": allow, "at": Date().timeIntervalSince1970], forKey: Self.verdictKey)
-        store.synchronize()
+        linkStore.set(["id": approval.id, "allow": allow, "at": Date().timeIntervalSince1970], for: .verdict)
+        linkStore.flush()
     }
 
     func read() {
         // Only a new list counts: an old one read again mustn't undo newer news from a notification.
-        if let json = store.string(forKey: Self.sessionsKey), json != listedJSON, let shared = PhoneSessions.decode(json) {
+        if let json = linkStore.string(.sessions), json != listedJSON, let shared = PhoneSessions.decode(json) {
             listedJSON = json
             listed = shared
             listedKnown = true
             log("sessions: \(shared.enabled ? shared.sessions.map { "\($0.project) \($0.phase)\($0.summary == nil ? "" : " +summary")" }.joined(separator: ", ") : "summaries off")")
             rebuildSessions()
         }
-        if let json = store.string(forKey: Self.agentKey), let pending = AgentPending.decode(json) { mergeAgent(pending) }
-        if let json = store.string(forKey: UpdatesStore.macDoneKey), let list = AgentDoneList.decode(json) {
+        if let json = linkStore.string(.agent), let pending = AgentPending.decode(json) { mergeAgent(pending) }
+        if let json = linkStore.string(.macDone), let list = AgentDoneList.decode(json) {
             UpdatesStore.shared.applyMacDone(list)
         }
-        if let cloud = store.dictionary(forKey: Self.cloudKey), let link = cloud["url"] as? String, let url = URL(string: link),
+        if let cloud = linkStore.dictionary(.cloud), let link = cloud["url"] as? String, let url = URL(string: link),
            url.host == "api.anthropic.com", let token = cloud["token"] as? String, !token.isEmpty {
             cloudTrigger = (url, token)
         } else {
             cloudTrigger = nil
         }
-        if let reply = store.dictionary(forKey: Self.replyKey), let id = reply["id"] as? String,
+        if let reply = linkStore.dictionary(.reply), let id = reply["id"] as? String,
            let index = exchanges.firstIndex(where: { $0.id == id }) {
             switch reply["state"] as? String {
             case "working": if exchanges[index].state == .sending { exchanges[index].state = .working }
@@ -312,7 +304,7 @@ final class MacLink {
             macSeenAt = Date()
             log("mac \(id.prefix(8)) \(reply["state"] as? String ?? "?"): \(reply["text"] as? String ?? "")")
         }
-        if let request = store.dictionary(forKey: Self.approvalKey), let id = request["id"] as? String,
+        if let request = linkStore.dictionary(.approval), let id = request["id"] as? String,
            !answeredApprovals.contains(id), let at = request["at"] as? Double, Date().timeIntervalSince1970 - at < 120,
            let target = request["target"] as? String, let message = request["message"] as? String {
             approval = Approval(id: id, target: target, project: request["project"] as? String, message: message)
@@ -325,7 +317,7 @@ final class MacLink {
                 answer(approval, allow: true)
             }
             #endif
-        } else if let current = approval, store.dictionary(forKey: Self.approvalKey)?["id"] as? String != current.id {
+        } else if let current = approval, linkStore.dictionary(.approval)?["id"] as? String != current.id {
             approval = nil
         }
     }

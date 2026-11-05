@@ -1,0 +1,13 @@
+{
+  "iCloudName" : "phoneCommand",
+  "key" : "command",
+  "storedAs" : "dictionary",
+  "value" : {
+    "at" : 1762243200,
+    "id" : "cmd-1",
+    "project" : "mac-Tamagotchi",
+    "session" : "session-1",
+    "text" : "What's pending?",
+    "typed" : true
+  }
+}

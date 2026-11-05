@@ -13,7 +13,6 @@ final class PhoneNotifications: NSObject, UNUserNotificationCenterDelegate {
     static let replyAction = "reply"
     static let joinAction = "join"
     static let openDraftAction = "open-draft"
-    static let deviceTokenKey = "deviceToken"
 
     private(set) var status: UNAuthorizationStatus = .notDetermined
     private var started = false
@@ -68,10 +67,16 @@ final class PhoneNotifications: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func save(deviceToken: Data) {
-        let store = NSUbiquitousKeyValueStore.default
-        guard store.string(forKey: Self.deviceTokenKey) != deviceToken.hex else { return }
-        store.set(deviceToken.hex, forKey: Self.deviceTokenKey)
-        store.synchronize()
+        #if DEBUG
+        // Mochi Link spike 0.1: the push address in a file devicectl can copy (development builds only).
+        if let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            try? Data(deviceToken.hex.utf8).write(to: documents.appendingPathComponent("push-address.txt"))
+        }
+        #endif
+        let linkStore = MochiLink.store
+        guard linkStore.string(.deviceToken) != deviceToken.hex else { return }
+        linkStore.set(deviceToken.hex, for: .deviceToken)
+        linkStore.flush()
         MacLink.shared.log("push address saved for summaries")
     }
 

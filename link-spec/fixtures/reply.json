@@ -1,0 +1,11 @@
+{
+  "iCloudName" : "macReply",
+  "key" : "reply",
+  "storedAs" : "dictionary",
+  "value" : {
+    "at" : 1762243210,
+    "id" : "cmd-1",
+    "state" : "done",
+    "text" : "Five things are waiting."
+  }
+}

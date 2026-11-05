@@ -16,6 +16,9 @@ struct MochiActivityAttributes: ActivityAttributes {
         /// Which of the phase's ten poses to show. Each update moves it on and the system animates
         /// the change; Live Activities can't run animations of their own.
         var frame: Int?
+        /// Mochi Link (spike 0.2): the detail line sealed with the room key ("nonce.box"), opened by the widget, so the
+        /// push carrying it holds no readable text. The Mac doesn't send it yet.
+        var sealed: String?
     }
 
     var petName: String

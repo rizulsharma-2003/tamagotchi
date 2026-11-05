@@ -1,0 +1,27 @@
+{
+  "iCloudName" : "macSessions",
+  "key" : "sessions",
+  "storedAs" : "json-string",
+  "value" : {
+    "enabled" : true,
+    "sessions" : [
+      {
+        "files" : [
+          "KokoroVoice.swift"
+        ],
+        "finishedAt" : 1762243100,
+        "id" : "session-1",
+        "phase" : "done",
+        "phaseSince" : 1762243000,
+        "project" : "mac-Tamagotchi",
+        "summary" : {
+          "done" : "Gave Mochi its own voice.",
+          "next" : [
+            "Push it"
+          ]
+        }
+      }
+    ],
+    "updatedAt" : 1762243200
+  }
+}

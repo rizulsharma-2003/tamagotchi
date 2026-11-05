@@ -1,0 +1,10 @@
+{
+  "iCloudName" : "macEnded",
+  "key" : "activityEnded",
+  "storedAs" : "dictionary",
+  "value" : {
+    "at" : 1762243200,
+    "dismissAt" : 1762243500,
+    "since" : 1762242000
+  }
+}

@@ -30,8 +30,6 @@ final class UpdatesStore {
 
     private static let keep: TimeInterval = 7 * 86_400
     private static let maxEntries = 300
-    static let phoneDoneKey = "phoneDone"
-    static let macDoneKey = "macDone"
     private struct Saved: Codable {
         var entries: [Entry]
         var done: [String: Double]
@@ -118,9 +116,9 @@ final class UpdatesStore {
     }
 
     private func shareDone() {
-        let store = NSUbiquitousKeyValueStore.default
-        store.set(AgentDoneList(ids: done).trimmed().json, forKey: Self.phoneDoneKey)
-        store.synchronize()
+        let linkStore = MochiLink.store
+        linkStore.set(AgentDoneList(ids: done).trimmed().json, for: .phoneDone)
+        linkStore.flush()
     }
 
     /// The Lock Screen widget's copy of the card (and the done list the notification extension checks).

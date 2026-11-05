@@ -15,6 +15,8 @@ struct PhoneSettingsView: View {
     }
 
     private var phone: PhoneController { environment.phone }
+    private var link: LinkController { environment.link }
+    @State private var confirmUnpair = false
     private var name: String { store.settings.petName }
     private var ready: Bool { phone.hasKey && phone.teamSigned && phone.pushToStartToken != nil }
 
@@ -27,7 +29,9 @@ struct PhoneSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("Link") {
+            linkSection
+
+            Section("iCloud link") {
                 status("iCloud on this Mac", ok: phone.teamSigned && phone.iCloudSignedIn,
                        detail: !phone.teamSigned ? "This build isn't signed with your team" : phone.iCloudSignedIn ? "Ready" : "Sign in to iCloud")
                 status("Your iPhone", ok: phone.pushToStartToken != nil,
@@ -106,6 +110,68 @@ struct PhoneSettingsView: View {
         }
         .formStyle(.grouped)
         .onAppear { phone.readTokens() }
+    }
+
+    /// Mochi Link: the fast, end-to-end encrypted link through the relay.
+    @ViewBuilder
+    private var linkSection: some View {
+        Section("Mochi Link") {
+            if link.paired {
+                status("Relay", ok: link.status == .online,
+                       detail: link.status == .online ? "Connected" : link.status == .connecting ? "Connecting…" : "Offline, retrying")
+                if link.devices.isEmpty {
+                    status("Your iPhone", ok: false, detail: "Not paired yet")
+                }
+                ForEach(link.devices, id: \.device) { peer in
+                    status(peer.name ?? (peer.role == "pocket" ? "iPhone" : peer.role.capitalized), ok: peer.online,
+                           detail: peer.online ? "Online" : "Away" + (peer.lastSeen.map {
+                               " · \(Date(timeIntervalSince1970: $0 > 10_000_000_000 ? $0 / 1000 : $0).formatted(.relative(presentation: .named)))"
+                           } ?? ""))
+                }
+            }
+            if let code = link.code {
+                HStack(alignment: .top, spacing: 16) {
+                    if let image = LinkController.qrImage(code.url.absoluteString) {
+                        Image(nsImage: image).interpolation(.none).resizable().frame(width: 180, height: 180)
+                            .padding(8).background(Color.white, in: RoundedRectangle(cornerRadius: 12))
+                            .accessibilityLabel("Pairing QR code")
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("On your iPhone, open Mochi Pocket › Settings › Pair with your Mac, and scan this code.")
+                        if let expires = link.codeExpires {
+                            Text("Works once, until \(expires.formatted(date: .omitted, time: .shortened)).")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        HStack {
+                            Button("Copy Link") { link.copyCode() }
+                            Button("Done") { link.hideCode() }
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            } else {
+                HStack {
+                    Button(link.paired ? "Pair Another Device…" : "Pair Your iPhone…") { Task { await link.showCode() } }
+                        .disabled(link.working)
+                    if link.working { ProgressView().controlSize(.small) }
+                    Spacer()
+                    if link.paired {
+                        Button("Unpair This Mac…", role: .destructive) { confirmUnpair = true }
+                    }
+                }
+            }
+            if let problem = link.problem {
+                Label(problem, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).font(.caption)
+            }
+            Text("Messages between this Mac and your iPhone go through your own relay in under a second, end-to-end encrypted: "
+                 + "the relay passes them on but can't read them. iCloud stays on as a backup for now.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .confirmationDialog("Unpair this Mac from Mochi Link?", isPresented: $confirmUnpair) {
+            Button("Unpair", role: .destructive) { link.unpair() }
+        } message: {
+            Text("Your iPhone will need to scan a new code to use Mochi Link again. iCloud keeps working meanwhile.")
+        }
     }
 
     private func status(_ title: String, ok: Bool, detail: String) -> some View {

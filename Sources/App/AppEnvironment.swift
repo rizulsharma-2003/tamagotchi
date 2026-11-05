@@ -56,6 +56,8 @@ final class AppEnvironment: WorldEffects {
     lazy var demoTour = DemoTour(environment: self)
     lazy var assistant = AssistantController(environment: self)
     lazy var phone = PhoneController(environment: self)
+    /// Mochi Link: pairing with the relay and who's connected.
+    let link = LinkController()
     lazy var agent = AgentController(environment: self)
     let macUsage = MacUsageMonitor()
 
@@ -129,6 +131,7 @@ final class AppEnvironment: WorldEffects {
         recap.start()
         adventure.start()
         assistant.start()
+        link.start()
         phone.start()
         agent.start()
     }

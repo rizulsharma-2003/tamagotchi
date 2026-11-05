@@ -1,0 +1,13 @@
+{
+  "iCloudName" : "macApproval",
+  "key" : "approval",
+  "storedAs" : "dictionary",
+  "value" : {
+    "at" : 1762243200,
+    "command" : "cmd-1",
+    "id" : "approval-1",
+    "message" : "Run the tests and push.",
+    "project" : "mac-Tamagotchi",
+    "target" : "session-1"
+  }
+}

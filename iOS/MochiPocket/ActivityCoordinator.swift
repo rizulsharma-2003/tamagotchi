@@ -1,5 +1,7 @@
 import ActivityKit
+import CryptoKit
 import Foundation
+import TamagotchiCore
 import Observation
 import UIKit
 
@@ -17,20 +19,16 @@ final class ActivityCoordinator {
     private(set) var runningPhases: [String] = []
     private(set) var lastSaved: Date?
 
-    private let store = NSUbiquitousKeyValueStore.default
+    private var linkStore: LinkStore { MochiLink.store }
     private var started = false
     private var watched = Set<String>()
     private var loggedActivities: String?
 
-    static let pushToStartKey = "pushToStart"
-    static let updateTokensKey = "updateTokens"
-    static let savedAtKey = "savedAt"
-    static let macEndedKey = "macEnded"
 
     func start() {
         guard !started else { return }
         started = true
-        store.synchronize()
+        linkStore.flush()
         Task {
             for await enabled in ActivityAuthorizationInfo().activityEnablementUpdates { activitiesEnabled = enabled }
         }
@@ -43,8 +41,7 @@ final class ActivityCoordinator {
             for await activity in Activity<MochiActivityAttributes>.activityUpdates { watch(activity) }
         }
         refresh()
-        NotificationCenter.default.addObserver(forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification, object: store,
-                                               queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: .linkStoreDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.followMacEnd() }
         }
         followMacEnd()
@@ -54,7 +51,7 @@ final class ActivityCoordinator {
     /// The Mac ended its Live Activity. Its push normally closes it; this covers the times the push
     /// can't (the Mac hadn't heard the activity's address yet), as soon as this app runs.
     func followMacEnd() {
-        guard let ended = store.dictionary(forKey: Self.macEndedKey), let at = ended["at"] as? Double,
+        guard let ended = linkStore.dictionary(.activityEnded), let at = ended["at"] as? Double,
               at > UserDefaults.standard.double(forKey: "handledMacEnd") else { return }
         UserDefaults.standard.set(at, forKey: "handledMacEnd")
         let dismissAt = Date(timeIntervalSince1970: ended["dismissAt"] as? Double ?? at)
@@ -95,31 +92,31 @@ final class ActivityCoordinator {
         iCloudAvailable = FileManager.default.ubiquityIdentityToken != nil
         // Forget tokens of activities that ended, so the Mac never pushes to them.
         let live = Set(activities.map(\.id))
-        var tokens = store.dictionary(forKey: Self.updateTokensKey) as? [String: String] ?? [:]
+        var tokens = linkStore.dictionary(.updateTokens) as? [String: String] ?? [:]
         let before = tokens.count
         tokens = tokens.filter { live.contains($0.key) }
         if tokens.count != before {
-            store.set(tokens, forKey: Self.updateTokensKey)
+            linkStore.set(tokens, for: .updateTokens)
             markSaved()
         }
     }
 
     private func save(pushToStart token: Data) {
-        store.set(token.hex, forKey: Self.pushToStartKey)
+        linkStore.set(token.hex, for: .pushToStart)
         hasPushToStartToken = true
         markSaved()
     }
 
     private func save(update token: Data, for activityID: String) {
-        var tokens = store.dictionary(forKey: Self.updateTokensKey) as? [String: String] ?? [:]
+        var tokens = linkStore.dictionary(.updateTokens) as? [String: String] ?? [:]
         tokens[activityID] = token.hex
-        store.set(tokens, forKey: Self.updateTokensKey)
+        linkStore.set(tokens, for: .updateTokens)
         markSaved()
     }
 
     private func markSaved() {
-        store.set(Date().timeIntervalSince1970, forKey: Self.savedAtKey)
-        store.synchronize()
+        linkStore.set(Date().timeIntervalSince1970, for: .tokensSavedAt)
+        linkStore.flush()
         lastSaved = Date()
     }
 
@@ -133,6 +130,29 @@ final class ActivityCoordinator {
         }
         refresh()
     }
+
+    #if DEBUG
+    /// `-sealSpike 1` (Mochi Link spike 0.2): a fresh room key in the shared Keychain group and a demo Live Activity
+    /// whose detail line is sealed with it. The widget logs whether it could open it (app group `link-spike.txt`).
+    func startSealedDemo() {
+        let key = SymmetricKey(size: .bits256)
+        let stored = LinkSeal.storeKey(key)
+        LinkSeal.note("app: key stored in keychain \(stored) (status \(LinkSeal.lastStatus)); reads back \(LinkSeal.loadKey() != nil)")
+        var state = Self.demoState("working", frame: 0)
+        state.detail = nil
+        state.sealed = LinkSeal.seal("Sealed hello from Link 🐾 \(Date().formatted(date: .omitted, time: .shortened))",
+                                     ad: LinkSeal.liveActivityAD, key: key)
+        let attributes = MochiActivityAttributes(petName: "Mochi", companionName: "Patch")
+        do {
+            let activity = try Activity.request(attributes: attributes, content: .init(state: state, staleDate: nil), pushType: .token)
+            demoIDs.insert(activity.id)
+            LinkSeal.note("app: sealed demo started")
+        } catch {
+            LinkSeal.note("app: couldn't start the demo: \(error)")
+        }
+        refresh()
+    }
+    #endif
 
     // MARK: A moving demo
 
