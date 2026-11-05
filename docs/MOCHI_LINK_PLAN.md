@@ -1,7 +1,8 @@
 # Mochi Link: plan
 
 **Status:** proposal, 2026-11-04; updated the same day: **Android and Windows will be built in Flutter** (5.4).
-Nothing in this document is built yet.
+Phases 0–6 are built (2026-11-05): iCloud is off and Mochi Link carries everything; see the Progress notes at the end
+of section 7.
 **What it is:** a replacement for the iCloud key-value link between MacTamagotchi and Mochi Pocket. One small,
 end-to-end encrypted relay that connects every Mochi app (Mac, iPhone, later Windows and Android) and Mochi Cloud,
 built so the apps can be distributed to anyone, not just to devices on the InsideEdge team.
@@ -498,6 +499,23 @@ for you" card in pure Python (the cloud image's `cryptography` crashes on import
 environment's network allowlist must include the relay's domain. Its APNs variables are gone. The Mac's Unpair now
 deletes the room on the relay (every credential in it dies; the iPhone sees 4004/404 and asks to scan again), and the
 iPhone's Unpair removes itself. Rooms nobody touches for 90 days delete themselves.
+
+**Phase 6 done (2026-11-05): iCloud is off.** `ICloudLinkStore` and `HybridLinkStore` are gone, and so is every
+`NSUbiquitousKeyValueStore` use. Paired, `MochiLink.store` is the `RelayLinkStore`; unpaired, it's a
+`LocalLinkStore` that keeps only the device's own writes (nothing leaves it), so both apps run on their own, and
+the device's own state and push addresses carry into the relay when it pairs (and back when it unpairs). The key
+names stay the relay's (`LinkKey` raw values); the iCloud names, `flush()` and `hasAnyValue` are gone. The Mac's
+direct-APNs path is gone too: the `.p8` in the Keychain or in `Resources/APNsAuthKey.p8`, `MochiAPNsKeyID`,
+`APNS_KEY_FILE`, Settings › iPhone › Choose .p8 and the Key/Team ID fields, the old Mochi Cloud settings block with a
+push key, and `APNsToken`. Alerts, Live Activities and Send a Test go only through the relay; unpaired, nothing is
+sent and Settings says to pair first. Claude's words are collected for summaries only while a phone is paired.
+No app or extension claims `com.apple.developer.ubiquity-kvstore-identifier` any more (`Signing/`, Mochi Pocket's
+entitlements, `scripts/build-app.sh`). **The Mac needs no provisioning profile:** its only entitlement is
+`com.apple.security.device.audio-input` (plus the sandboxed widget's own), it uses no App Group, and an ad-hoc build
+or an Apple Development/Developer ID signature without a profile all launch. `TEAM_ID` + `MAC_PROFILE` remain as an
+optional team-signed build (it adds only the application and team identifiers). Still by hand: delete the
+"MacTamagotchi APNs key" Keychain item; revoke `PBGWR4LQA9` once Mochi Cloud no longer has its key; keep
+`NZX7W5SU5V` until the relay gets its own Link key (4.6.1: the relay pushes with it today).
 
 ## 8. Risks
 

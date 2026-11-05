@@ -24,8 +24,8 @@ throwaway `claude -p` target session:
 
 The iPhone companion was checked too:
 - built for the iOS 27 simulator and then the real iPhone 14 Pro, team-signed and installed with `devicectl`;
-- the iPhone's push addresses reached the Mac through iCloud key-value storage within 2 seconds.
-- commands from the phone round-tripped through iCloud on the real devices: a quick command answered in
+- (before Mochi Link) the iPhone's push addresses reached the Mac through iCloud key-value storage within 2 seconds.
+- (before Mochi Link) commands from the phone round-tripped through iCloud on the real devices: a quick command answered in
   about 14 seconds; an approval mirrored to the phone was approved there and the test session replied "pong";
   hold-to-talk was tried by the user (YouTube opened on the Mac);
 - the font animation advances once a second, checked with simulator screenshots a second apart.
@@ -34,6 +34,10 @@ With the iPhone tests: **314 tests in 37 suites pass**. With the phone room, sum
 **326 tests in 38 suites pass**. With Mochi keeping the Mac's rhythm: **328 tests in 38 suites pass**; the three readings (input idle time, screen-on assertions, processor load) were checked on this Mac. The hook helper was also run against a stand-in app socket: Claude's
 message and file names went through only with `share-summaries` present, and never into the spool. The
 summarizer's exact command line was run once: about 3.6 seconds, $0.0005, and a valid note.
+
+With Mochi Link carrying everything between the Mac and the phones, and iCloud turned off (phase 6 of
+MOCHI_LINK_PLAN.md): **391 tests in 50 suites pass**. `MOCHI_LINK_LIVE=<relay host> swift test --filter
+LiveRelayTests` also pairs two test devices in a throwaway room on the real relay, and deletes it afterwards.
 
 | Suite | Covers |
 |---|---|

@@ -40,7 +40,8 @@ Four Swift package targets keep the testable logic away from UI:
 | Focus buddy | `Features/FocusTimer.swift` (phase machine), `Features/FocusLog.swift` |
 | Daily recap | `Features/DailyRecap.swift` — the day's numbers from real journal events and the focus log |
 | Holidays and room | `Features/SeasonModels.swift` (`SeasonCalendar`), `Features/RoomModels.swift`, `Features/FurnitureCatalog.swift` |
-| iPhone Live Activity | `Phone/LiveActivityModels.swift` — `PhoneSettings`, `LiveActivityPlanner` (sessions → phase), `LiveActivityPayload` (APNs start/update/end), `APNsToken` (ES256 JWT) |
+| iPhone Live Activity | `Phone/LiveActivityModels.swift` — `PhoneSettings`, `LiveActivityPlanner` (sessions → phase), `LiveActivityPayload` (APNs start/update/end, which the relay pushes) |
+| Mochi Link | `Link/` — `LinkKey` and `LinkStore` (`RelayLinkStore` when paired, `LocalLinkStore` when not; `MochiLink.use`), `LinkCrypto` (AES-GCM, test vectors in `link-spec/`), `LinkPush` (sealed alerts and Live Activities), `LinkCredentials` + `LinkPairing` (Keychain, QR pairing). See MOCHI_LINK_PLAN.md |
 | Ask Mochi | `Assistant/QuickCommands.swift` (instant, deterministic commands), `AssistantBrain.swift` (`BrainLaunch` flags and instructions, `BrainContext`, `BrainEvent` stream parsing, `BrainStep`, `AgentNames` session-name ↔ project matching), `MCPServerCore.swift` + `AnyJSON.swift` (the tools protocol), `AssistantSettings.swift` |
 
 App: `AppEnvironment` (composition root), `MenuBar/` (StatusItemController, MenuBarOverlayController — the click-through overlay over the menu bar, accepting the mouse only over Mochi — MenuBarPetCanvas, MenuBarStageView, MenuBarDen, MenuBarGlyph for the classic icon),
@@ -129,13 +130,15 @@ read-only exception for `~/Library/Application Support/MacTamagotchi/Widget/`, w
 ## The iPhone companion
 
 `iOS/MochiPocket.xcodeproj` holds:
-- **MochiPocket**, a SwiftUI app. It shares its push tokens through iCloud key-value storage and has a
-  preview and test buttons.
-- **MochiLiveActivity**, the WidgetKit Live Activity.
+- **MochiPocket**, a SwiftUI app. It pairs with the Mac by QR code and talks to it through Mochi Link
+  (`PocketLink`), registers its push addresses with the relay, and has a preview and test buttons.
+- **MochiLiveActivity**, the WidgetKit Live Activity (it opens the sealed title and detail with `LinkSeal`).
+- **MochiNotifications**, the notification service extension that opens sealed alerts.
 - **Shared/**, the `MochiActivityAttributes` wire model, the views and the art catalogue.
 
 `Signing/MacSigning.xcodeproj` is a placeholder macOS target that lets Xcode register the Mac app's App ID
-and create the profile the team-signed build embeds. See LIVE_ACTIVITY.md.
+and create the profile for the optional team-signed build. The Mac app itself needs no profile: it claims
+no iCloud or other restricted entitlement. See LIVE_ACTIVITY.md.
 
 ## Extending: new event providers
 
