@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Foundation
 import Observation
 import os
@@ -44,6 +45,8 @@ final class PhoneController {
     /// While Claude works, a quiet update this often moves Mochi and Patch to their next pose.
     private static let motionInterval: TimeInterval = 6
     @ObservationIgnored private var frameCounter = 0
+    /// When this Mac last started the Live Activity (Unix time).
+    @ObservationIgnored private var activityStartedAt = 0.0
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -84,9 +87,13 @@ final class PhoneController {
         updateTokens = tokens
         tokensSavedAt = link.double(.tokensSavedAt).map(Date.init(timeIntervalSince1970:))
         deviceToken = link.string(.deviceToken)
-        // The iPhone lists its running activities; follow it rather than guessing.
-        if activityRunning, hadTokens, tokens.isEmpty {
+        // The iPhone lists its running activities; follow it rather than guessing. Only a list the phone saved after
+        // this activity started counts: a list that merely looks empty for a moment (a relay reconnect, iCloud
+        // catching up) mustn't read as "you swiped it away".
+        let reportedSince = (tokensSavedAt?.timeIntervalSince1970 ?? 0) > activityStartedAt
+        if activityRunning, hadTokens, tokens.isEmpty, reportedSince {
             // Gone from the phone (swiped away, or the app was reinstalled): back for Claude's next turn.
+            Self.linkLog.notice("live activity: the iPhone reports it gone; waiting for Claude's next turn")
             activityRunning = false
             shown = nil
             endedByHandAt = Date()
@@ -190,19 +197,19 @@ final class PhoneController {
         summaries[report.sessionID] = (summary, report.files, report.at)
         lastSummary = "\(report.project): \(summary.done)"
         publishSessions(force: true)
-        guard hasKey, teamSigned, let deviceToken else { return }
+        guard canPush, MochiLink.relay != nil || deviceToken != nil else { return }
         if settings.notifyOnlyWhenAway, Self.secondsSinceInput() < 180 { return }
         let card = PhoneSessionCard(id: report.sessionID, project: report.project, phase: "done", summary: summary,
                                     files: Array(report.files.prefix(12)), finishedAt: report.at.timeIntervalSince1970.rounded())
-        deliver(PhoneAlertPayload.turnFinished(card), to: [deviceToken], priority: 10, label: "Summary sent", pushType: "alert")
+        deliver(PhoneAlertPayload.turnFinished(card), to: deviceToken.map { [$0] } ?? [], priority: 10, label: "Summary sent", pushType: "alert")
     }
 
     /// Mochi's agent news (new mail, a meeting soon, tasks due) as an ordinary notification.
     /// Returns false when the iPhone can't be reached yet.
     @discardableResult
     func sendAgentNews(title: String, body: String, pending: AgentPending?, quietIfKnown: Bool) -> Bool {
-        guard hasKey, teamSigned, let deviceToken else { return false }
-        deliver(PhoneAlertPayload.agentNews(title: title, body: body, pending: pending, quietIfKnown: quietIfKnown), to: [deviceToken],
+        guard canPush, MochiLink.relay != nil || deviceToken != nil else { return false }
+        deliver(PhoneAlertPayload.agentNews(title: title, body: body, pending: pending, quietIfKnown: quietIfKnown), to: deviceToken.map { [$0] } ?? [],
                 priority: 10, label: "News sent", pushType: "alert")
         return true
     }
@@ -367,7 +374,7 @@ final class PhoneController {
         publishSessions()
         if let testUntil, Date() < testUntil { return }
         testUntil = nil
-        guard settings.enabled, hasKey, teamSigned else {
+        guard settings.enabled, canPush else {
             if activityRunning, let shown { send(end: shown) }
             return
         }
@@ -402,8 +409,19 @@ final class PhoneController {
     func sendTest() {
         testUntil = Date().addingTimeInterval(60)
         endedByHandAt = nil
-        send(start: LiveActivityState(phase: "working", title: "Hello from your Mac!", detail: "Mochi is linked through iCloud",
+        send(start: LiveActivityState(phase: "working", title: "Hello from your Mac!",
+                                      detail: MochiLink.relay != nil ? "Through Mochi Link, end-to-end encrypted" : "Mochi is linked through iCloud",
                                       since: Date().timeIntervalSince1970))
+    }
+
+    /// Settings › iPhone › Mochi Link: a sealed notification through the relay, to check the whole path.
+    func sendTestNotification() {
+        guard let relay = MochiLink.relay else { return }
+        relay.sendAlert(["title": "Hello from \(LinkController.macName)", "subtitle": "Mochi Link test",
+                         "body": "This notification came through your relay, end-to-end encrypted: only your iPhone could read it.",
+                         "userInfo": [:] as [String: Any]], category: nil, threadId: nil)
+        lastResult = "Test notification sent through Mochi Link"
+        lastError = nil
     }
 
     /// Ends it and takes it off the Lock Screen right away (a dismissal date in the past).
@@ -418,6 +436,27 @@ final class PhoneController {
     }
 
     // MARK: Pushes
+
+    /// Mochi Link (docs/MOCHI_LINK_PLAN.md 4.6.1): alerts sealed with the room key for the phone's notification extension,
+    /// Live Activities with their title and detail sealed for the widget; the relay holds the push key and the phone's
+    /// addresses.
+    private func deliverThroughRelay(_ payload: Data, relay: RelayLinkStore, priority: Int, label: String, pushType: String) {
+        if pushType == "liveactivity" {
+            lastSentAt = Date()
+            guard let raw = LinkCrypto.data(base64url: relay.credentials.key),
+                  let apns = LinkPush.liveActivity(from: payload, liveActivityKey: LinkCrypto.liveActivityKey(from: SymmetricKey(data: raw)),
+                                                   petName: environment.settingsStore.settings.petName) else {
+                lastError = "Couldn't seal the Live Activity update."
+                return
+            }
+            relay.sendLiveActivity(apns, priority: priority)
+        } else {
+            guard let alert = LinkPush.alert(from: payload) else { return }
+            relay.sendAlert(alert.inner, category: alert.category, threadId: alert.threadId, priority: priority)
+        }
+        lastResult = "\(label) · through Mochi Link"
+        lastError = nil
+    }
 
     private func nextTimestamp() -> Date {
         // Each push needs a newer timestamp than the last, or iOS ignores it.
@@ -435,13 +474,16 @@ final class PhoneController {
     private func send(start state: LiveActivityState) {
         let state = nextFrame(state)
         guard let token = pushToStartToken else {
+            Self.linkLog.notice("live activity: can't start, no push-to-start address from the iPhone yet")
             lastError = "Open Mochi Pocket on your iPhone once, so it can share where to reach it."
             return
         }
         let payload = LiveActivityPayload.start(state, petName: environment.settingsStore.settings.petName,
                                                 companionName: environment.settingsStore.settings.companionName, timestamp: nextTimestamp())
         activityRunning = true
+        activityStartedAt = Date().timeIntervalSince1970
         shown = state
+        Self.linkLog.notice("live activity: start (\(state.phase, privacy: .public))")
         deliver(payload, to: [token], priority: 10, label: "Started on your iPhone")
     }
 
@@ -457,6 +499,7 @@ final class PhoneController {
 
     /// Claude's own finish stays on the Lock Screen a few minutes; the Settings button removes it at once.
     private func send(end state: LiveActivityState, dismissAfter: TimeInterval = 180) {
+        Self.linkLog.notice("live activity: end (\(state.phase, privacy: .public), dismissed after \(Int(dismissAfter))s)")
         activityRunning = false
         shown = nil
         // Mochi Pocket also closes it the next time it runs, in case the push can't reach it.
@@ -467,7 +510,15 @@ final class PhoneController {
                 to: Array(Set(updateTokens.values)), priority: 10, label: "Ended")
     }
 
+    /// Pushes can go out: through the Mochi Link relay once paired (no key needed on this Mac), else straight to Apple
+    /// with the key in the Keychain.
+    var canPush: Bool { teamSigned && (MochiLink.relay != nil || hasKey) }
+
     private func deliver(_ payload: Data, to tokens: [String], priority: Int, label: String, pushType: String = "liveactivity") {
+        if let relay = MochiLink.relay {
+            deliverThroughRelay(payload, relay: relay, priority: priority, label: label, pushType: pushType)
+            return
+        }
         guard let bearer = currentBearer() else { return }
         if pushType == "liveactivity" { lastSentAt = Date() }
         let topic = pushType == "liveactivity" ? settings.topic + ".push-type.liveactivity" : settings.topic

@@ -77,6 +77,7 @@ final class PhoneNotifications: NSObject, UNUserNotificationCenterDelegate {
         guard linkStore.string(.deviceToken) != deviceToken.hex else { return }
         linkStore.set(deviceToken.hex, for: .deviceToken)
         linkStore.flush()
+        PocketLink.shared.registerPush()
         MacLink.shared.log("push address saved for summaries")
     }
 

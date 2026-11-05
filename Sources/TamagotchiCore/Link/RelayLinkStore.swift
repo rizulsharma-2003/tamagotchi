@@ -22,9 +22,10 @@ public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDeleg
     private let lock = NSLock()
     private var values: [LinkKey: Any] = [:]
     /// Frames waiting for a connection: messages in order, state only its newest value.
-    private var outbox: [(key: LinkKey?, frame: Data)] = []
+    private var outbox: [(id: String, key: String?, frame: Data)] = []
     /// Frames sent but not yet acknowledged by the relay, by id; sent again after a reconnect (the relay drops repeats).
-    private var unacked: [String: (order: Int, frame: Data)] = [:]
+    /// `key` names the state key a pending write is for, so a `sync` can't clear or overwrite it with an older value.
+    private var unacked: [String: (order: Int, key: String?, frame: Data)] = [:]
     private var sendCount = 0
     /// Message ids already applied (newest last), so a redelivery isn't applied twice.
     private var applied: [String] = []
@@ -59,13 +60,53 @@ public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDeleg
         }
         let id = UUID().uuidString.lowercased()
         guard let frame = Self.frame(value, for: key, credentials: credentials, key: self.key, id: id) else { return }
-        send(frame, id: id, stateKey: key.kind == .message ? nil : key)
+        send(frame, id: id, replaces: key.kind == .message ? nil : key.rawValue)
     }
 
     /// Frames go out as soon as they're written.
     public func flush() {}
 
     public var hasAnyValue: Bool { lock.withLock { !values.isEmpty } }
+
+    // MARK: Pushes (phase 4)
+
+    /// A notification for the phone, sealed with K; the relay pushes it with generic text and the phone's notification
+    /// extension opens it (docs/MOCHI_LINK_PLAN.md 4.6.1).
+    public func sendAlert(_ inner: [String: Any], category: String?, threadId: String?, priority: Int = 10, collapse: String? = nil,
+                          ttl: Int = 3600) {
+        let id = UUID().uuidString.lowercased()
+        guard let plain = try? JSONSerialization.data(withJSONObject: inner),
+              let sealed = try? LinkCrypto.seal(plain, ad: LinkCrypto.associatedData(room: credentials.room, key: "alert", id: id,
+                                                                                       from: credentials.device), key: key) else { return }
+        var push: [String: Any] = ["kind": "alert", "priority": priority]
+        if let collapse { push["collapse"] = collapse }
+        if let category { push["category"] = category }
+        if let threadId { push["threadId"] = threadId }
+        let frame: [String: Any] = ["v": 1, "op": "send", "key": "alert", "id": id, "to": ["pocket"], "ttl": ttl,
+                                    "at": Date().timeIntervalSince1970.rounded(), "push": push, "nonce": sealed.nonce, "box": sealed.box]
+        guard let data = try? JSONSerialization.data(withJSONObject: frame) else { return }
+        send(data, id: id, replaces: nil)
+    }
+
+    /// A Live Activity start, update or end for the phone; `apns` comes from `LinkPush.liveActivity`.
+    public func sendLiveActivity(_ apns: [String: Any], priority: Int, collapse: String = "live-activity") {
+        let id = UUID().uuidString.lowercased()
+        let frame: [String: Any] = ["v": 1, "op": "send", "key": "liveActivity", "id": id, "to": ["pocket"], "ttl": 600,
+                                    "at": Date().timeIntervalSince1970.rounded(),
+                                    "push": ["kind": "liveactivity", "priority": priority, "collapse": collapse], "apns": apns]
+        guard let data = try? JSONSerialization.data(withJSONObject: frame) else { return }
+        // Only the newest waiting update matters; a start or end always goes.
+        let event = apns["event"] as? String
+        send(data, id: id, replaces: event == "update" ? "liveActivity" : nil)
+    }
+
+    /// The phone's push addresses, for the relay only (they never reach other devices).
+    public func register(tokens: [String: Any], apnsEnv: String, topic: String) {
+        let id = UUID().uuidString.lowercased()
+        let frame: [String: Any] = ["v": 1, "op": "register", "id": id, "tokens": tokens, "apnsEnv": apnsEnv, "topic": topic]
+        guard let data = try? JSONSerialization.data(withJSONObject: frame) else { return }
+        send(data, id: id, replaces: "register")
+    }
 
     // MARK: Connection
 
@@ -113,10 +154,15 @@ public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDeleg
         setStatus(.online)
         let hello: [String: Any] = ["v": 1, "op": "hello", "platform": Self.platform, "app": Self.appVersion]
         if let data = try? JSONSerialization.data(withJSONObject: hello) { webSocketTask.send(.data(data)) { _ in } }
-        // Whatever the relay never confirmed goes again (oldest first), then what waited offline.
+        // Whatever the relay never confirmed goes again (oldest first), then what waited offline; everything stays
+        // tracked until the relay acknowledges it, so another drop can't lose it.
         let waiting = lock.withLock { () -> [Data] in
-            defer { outbox.removeAll() }
-            return unacked.values.sorted { $0.order < $1.order }.map(\.frame) + outbox.map(\.frame)
+            for entry in outbox {
+                sendCount += 1
+                unacked[entry.id] = (sendCount, entry.key, entry.frame)
+            }
+            outbox.removeAll()
+            return unacked.values.sorted { $0.order < $1.order }.map(\.frame)
         }
         for frame in waiting { webSocketTask.send(.data(frame)) { _ in } }
         schedulePing(for: webSocketTask)
@@ -124,8 +170,17 @@ public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDeleg
 
     public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
                            reason: Data?) {
+        if closeCode.rawValue == 4001 || closeCode.rawValue == 4004 {
+            // This device was removed from the room, or the room was deleted: retrying can't help.
+            Self.log.notice("relay closed the link for good (\(closeCode.rawValue)): pair again")
+            lock.withLock { running = false }
+            removed = true
+        }
         dropped(webSocketTask, why: "closed \(closeCode.rawValue)")
     }
+
+    /// The relay removed this device or deleted the room; Settings should offer to pair again.
+    public private(set) var removed = false
 
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let socket = task as? URLSessionWebSocketTask else { return }
@@ -155,18 +210,18 @@ public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDeleg
         }
     }
 
-    private func send(_ frame: Data, id: String, stateKey: LinkKey?) {
+    private func send(_ frame: Data, id: String, replaces stateKey: String?) {
         let task = lock.withLock { () -> URLSessionWebSocketTask? in
             if _status == .online, let socket {
                 sendCount += 1
-                unacked[id] = (sendCount, frame)
+                unacked[id] = (sendCount, stateKey, frame)
                 if unacked.count > 128, let oldest = unacked.min(by: { $0.value.order < $1.value.order })?.key {
                     unacked.removeValue(forKey: oldest)
                 }
                 return socket
             }
             if let stateKey { outbox.removeAll { $0.key == stateKey } }
-            outbox.append((stateKey, frame))
+            outbox.append((id, stateKey, frame))
             if outbox.count > 64 { outbox.removeFirst(outbox.count - 64) }
             return nil
         }
@@ -228,6 +283,11 @@ public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDeleg
 
     /// Opens one envelope from another device and makes it the current value of its key.
     private func apply(_ envelope: [String: Any], on task: URLSessionWebSocketTask) {
+        if envelope["op"] as? String == "send", let id = envelope["id"] as? String,
+           let name = envelope["key"] as? String, LinkKey(rawValue: name) == nil {
+            acknowledge(id, on: task)
+            return
+        }
         guard let name = envelope["key"] as? String, let key = LinkKey(rawValue: name), let id = envelope["id"] as? String,
               let from = envelope["from"] as? String,
               let nonce = envelope["nonce"] as? String, let box = envelope["box"] as? String else { return }
@@ -247,9 +307,13 @@ public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDeleg
             return
         }
         let value = wrapper["v"]
-        lock.withLock {
+        let applied = lock.withLock { () -> Bool in
+            // This device's own newer write is still on its way: the relay's copy is older.
+            if !isMessage, pendingStateKeys().contains(name) { return false }
             if let value, !(value is NSNull) { values[key] = value } else { values.removeValue(forKey: key) }
+            return true
         }
+        guard applied else { return }
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .linkStoreDidChange, object: nil, userInfo: ["keys": [key]])
         }
@@ -282,11 +346,16 @@ public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDeleg
         DispatchQueue.main.async { NotificationCenter.default.post(name: .linkPresenceDidChange, object: nil) }
     }
 
+    /// State keys with a write from this device still waiting or unacknowledged (call with the lock held).
+    private func pendingStateKeys() -> Set<String> {
+        Set(outbox.compactMap(\.key)).union(unacked.values.compactMap(\.key))
+    }
+
     /// After a `sync`: state keys the room no longer has were cleared while this device was away.
     private func clearState(except present: Set<LinkKey>) {
         let cleared = lock.withLock { () -> [LinkKey] in
-            let waiting = Set(outbox.compactMap(\.key))
-            let gone = values.keys.filter { $0.kind != .message && !present.contains($0) && !waiting.contains($0) }
+            let waiting = pendingStateKeys()
+            let gone = values.keys.filter { $0.kind != .message && !present.contains($0) && !waiting.contains($0.rawValue) }
             gone.forEach { values.removeValue(forKey: $0) }
             return gone
         }

@@ -18,7 +18,7 @@ struct PhoneSettingsView: View {
     private var link: LinkController { environment.link }
     @State private var confirmUnpair = false
     private var name: String { store.settings.petName }
-    private var ready: Bool { phone.hasKey && phone.teamSigned && phone.pushToStartToken != nil }
+    private var ready: Bool { phone.canPush && phone.pushToStartToken != nil }
 
     var body: some View {
         Form {
@@ -156,6 +156,8 @@ struct PhoneSettingsView: View {
                     if link.working { ProgressView().controlSize(.small) }
                     Spacer()
                     if link.paired {
+                        Button("Send a Test Notification") { phone.sendTestNotification() }
+                            .disabled(link.status != .online)
                         Button("Unpair This Mac…", role: .destructive) { confirmUnpair = true }
                     }
                 }

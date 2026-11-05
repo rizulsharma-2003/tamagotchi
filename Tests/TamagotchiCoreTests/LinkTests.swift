@@ -326,3 +326,44 @@ struct LiveRelayTests {
         print("live relay: command \(Int(commandTime * 1000)) ms, reply \(Int(replyTime * 1000)) ms")
     }
 }
+
+@Suite("Mochi Link pushes")
+struct LinkPushTests {
+    private let card = PhoneSessionCard(id: "session-9", project: "secret-project", phase: "done",
+                                        summary: TurnSummary(done: "Rotated the payroll keys.", next: []), files: ["payroll.swift"],
+                                        finishedAt: 1_762_243_100, phaseSince: 1_762_243_000)
+
+    @Test("A summary alert keeps its words, card and category; only category and thread stay readable")
+    func alert() throws {
+        let split = try #require(LinkPush.alert(from: PhoneAlertPayload.turnFinished(card)))
+        #expect(split.inner["title"] as? String == "secret-project")
+        #expect(split.inner["subtitle"] as? String == "Claude finished")
+        #expect(split.inner["body"] as? String == "Rotated the payroll keys.")
+        let userInfo = try #require(split.inner["userInfo"] as? [String: Any])
+        #expect(userInfo["session"] as? String == "session-9")
+        #expect(userInfo["card"] != nil && userInfo["aps"] == nil)
+        #expect(split.category == PhoneAlertPayload.turnCategory && split.threadId == "session-9")
+    }
+
+    @Test("A Live Activity push hides the project and detail but still opens in the widget")
+    func liveActivity() throws {
+        let roomKey = LinkCrypto.newRoomKey()
+        let laKey = LinkCrypto.liveActivityKey(from: roomKey)
+        let state = LiveActivityState(phase: "working", title: "Claude is working", detail: "secret-project · 12 tools", since: 1_762_243_000, frame: 3)
+        for payload in [LiveActivityPayload.update(state, timestamp: Date(), alert: true),
+                        LiveActivityPayload.start(state, petName: "Mochi", companionName: "Patch", timestamp: Date())] {
+            let apns = try #require(LinkPush.liveActivity(from: payload, liveActivityKey: laKey))
+            let clear = String(decoding: try JSONSerialization.data(withJSONObject: apns), as: UTF8.self)
+            #expect(!clear.contains("secret-project") && !clear.contains("12 tools"))
+            let content = try #require(apns["content-state"] as? [String: Any])
+            #expect(content["phase"] as? String == "working" && content["frame"] as? Int == 3)
+            let sealed = try #require(content["sealed"] as? String)
+            let opened = try #require(LinkPush.openLiveActivity(sealed, liveActivityKey: laKey))
+            #expect(opened.title == "Claude is working" && opened.detail == "secret-project · 12 tools")
+            // The room key itself can't open it, and neither can another room's.
+            #expect(LinkPush.openLiveActivity(content["sealed"] as! String, liveActivityKey: roomKey) == nil)
+            #expect(LinkPush.openLiveActivity(content["sealed"] as! String,
+                                              liveActivityKey: LinkCrypto.liveActivityKey(from: LinkCrypto.newRoomKey())) == nil)
+        }
+    }
+}

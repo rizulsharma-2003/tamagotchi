@@ -11,9 +11,24 @@ final class NotificationService: UNNotificationServiceExtension {
     private static let keepFor: TimeInterval = 3 * 86_400
 
     override func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
-        let info = request.content.userInfo
-        guard info["kind"] as? String == "agent", let content = request.content.mutableCopy() as? UNMutableNotificationContent else {
+        guard let content = request.content.mutableCopy() as? UNMutableNotificationContent else {
             contentHandler(request.content)
+            return
+        }
+        // Mochi Link: the push only says "Mochi has news"; the real title, text and details are sealed with the room key.
+        if let sealed = content.userInfo["mochi"] as? [String: Any], let inner = LinkSeal.openAlert(sealed) {
+            if let title = inner["title"] as? String { content.title = title }
+            if let subtitle = inner["subtitle"] as? String { content.subtitle = subtitle }
+            if let body = inner["body"] as? String { content.body = body }
+            if let extra = inner["userInfo"] as? [String: Any] {
+                var info = content.userInfo
+                for (key, value) in extra { info[key] = value }
+                content.userInfo = info
+            }
+        }
+        let info = content.userInfo
+        guard info["kind"] as? String == "agent" else {
+            contentHandler(content)
             return
         }
         let card = info["pending"] as? [String: Any]

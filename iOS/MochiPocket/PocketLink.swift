@@ -1,3 +1,4 @@
+import CryptoKit
 import Observation
 import SwiftUI
 import TamagotchiCore
@@ -27,6 +28,8 @@ final class PocketLink {
     /// At launch: talk through the relay if this phone is paired.
     func start() {
         MochiLink.use(credentials)
+        storeLiveActivityKey()
+        registerPush()
         NotificationCenter.default.addObserver(forName: .linkPresenceDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
@@ -54,6 +57,8 @@ final class PocketLink {
             }
             credentials = joined
             MochiLink.use(joined)
+            storeLiveActivityKey()
+            registerPush()
             MacLink.shared.log("link: paired with \(code.name)")
         } catch {
             problem = error.localizedDescription
@@ -62,9 +67,37 @@ final class PocketLink {
 
     func unpair() {
         LinkCredentialStore.delete(accessGroup: LinkSeal.accessGroup)
+        LinkSeal.deleteLiveActivityKey()
         credentials = nil
         MochiLink.use(nil)
         refresh()
+    }
+
+    /// Tells the relay where to reach this phone: its notification address and the Live Activity addresses. They stay
+    /// on the relay (the Mac no longer needs them once it pushes through Mochi Link).
+    func registerPush() {
+        guard let relay = MochiLink.relay else { return }
+        let store = MochiLink.store
+        var tokens: [String: Any] = [:]
+        if let device = store.string(.deviceToken) { tokens["device"] = device }
+        if let start = store.string(.pushToStart) { tokens["pushToStart"] = start }
+        if let updates = store.value(.updateTokens) as? [String: String] { tokens["updates"] = updates }
+        guard !tokens.isEmpty else { return }
+        #if DEBUG
+        let environment = "sandbox"
+        #else
+        let environment = "production"
+        #endif
+        relay.register(tokens: tokens, apnsEnv: environment, topic: "com.insideedge.mochi")
+    }
+
+    /// The widget's own key (derived from the room key) where it can read it while the phone is locked.
+    private func storeLiveActivityKey() {
+        guard let credentials, let raw = LinkCrypto.data(base64url: credentials.key), raw.count == 32 else {
+            LinkSeal.deleteLiveActivityKey()
+            return
+        }
+        LinkSeal.storeLiveActivityKey(LinkCrypto.liveActivityKey(from: SymmetricKey(data: raw)).withUnsafeBytes { Data($0) })
     }
 
     private func refresh() {

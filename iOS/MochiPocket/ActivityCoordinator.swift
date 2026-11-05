@@ -1,5 +1,4 @@
 import ActivityKit
-import CryptoKit
 import Foundation
 import TamagotchiCore
 import Observation
@@ -117,6 +116,7 @@ final class ActivityCoordinator {
     private func markSaved() {
         linkStore.set(Date().timeIntervalSince1970, for: .tokensSavedAt)
         linkStore.flush()
+        PocketLink.shared.registerPush()
         lastSaved = Date()
     }
 
@@ -130,29 +130,6 @@ final class ActivityCoordinator {
         }
         refresh()
     }
-
-    #if DEBUG
-    /// `-sealSpike 1` (Mochi Link spike 0.2): a fresh room key in the shared Keychain group and a demo Live Activity
-    /// whose detail line is sealed with it. The widget logs whether it could open it (app group `link-spike.txt`).
-    func startSealedDemo() {
-        let key = SymmetricKey(size: .bits256)
-        let stored = LinkSeal.storeKey(key)
-        LinkSeal.note("app: key stored in keychain \(stored) (status \(LinkSeal.lastStatus)); reads back \(LinkSeal.loadKey() != nil)")
-        var state = Self.demoState("working", frame: 0)
-        state.detail = nil
-        state.sealed = LinkSeal.seal("Sealed hello from Link 🐾 \(Date().formatted(date: .omitted, time: .shortened))",
-                                     ad: LinkSeal.liveActivityAD, key: key)
-        let attributes = MochiActivityAttributes(petName: "Mochi", companionName: "Patch")
-        do {
-            let activity = try Activity.request(attributes: attributes, content: .init(state: state, staleDate: nil), pushType: .token)
-            demoIDs.insert(activity.id)
-            LinkSeal.note("app: sealed demo started")
-        } catch {
-            LinkSeal.note("app: couldn't start the demo: \(error)")
-        }
-        refresh()
-    }
-    #endif
 
     // MARK: A moving demo
 

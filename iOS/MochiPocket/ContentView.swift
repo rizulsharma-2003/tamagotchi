@@ -67,13 +67,6 @@ struct ContentView: View {
             if let text = UserDefaults.standard.string(forKey: "sendCommand") { talk.send(typed: text) }
             #if DEBUG
             if UserDefaults.standard.bool(forKey: "kokoroTest") { await KokoroVoice.shared.selfTest() }
-            if UserDefaults.standard.bool(forKey: "sealSpike") { coordinator.startSealedDemo() }
-            // Spike 0.2: copy the extensions' log where devicectl can reach it (Documents).
-            if let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.insideedge.mochi"),
-               let log = try? Data(contentsOf: group.appendingPathComponent("link-spike.txt")),
-               let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                try? log.write(to: documents.appendingPathComponent("link-spike.txt"))
-            }
             // Simulator screenshots: `-demoContent 1`, and `-openSheet settings|updates`.
             if UserDefaults.standard.bool(forKey: "demoContent") { link.showDemoContent() }
             switch UserDefaults.standard.string(forKey: "openSheet") {

@@ -44,10 +44,10 @@ struct MochiLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.center) {
                     VStack(spacing: 1) {
-                        Text(state.title)
+                        Text(state.shownTitle)
                             .font(.system(size: 16, weight: .bold, design: .rounded))
                             .lineLimit(1)
-                        if let detail = state.detail, !detail.isEmpty {
+                        if let detail = state.shownDetail, !detail.isEmpty {
                             Text(detail)
                                 .font(.system(size: 13, weight: .medium, design: .rounded))
                                 .foregroundStyle(.secondary)

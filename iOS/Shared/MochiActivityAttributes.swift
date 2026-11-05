@@ -16,8 +16,8 @@ struct MochiActivityAttributes: ActivityAttributes {
         /// Which of the phase's ten poses to show. Each update moves it on and the system animates
         /// the change; Live Activities can't run animations of their own.
         var frame: Int?
-        /// Mochi Link (spike 0.2): the detail line sealed with the room key ("nonce.box"), opened by the widget, so the
-        /// push carrying it holds no readable text. The Mac doesn't send it yet.
+        /// Mochi Link: the title and detail sealed with the Live Activity key ("nonce.box"), so the push holds no readable
+        /// project names; `title` is then only a placeholder (docs/MOCHI_LINK_PLAN.md 4.6.1).
         var sealed: String?
     }
 
@@ -31,4 +31,11 @@ extension MochiActivityAttributes.ContentState {
     var art: String { Self.phases.contains(phase) ? phase : "idle" }
     var sinceDate: Date { Date(timeIntervalSince1970: since) }
     var showsTimer: Bool { phase == "working" || phase == "waiting" }
+
+    /// The title to show: from `sealed` when there is one and this device can open it.
+    var shownTitle: String { opened?.title ?? title }
+    /// The detail to show: from `sealed` when there is one, else the plain detail.
+    var shownDetail: String? { sealed == nil ? detail : opened?.detail }
+
+    private var opened: (title: String?, detail: String?)? { sealed.flatMap(LinkSeal.openLiveActivity) }
 }

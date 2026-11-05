@@ -238,6 +238,37 @@ The relay holds the push credentials as Worker secrets. **No app ships a push ke
 - **APNs environment:** development builds register as `sandbox`, TestFlight and App Store builds as `production`.
   The relay picks the host from the device's registration.
 
+### 4.6.1 Push wire format (phase 4, decided 2026-11-05)
+
+The key for now: the existing team key `NZX7W5SU5V` (Worker secret `APNS_KEY`; vars `APNS_KEY_ID`, `APNS_TEAM_ID`
+`CZDJF6N2RH`, default topic `com.insideedge.mochi`). A dedicated Link key replaces it later.
+
+**`register`** (pocket → relay, whenever its push addresses change):
+`{v:1, op:"register", id, tokens:{device:"<hex>", pushToStart:"<hex>", updates:{"<activityId>":"<hex>"}}, apnsEnv:"sandbox"|"production", topic:"com.insideedge.mochi"}`.
+Tokens never leave the relay. APNs answering 410 or `BadDeviceToken` removes that token.
+
+**Alerts**: a `send` with key `alert` (from `host` or `cloud`, to `pocket`), sealed with K like any message. Inner
+JSON: `{"title", "body", "userInfo":{…}}` (`userInfo` carries what the plain payload used to: `card`, `pending`,
+`quietIfKnown`, …). Push hint: `{kind:"alert", priority:10, collapse?, category?, threadId?}`. Alerts are always
+pushed (they're what shows on the phone), and also delivered on the socket if the phone is connected (the app
+ignores that copy). The relay builds:
+`{"aps":{"alert":{"title":"Mochi","body":"Mochi has news"},"mutable-content":1,"sound":"default","category":…,"thread-id":…},"mochi":{"v":1,"room","key","id","from","nonce","box"}}`
+with `apns-push-type: alert`, `apns-priority`, `apns-collapse-id`, `apns-expiration` = now + ttl. The
+MochiNotifications extension opens `mochi.box` with K (Keychain group) and fills in title, body and userInfo; if it
+can't, the generic text stays. A payload over 4096 bytes is refused with `push_too_large` (the message is still
+delivered on the socket/queue); the Mac keeps sealed alerts under ~2.5 KB of plaintext.
+
+**Live Activities**: a `send` with key `liveActivity` (host → pocket) carrying an extra clear field `apns`:
+`{"event":"start"|"update"|"end", "timestamp", "content-state":{…, "sealed":"<nonce>.<box>"}, "attributes-type"?,
+"attributes"?, "stale-date"?, "dismissal-date"?, "alert"?}` (no `box` needed; the sensitive fields are sealed with the
+derived key K_la inside `content-state.sealed`, and the plain fields hold placeholders). Push hint
+`{kind:"liveactivity", priority:5|10, collapse}`. The relay sends `start` to each pocket's `pushToStart` token and
+`update`/`end` to every token in its `updates`, with `apns-push-type: liveactivity` and topic
+`<topic>.push-type.liveactivity`. Updates are collapsed per pocket: at most one every 5 s, newest wins (start, end
+and priority-10 updates go at once).
+
+**Roles**: `alert` from host or cloud to pocket; `liveActivity` from host to pocket.
+
 ### 4.7 When a device is away
 
 | Situation | What happens |
@@ -454,6 +485,12 @@ background agent in its own git worktree while track A goes on; everything is re
 | 0.2 Live Activity content end-to-end | **Yes, with a file key** (2026-11-04) | On the iPhone 14 Pro (iOS 27.0.1) the Live Activity view can't read the Keychain while it renders (shared access group, after-first-unlock item: not found), but it can read a key file in the app group (`completeFileProtectionUntilFirstUserAuthentication`) and open AES-GCM content with CryptoKit. Design: keep K in the Keychain; give the widget only a derived key, `K_la = HKDF-SHA256(K, info "mochi-link/v1 live-activity")`, in the app-group file, so a leaked file reveals Live Activity text but can't open or forge messages. The Live Activity `content-state` carries `sealed` ("nonce.box") instead of the readable title/detail. Spike code: `iOS/SharedData/LinkSeal.swift`, `-sealSpike 1`. |
 | 0.1 APNs from a Worker | **Yes** (2026-11-04) | A Worker on the free plan (`mochi-link-spike`, wrangler 4.151.3) signed an ES256 JWT with WebCrypto and `fetch`ed `api.sandbox.push.apple.com/3/device/<token>` directly: APNs answered 200 with an `apns-id` in ~1 s including signing. So the relay's push gateway can talk to APNs itself; FCM is only needed for Android. |
 | 0.4 `cryptography` in Mochi Cloud | pending | |
+
+**Progress (2026-11-05):** phases 0–4 work on the user's Mac and iPhone. The relay (`mochi-link`, v1.1.0, private repo
+rizulsharma-2003/mochi-link) carries commands, replies, state, presence and pushes; a sealed test notification and a
+sealed Live Activity ("Claude finished!" with the summary line) reached the Lock Screen, opened only on the phone. The
+Mac still keeps the direct-APNs path with its own key as a fallback while unpaired; that key and iCloud go in phase 6.
+Flutter: Mochi's art (`mochi_art`) and the Dart link client (`mochi_link`, interoperable with Swift, live-tested).
 
 ## 8. Risks
 

@@ -157,3 +157,58 @@ public struct LinkEnvelope: Codable, Equatable, Sendable {
         return LinkCrypto.Sealed(nonce: nonce, box: box)
     }
 }
+
+/// Turning the Mac's APNs payloads into what the relay pushes (docs/MOCHI_LINK_PLAN.md 4.6.1): an alert's text and
+/// details sealed with K (the notification extension opens them), a Live Activity's title and detail sealed with the
+/// derived K_la (the widget opens them), and only generic text left readable.
+public enum LinkPush {
+    /// Associated data for a Live Activity's sealed title and detail.
+    public static let liveActivityAD = "mochi-link/v1|live-activity|detail"
+
+    /// What a sealed alert carries: `title`, `subtitle`, `body` and `userInfo` (everything outside `aps`), plus the
+    /// category and thread the relay needs in the clear.
+    public static func alert(from payload: Data) -> (inner: [String: Any], category: String?, threadId: String?)? {
+        guard let object = (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any],
+              let aps = object["aps"] as? [String: Any] else { return nil }
+        var inner: [String: Any] = [:]
+        if let alert = aps["alert"] as? [String: Any] {
+            for field in ["title", "subtitle", "body"] { if let text = alert[field] as? String { inner[field] = text } }
+        } else if let text = aps["alert"] as? String {
+            inner["body"] = text
+        }
+        inner["userInfo"] = object.filter { $0.key != "aps" }
+        return (inner, aps["category"] as? String, aps["thread-id"] as? String)
+    }
+
+    /// The `apns` object for a Live Activity push: the payload's `aps` with the title and detail sealed into
+    /// `content-state.sealed` ("nonce.box"), a placeholder title, and generic alert text.
+    public static func liveActivity(from payload: Data, liveActivityKey: SymmetricKey, petName: String = "Mochi") -> [String: Any]? {
+        guard let object = (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any],
+              var aps = object["aps"] as? [String: Any], var state = aps["content-state"] as? [String: Any] else { return nil }
+        var secret: [String: Any] = [:]
+        if let title = state["title"] { secret["title"] = title }
+        if let detail = state["detail"] { secret["detail"] = detail }
+        guard let plain = try? JSONSerialization.data(withJSONObject: secret),
+              let sealed = try? LinkCrypto.seal(plain, ad: liveActivityAD, key: liveActivityKey) else { return nil }
+        state["title"] = petName
+        state.removeValue(forKey: "detail")
+        state["sealed"] = sealed.nonce + "." + sealed.box
+        aps["content-state"] = state
+        if var alert = aps["alert"] as? [String: Any] {
+            // The system shows this text itself, so nothing private goes in it.
+            alert["title"] = petName
+            alert["body"] = (aps["event"] as? String) == "start" ? "\(petName) is watching Claude work" : "Claude needs you"
+            aps["alert"] = alert
+        }
+        return aps
+    }
+
+    /// The widget's side: the title and detail back out of `sealed`.
+    public static func openLiveActivity(_ sealed: String, liveActivityKey: SymmetricKey) -> (title: String?, detail: String?)? {
+        let parts = sealed.split(separator: ".", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              let plain = LinkCrypto.open(.init(nonce: parts[0], box: parts[1]), ad: liveActivityAD, key: liveActivityKey),
+              let object = (try? JSONSerialization.jsonObject(with: plain)) as? [String: Any] else { return nil }
+        return (object["title"] as? String, object["detail"] as? String)
+    }
+}
