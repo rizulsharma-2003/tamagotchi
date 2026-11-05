@@ -163,8 +163,9 @@ struct PhoneSettingsView: View {
                     if link.working { ProgressView().controlSize(.small) }
                     Spacer()
                     if link.paired {
-                        Button("Send a Test Notification") { phone.sendTestNotification() }
+                        Button("Send a Test to All Phones") { phone.sendTestNotification() }
                             .disabled(link.status != .online)
+                            .help("Every paired phone gets it: iPhone and Android")
                         Button("Unpair This Mac…", role: .destructive) { confirmUnpair = true }
                     }
                 }

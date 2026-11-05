@@ -418,7 +418,7 @@ final class PhoneController {
     func sendTestNotification() {
         guard let relay = MochiLink.relay else { return }
         relay.sendAlert(["title": "Hello from \(LinkController.macName)", "subtitle": "Mochi Link test",
-                         "body": "This notification came through your relay, end-to-end encrypted: only your iPhone could read it.",
+                         "body": "This notification came through your relay, end-to-end encrypted: only your phones could read it.",
                          "userInfo": [:] as [String: Any]], category: nil, threadId: nil)
         lastResult = "Test notification sent through Mochi Link"
         lastError = nil
