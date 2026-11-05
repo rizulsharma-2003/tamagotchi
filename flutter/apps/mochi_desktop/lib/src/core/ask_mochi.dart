@@ -68,14 +68,23 @@ abstract final class AskLaunch {
     systemPrompt(petName),
   ];
 
-  /// One line without quotes or shell metacharacters, so it survives npm's `claude.cmd` shim on Windows too.
+  /// One line without quotes or shell metacharacters, so it survives npm's `claude.cmd` shim on Windows too (the pet's
+  /// name is one you typed, so it goes through [safeName]).
   static String systemPrompt(String petName) =>
-      'You are $petName, a small cat who lives on the user\'s computer next to Claude Code and keeps them company. '
-      'People may spell your name Motchi. Answer in one or two short, friendly sentences (at most 40 words, no markdown, '
+      'You are ${safeName(petName)}, a small cat who lives on the user\'s computer next to Claude Code and keeps them company. '
+      '${safeName(petName) == 'Mochi' ? 'People may spell your name Motchi. ' : ''}Answer in one or two short, friendly sentences (at most 40 words, no markdown, '
       'no lists). You can search the web with WebSearch when a question needs current facts. You have no other tools: '
       'you can\'t open apps, change settings, read files or message the user\'s Claude Code sessions from here, so if '
       'asked, say that comes to Windows later. Each request starts with a [Context] line about the computer right now '
       '(the time and the Claude sessions you know): use it, don\'t repeat it. Never claim you did something you didn\'t.';
+
+  /// [name] with only letters, digits, spaces, hyphens, apostrophes and full stops (nothing cmd.exe treats
+  /// specially), at most 24 characters; "Mochi" when nothing is left.
+  static String safeName(String name) {
+    final kept = name.replaceAll(RegExp(r"[^\p{L}\p{N} '.-]", unicode: true), '').replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (kept.isEmpty) return 'Mochi';
+    return kept.length > 24 ? kept.substring(0, 24).trim() : kept;
+  }
 
   /// `[Context] …` then the request (Swift `BrainLaunch.message`).
   static String message({required String request, required String context, bool spoken = false}) =>
@@ -97,13 +106,14 @@ class AskMochi extends ChangeNotifier {
     required void Function(PetCue cue) cue,
     UrlOpener? opener,
     String Function()? model,
-    this.petName = 'Mochi',
+    String Function()? petName,
     this.timeout = const Duration(seconds: 90),
     DateTime Function()? clock,
   }) : _runner = runner,
        _cue = cue,
        _opener = opener,
        _model = model ?? (() => 'haiku'),
+       _petName = petName ?? (() => 'Mochi'),
        _clock = clock ?? DateTime.now;
 
   final SessionStore sessions;
@@ -112,7 +122,10 @@ class AskMochi extends ChangeNotifier {
   final UrlOpener? _opener;
   final String Function() _model;
   final DateTime Function() _clock;
-  final String petName;
+  final String Function() _petName;
+
+  /// The pet's name (Settings › General), in Ask Mochi's words and its instructions to Claude.
+  String get petName => _petName();
   final Duration timeout;
 
   final List<AskExchange> _exchanges = [];

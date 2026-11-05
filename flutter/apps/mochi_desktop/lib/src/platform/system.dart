@@ -67,6 +67,32 @@ class SystemMotion extends ValueNotifier<bool> {
   }
 }
 
+/// Shows a folder of Mochi's (its own folder, Claude Code's backups) in File Explorer, or Finder on the macOS build.
+abstract interface class FolderOpener {
+  Future<bool> open(String path);
+}
+
+class SystemFolderOpener implements FolderOpener {
+  const SystemFolderOpener();
+
+  @override
+  Future<bool> open(String path) async {
+    final folder = Directory(path);
+    if (!folder.existsSync()) return false;
+    try {
+      if (Platform.isWindows) {
+        // Explorer's exit code says nothing about whether the window opened.
+        await Process.start('explorer.exe', [folder.absolute.path], mode: ProcessStartMode.detached);
+        return true;
+      }
+      final result = await Process.run('/usr/bin/open', [folder.absolute.path]);
+      return result.exitCode == 0;
+    } on ProcessException {
+      return false;
+    }
+  }
+}
+
 /// Opens https links in the default browser: `rundll32 url.dll,FileProtocolHandler` on Windows (no shell, so `&` in
 /// a link is safe), `open` on macOS.
 class SystemUrlOpener implements UrlOpener {

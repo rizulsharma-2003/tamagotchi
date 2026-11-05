@@ -17,6 +17,7 @@ import 'demo.dart';
 import 'link/link_host.dart';
 import 'link/phone_sync.dart';
 import 'platform/credential_vault.dart';
+import 'platform/startup.dart';
 import 'platform/system.dart';
 
 /// This app's version, shown on the other devices and in Settings.
@@ -33,12 +34,25 @@ class MochiDesktop {
     required this.link,
     required this.motion,
     required ClaudeRunner? Function() claude,
-    UrlOpener? opener,
+    this.opener,
+    this.folders,
+    StartupItem? startup,
+    String? Function()? locateClaude,
     BridgeServer? bridge,
     DateTime Function()? clock,
   }) : _claude = claude,
+       _locateClaude = locateClaude,
+       startup = startup ?? const UnsupportedStartup(),
        _bridge = bridge ?? BridgeServer(paths) {
-    ask = AskMochi(sessions: sessions, runner: claude, cue: cue, opener: opener, model: () => settings.model, clock: clock);
+    ask = AskMochi(
+      sessions: sessions,
+      runner: claude,
+      cue: cue,
+      opener: opener,
+      model: () => settings.model,
+      petName: () => settings.petName,
+      clock: clock,
+    );
     phone = PhoneSync(
       host: link,
       sessions: sessions,
@@ -103,6 +117,12 @@ class MochiDesktop {
       motion: SystemMotion(),
       claude: claude,
       opener: const SystemUrlOpener(),
+      folders: const SystemFolderOpener(),
+      startup: systemStartup(),
+      locateClaude: () {
+        claude();
+        return executable;
+      },
     );
   }
 
@@ -114,7 +134,17 @@ class MochiDesktop {
   final SystemMotion motion;
   late final AskMochi ask;
   late final PhoneSync phone;
+
+  /// Opens links (About, the agent) in the browser; null in tests.
+  final UrlOpener? opener;
+
+  /// Shows Mochi's folders in File Explorer; null in tests.
+  final FolderOpener? folders;
+
+  /// "Start Mochi with Windows" (Settings › General).
+  final StartupItem startup;
   final ClaudeRunner? Function() _claude;
+  final String? Function()? _locateClaude;
   final BridgeServer _bridge;
 
   final StreamController<PetCue> _cues = StreamController.broadcast();
@@ -128,6 +158,9 @@ class MochiDesktop {
   Stream<PetCue> get cues => _cues.stream;
 
   BridgeServer get bridge => _bridge;
+
+  /// Where Claude Code's `claude` is on this PC (null: not found), for Settings. Looks again each time.
+  String? locateClaude() => _locateClaude?.call();
 
   void cue(PetCue cue) {
     if (!_cues.isClosed) _cues.add(cue);
@@ -168,16 +201,16 @@ class MochiDesktop {
     sessions.apply(event);
   }
 
-  /// Claude's moments, live only.
+  /// Claude's moments, live only, as Settings allows (General › Pause reactions, Notifications › On this PC).
   void _transition(SessionTransition transition) {
-    if (transition.delivery == Delivery.late || !transition.phaseChanged) return;
+    if (transition.delivery == Delivery.late || !transition.phaseChanged || settings.pauseReactions) return;
     switch (transition.phase) {
       case SessionPhase.turnCompleted:
-        cue(PetCue.finished);
+        if (settings.celebrateFinished) cue(PetCue.finished);
       case SessionPhase.waitingForUser:
         cue(PetCue.needsYou);
       case SessionPhase.turnFailed:
-        cue(PetCue.snag);
+        if (settings.showSnags) cue(PetCue.snag);
       default:
         break;
     }

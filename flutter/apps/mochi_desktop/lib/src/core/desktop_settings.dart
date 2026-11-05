@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:mochi_art/mochi_art.dart' show Accessory, AccessorySlot, OfficeTheme, PetColor, SeasonalEvent;
+
+import 'seasons.dart';
 
 /// Where the settings live: a JSON file in the app's private folder, or memory in tests.
 abstract interface class SettingsDocument {
@@ -46,23 +49,27 @@ class MemorySettingsDocument implements SettingsDocument {
   void write(Map<String, Object?> json) => this.json = json;
 }
 
-/// The app's settings (Settings window), saved as they change.
+/// The app's settings (the Settings window), saved as they change. Every field has a safe default, so a file from an
+/// older version (or a damaged one) loads with the new fields at their defaults; names follow the Mac's AppSettings.
 class DesktopSettings extends ChangeNotifier {
-  DesktopSettings(this._document) {
+  DesktopSettings(this._document, {DateTime Function()? clock}) {
     final json = _document.read() ?? const {};
-    _themeMode = ThemeMode.values.where((mode) => mode.name == json['theme']).firstOrNull ?? ThemeMode.system;
-    _showPet = json['showPet'] is bool ? json['showPet']! as bool : true;
-    _roamTaskbar = json['roamTaskbar'] is bool ? json['roamTaskbar']! as bool : true;
-    _shareSummaries = json['shareSummaries'] is bool ? json['shareSummaries']! as bool : false;
-    _acceptCommands = json['acceptCommands'] is bool ? json['acceptCommands']! as bool : true;
-    _model = json['model'] == 'sonnet' ? 'sonnet' : 'haiku';
-    final position = json['petPosition'];
-    if (position is List && position.length == 2 && position.every((value) => value is num)) {
-      _petPosition = Offset((position[0] as num).toDouble(), (position[1] as num).toDouble());
-    }
-    final handled = json['handledCommands'];
-    if (handled is List) _handledCommands.addAll(handled.whereType<String>());
+    _load(json);
+    final adopted = json['adoptedAt'] is String ? DateTime.tryParse(json['adoptedAt']! as String) : null;
+    _adoptedAt = adopted ?? (clock ?? DateTime.now)();
+    // The first launch of this version: the new fields go into the file, and Mochi's birthday is today.
+    if (adopted == null || json['v'] != version) _save();
   }
+
+  /// The file's format. Version 1 had no number (theme, the pet, phones, Ask Mochi); 2 adds the names, the look,
+  /// holidays, reactions and the day Mochi arrived.
+  static const int version = 2;
+
+  static const String defaultPetName = 'Mochi';
+  static const String defaultCompanionName = 'Patch';
+
+  /// The longest name the phones show in full.
+  static const int maxNameLength = 24;
 
   final SettingsDocument _document;
 
@@ -74,6 +81,70 @@ class DesktopSettings extends ChangeNotifier {
   String _model = 'haiku';
   Offset? _petPosition;
   final List<String> _handledCommands = [];
+  String _petName = defaultPetName;
+  String _companionName = defaultCompanionName;
+  PetColor _petColor = PetColor.cream;
+  Accessory? _petAccessory;
+  Accessory? _companionAccessory;
+  Accessory? _deskAccessory = Accessory.plant;
+  OfficeTheme _officeTheme = OfficeTheme.cozyDesk;
+  bool _holidays = true;
+  int? _birthdayMonth;
+  int? _birthdayDay;
+  bool _pauseReactions = false;
+  bool _celebrateFinished = true;
+  bool _showSnags = true;
+  late DateTime _adoptedAt;
+
+  void _load(Map<String, Object?> json) {
+    bool flag(String key, bool fallback) => json[key] is bool ? json[key]! as bool : fallback;
+    T? named<T extends Enum>(List<T> values, Object? name) => values.where((value) => value.name == name).firstOrNull;
+    _themeMode = named(ThemeMode.values, json['theme']) ?? ThemeMode.system;
+    _showPet = flag('showPet', true);
+    _roamTaskbar = flag('roamTaskbar', true);
+    _shareSummaries = flag('shareSummaries', false);
+    _acceptCommands = flag('acceptCommands', true);
+    _model = json['model'] == 'sonnet' ? 'sonnet' : 'haiku';
+    final position = json['petPosition'];
+    _petPosition = position is List && position.length == 2 && position.every((value) => value is num)
+        ? Offset((position[0] as num).toDouble(), (position[1] as num).toDouble())
+        : null;
+    final handled = json['handledCommands'];
+    _handledCommands
+      ..clear()
+      ..addAll(handled is List ? handled.whereType<String>() : const <String>[]);
+    _petName = _name(json['petName'], defaultPetName);
+    _companionName = _name(json['companionName'], defaultCompanionName);
+    _petColor = named(PetColor.values, json['petColor']) ?? PetColor.cream;
+    _petAccessory = _fits(named(Accessory.values, json['petAccessory']), AccessorySlot.wearable);
+    _companionAccessory = _fits(named(Accessory.values, json['companionAccessory']), AccessorySlot.wearable);
+    // A missing key is the Mac's default (the desk plant); null is "None".
+    _deskAccessory = json.containsKey('deskAccessory')
+        ? _fits(named(Accessory.values, json['deskAccessory']), AccessorySlot.desk)
+        : Accessory.plant;
+    _officeTheme = named(OfficeTheme.values, json['officeTheme']) ?? OfficeTheme.cozyDesk;
+    final seasonal = json['seasonal'] is Map ? (json['seasonal']! as Map).cast<String, Object?>() : const <String, Object?>{};
+    _holidays = seasonal['enabled'] is bool ? seasonal['enabled']! as bool : true;
+    final month = seasonal['birthdayMonth'], day = seasonal['birthdayDay'];
+    final valid = month is int && day is int && month >= 1 && month <= 12 && day >= 1 && day <= daysIn(month);
+    _birthdayMonth = valid ? month : null;
+    _birthdayDay = valid ? day : null;
+    _pauseReactions = flag('pauseReactions', false);
+    _celebrateFinished = flag('celebrateFinished', true);
+    _showSnags = flag('showSnags', true);
+  }
+
+  static String _name(Object? value, String fallback) =>
+      value is String ? value.substring(0, value.length.clamp(0, maxNameLength)) : fallback;
+
+  static Accessory? _fits(Accessory? accessory, AccessorySlot slot) => accessory?.slot == slot ? accessory : null;
+
+  /// Days in [month] (29 in February: a birthday on the 29th shows on the 28th in other years).
+  static int daysIn(int month) => switch (month) {
+    2 => 29,
+    4 || 6 || 9 || 11 => 30,
+    _ => 31,
+  };
 
   /// System, light or dark.
   ThemeMode get themeMode => _themeMode;
@@ -101,9 +172,81 @@ class DesktopSettings extends ChangeNotifier {
   String get model => _model;
   set model(String value) => _set(() => _model = value == 'sonnet' ? 'sonnet' : 'haiku');
 
-  /// Where you last left the desktop pet (screen coordinates).
+  /// Where you last left the desktop pet (screen coordinates). Null: bottom left, just above the taskbar.
   Offset? get petPosition => _petPosition;
   set petPosition(Offset? value) => _set(() => _petPosition = value);
+
+  /// The pet's name as typed in Settings (at most [maxNameLength] characters); [petName] is what shows.
+  String get petNameText => _petName;
+
+  /// The pet's name everywhere: the main window, the phones, Ask Mochi. Blank means the default.
+  String get petName => _petName.trim().isEmpty ? defaultPetName : _petName.trim();
+  set petName(String value) => _set(() => _petName = _name(value, defaultPetName));
+
+  /// The coding companion's name as typed; [companionName] is what shows.
+  String get companionNameText => _companionName;
+  String get companionName => _companionName.trim().isEmpty ? defaultCompanionName : _companionName.trim();
+  set companionName(String value) => _set(() => _companionName = _name(value, defaultCompanionName));
+
+  /// The pet's coat.
+  PetColor get petColor => _petColor;
+  set petColor(PetColor value) => _set(() => _petColor = value);
+
+  /// What the pet wears (none by default). Only wearables: a desk thing is refused.
+  Accessory? get petAccessory => _petAccessory;
+  set petAccessory(Accessory? value) => _set(() => _petAccessory = _fits(value, AccessorySlot.wearable));
+
+  /// What the companion wears.
+  Accessory? get companionAccessory => _companionAccessory;
+  set companionAccessory(Accessory? value) => _set(() => _companionAccessory = _fits(value, AccessorySlot.wearable));
+
+  /// What stands on the companion's desk (the plant by default, as on the Mac). Only desk things.
+  Accessory? get deskAccessory => _deskAccessory;
+  set deskAccessory(Accessory? value) => _set(() => _deskAccessory = _fits(value, AccessorySlot.desk));
+
+  /// The room's style.
+  OfficeTheme get officeTheme => _officeTheme;
+  set officeTheme(OfficeTheme value) => _set(() => _officeTheme = value);
+
+  /// Holidays (Halloween, Diwali, Christmas, New Year, Valentine's Day and birthdays) bring decorations and costumes.
+  bool get holidays => _holidays;
+  set holidays(bool value) => _set(() => _holidays = value);
+
+  /// Your birthday, month (1–12) and day, or null.
+  int? get birthdayMonth => _birthdayMonth;
+  int? get birthdayDay => _birthdayDay;
+
+  /// Sets your birthday ([month] null clears it); the day is kept inside the month.
+  void setBirthday(int? month, int? day) => _set(() {
+    if (month == null || month < 1 || month > 12) {
+      _birthdayMonth = null;
+      _birthdayDay = null;
+    } else {
+      _birthdayMonth = month;
+      _birthdayDay = (day ?? 1).clamp(1, daysIn(month));
+    }
+  });
+
+  /// The day Mochi came to this PC (its first launch): its birthday comes round every year.
+  DateTime get adoptedAt => _adoptedAt;
+
+  /// The holiday settings, for the calendar.
+  SeasonalSettings get seasonal => SeasonalSettings(enabled: _holidays, birthdayMonth: _birthdayMonth, birthdayDay: _birthdayDay);
+
+  /// The holiday on [date] (null: none, or holidays are off).
+  SeasonalEvent? holidayOn(DateTime date) => SeasonCalendar.event(date, seasonal, mochiBirthday: _adoptedAt);
+
+  /// Mochi stops reacting to Claude's moments (no celebration, worry or wave); the sessions keep updating.
+  bool get pauseReactions => _pauseReactions;
+  set pauseReactions(bool value) => _set(() => _pauseReactions = value);
+
+  /// Mochi bounces and says "Claude finished!" when a turn ends.
+  bool get celebrateFinished => _celebrateFinished;
+  set celebrateFinished(bool value) => _set(() => _celebrateFinished = value);
+
+  /// Mochi looks worried and says "Claude hit a snag" when a turn ends with an error.
+  bool get showSnags => _showSnags;
+  set showSnags(bool value) => _set(() => _showSnags = value);
 
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
@@ -114,24 +257,50 @@ class DesktopSettings extends ChangeNotifier {
     _save();
   }
 
+  /// Settings › General › Reset: every setting back to its default. The pairing (kept in the vault, not here), the
+  /// phone commands already handled and Mochi's birthday stay.
+  void reset() {
+    final handled = List<String>.of(_handledCommands);
+    _load(const {});
+    _handledCommands.addAll(handled);
+    _save();
+    notifyListeners();
+  }
+
   void _set(void Function() change) {
     change();
     _save();
     notifyListeners();
   }
 
+  /// What's saved.
+  Map<String, Object?> toJson() => {
+    'v': version,
+    'theme': _themeMode.name,
+    'showPet': _showPet,
+    'roamTaskbar': _roamTaskbar,
+    'shareSummaries': _shareSummaries,
+    'acceptCommands': _acceptCommands,
+    'model': _model,
+    if (_petPosition != null) 'petPosition': [_petPosition!.dx, _petPosition!.dy],
+    'handledCommands': List<String>.of(_handledCommands),
+    'petName': _petName,
+    'companionName': _companionName,
+    'petColor': _petColor.name,
+    'petAccessory': _petAccessory?.name,
+    'companionAccessory': _companionAccessory?.name,
+    'deskAccessory': _deskAccessory?.name,
+    'officeTheme': _officeTheme.name,
+    'seasonal': {'enabled': _holidays, 'birthdayMonth': ?_birthdayMonth, 'birthdayDay': ?_birthdayDay},
+    'pauseReactions': _pauseReactions,
+    'celebrateFinished': _celebrateFinished,
+    'showSnags': _showSnags,
+    'adoptedAt': _adoptedAt.toIso8601String(),
+  };
+
   void _save() {
     try {
-      _document.write({
-        'theme': _themeMode.name,
-        'showPet': _showPet,
-        'roamTaskbar': _roamTaskbar,
-        'shareSummaries': _shareSummaries,
-        'acceptCommands': _acceptCommands,
-        'model': _model,
-        if (_petPosition != null) 'petPosition': [_petPosition!.dx, _petPosition!.dy],
-        'handledCommands': _handledCommands,
-      });
+      _document.write(toJson());
     } on Object catch (error) {
       debugPrint('Mochi: settings could not be saved (${error.runtimeType})');
     }

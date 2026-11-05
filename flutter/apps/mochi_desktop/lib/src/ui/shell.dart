@@ -9,7 +9,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart' show Alignment, Colors;
+import 'package:flutter/material.dart' show Alignment, Colors, Rect;
 import 'package:flutter/services.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -42,6 +42,11 @@ abstract interface class DesktopShell {
 
   /// The pet's window for Win32 moves (Windows only; null elsewhere, where Mochi doesn't roam).
   PetWindow? get petWindow;
+
+  /// The size the main window form takes the next time it's shown: [SurfaceSizes.main] for Mochi's own pages,
+  /// [SurfaceSizes.settings] for Settings. Changing it while the main window shows resizes it on the next [show].
+  Size get mainSize;
+  set mainSize(Size size);
 
   /// Ticks (or unticks) "Roam along the taskbar" in the tray menu.
   Future<void> setRoaming(bool roaming);
@@ -89,6 +94,9 @@ abstract final class SurfaceSizes {
 
   static const Size main = Size(460, 720);
   static const Size mainMinimum = Size(400, 520);
+
+  /// The Settings window: the Mac's Settings size, a sidebar and the open pane side by side.
+  static const Size settings = Size(900, 660);
 }
 
 /// window_manager and tray_manager (Windows; the macOS development build).
@@ -99,6 +107,12 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   Surface _surface = Surface.hidden;
   PetWindow? _petWindow;
   bool _roaming = true;
+
+  @override
+  Size mainSize = SurfaceSizes.main;
+
+  /// The main window's size as last set here (null: it isn't showing).
+  Size? _mainShown;
 
   Surface get surface => _surface;
 
@@ -164,6 +178,7 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   Future<void> show(Surface surface, {Offset? petPosition, Size petSize = SurfaceSizes.pet}) async {
     final previous = _surface;
     _surface = surface;
+    if (surface != Surface.main) _mainShown = null;
     switch (surface) {
       case Surface.hidden:
         await windowManager.hide();
@@ -188,9 +203,14 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
         await windowManager.setHasShadow(true);
         if (previous != Surface.main) {
           await windowManager.setMinimumSize(SurfaceSizes.mainMinimum);
-          await windowManager.setSize(SurfaceSizes.main);
+          await windowManager.setSize(mainSize);
           await windowManager.center();
+        } else if (_mainShown != mainSize) {
+          // Settings opened from Mochi's window (or closed back to it): the new size, around the same centre.
+          final bounds = await windowManager.getBounds();
+          await windowManager.setBounds(Rect.fromCenter(center: bounds.center, width: mainSize.width, height: mainSize.height));
         }
+        _mainShown = mainSize;
         await windowManager.setResizable(true);
         await windowManager.show();
         await windowManager.focus();

@@ -176,9 +176,16 @@ class FakeShell implements DesktopShell {
   Stream<ShellAction> get actions => controller.stream;
 
   @override
+  Size mainSize = SurfaceSizes.main;
+
+  /// The main window's size at each show of it.
+  final List<Size> mainShows = [];
+
+  @override
   Future<void> show(Surface surface, {Offset? petPosition, Size petSize = SurfaceSizes.pet}) async {
     shown.add(surface);
     shows.add((surface: surface, position: petPosition, size: petSize));
+    if (surface == Surface.main) mainShows.add(mainSize);
   }
 
   @override

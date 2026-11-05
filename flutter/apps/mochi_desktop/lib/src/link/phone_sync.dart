@@ -28,13 +28,33 @@ import 'link_host.dart';
 /// Writes Claude's closing message up as a short note (null: use [TurnSummarizer.fallback]).
 typedef TurnSummaryMaker = Future<TurnSummary?> Function(TurnReport report, List<String> earlier);
 
-/// The look this PC shares until pets can be customised on Windows: the Mac's defaults (link-spec/fixtures/look.json).
+/// The Mac's default look (link-spec/fixtures/look.json): what a fresh install shares.
 const PetLook defaultLook = PetLook(
   petName: 'Mochi',
   companionName: 'Patch',
   petColor: 'cream',
   deskAccessory: 'plant',
   theme: 'cozyDesk',
+  friendshipLevel: 0,
+);
+
+/// The look this PC shares (`look`), from Settings › General and Characters, so the phones' rooms match: names, the
+/// coat, what Mochi and the companion wear, the desk and the room's theme, and the holiday settings. Windows keeps no
+/// friendship or furniture yet: level 0 and an empty room.
+PetLook petLook(DesktopSettings settings) => PetLook(
+  petName: settings.petName,
+  companionName: settings.companionName,
+  petColor: settings.petColor.name,
+  petAccessory: settings.petAccessory?.name,
+  companionAccessory: settings.companionAccessory?.name,
+  deskAccessory: settings.deskAccessory?.name,
+  theme: settings.officeTheme.name,
+  seasonal: {
+    'enabled': settings.holidays,
+    'birthdayMonth': ?settings.birthdayMonth,
+    'birthdayDay': ?settings.birthdayDay,
+    'decorateMenuBar': true,
+  },
   friendshipLevel: 0,
 );
 
@@ -47,7 +67,7 @@ class PhoneSync {
     required this.summariesFlagFile,
     required void Function(PetCue cue) cue,
     TurnSummaryMaker? summarize,
-    this.look = defaultLook,
+    this.look,
     DateTime Function()? clock,
     this.tickInterval = const Duration(seconds: 2),
   }) : _cue = cue,
@@ -61,7 +81,9 @@ class PhoneSync {
 
   /// Present while summaries are shared: the hook helper includes Claude's closing message only then.
   final String summariesFlagFile;
-  final PetLook look;
+
+  /// A fixed look (tests); otherwise [petLook] of the settings.
+  final PetLook? look;
   final Duration tickInterval;
   final void Function(PetCue cue) _cue;
   final TurnSummaryMaker? _summarize;
@@ -108,7 +130,12 @@ class PhoneSync {
     _subscriptions.clear();
   }
 
-  void _settingsChanged() => tick(force: true);
+  /// A setting changed: the summaries switch takes effect at once; a new name or look goes out with the next tick
+  /// (within [tickInterval]), so typing a name doesn't send every letter.
+  void _settingsChanged() {
+    _syncSummaryFlag();
+    if (host.paired) _publishSessions(force: true);
+  }
 
   /// Publishes what changed (every [tickInterval], and right away when [force]d).
   void tick({bool force = false}) {
@@ -125,7 +152,7 @@ class PhoneSync {
   }
 
   void _publishLook() {
-    final value = look.toValue();
+    final value = (look ?? petLook(settings)).toValue();
     if (value == _publishedLook) return;
     _publishedLook = value;
     host.set(value, LinkKey.look);
