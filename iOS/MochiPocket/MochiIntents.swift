@@ -54,7 +54,7 @@ struct WaitingSnippet: View {
 /// "Hey Siri, check Mochi": Mochi Cloud looks now; the answer arrives as a notification.
 struct CheckNowIntent: AppIntent {
     static let title: LocalizedStringResource = "Check for Updates"
-    static let description = IntentDescription("Mochi Cloud checks your mail, calendar and Notion now, even while your Mac is off.")
+    static let description = IntentDescription("Mochi Cloud checks your mail, calendar and Notion now, even while your computer is off.")
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {

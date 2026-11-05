@@ -144,7 +144,7 @@ final class MacLink {
     /// "Draft reply": Mochi Cloud writes a reply to that thread into Gmail Drafts (never sends it) and notifies
     /// this iPhone. Returns why it couldn't be asked, or nil.
     func draftReply(threadID: String, note: String) async -> String? {
-        guard let trigger = cloudTrigger else { return "Set up Mochi Cloud on your Mac first (Settings › Agent › Mochi Cloud)." }
+        guard let trigger = cloudTrigger else { return "Set up Mochi Cloud on \(PocketLink.shared.host.yours) first (Settings › Agent › Mochi Cloud)." }
         guard !threadID.isEmpty, threadID.allSatisfy({ $0.isLetter || $0.isNumber }) else { return "That email can't be found." }
         // One line of plain words: no angle brackets, so it can't be mistaken for the request's wrapper.
         let words = note.components(separatedBy: .newlines).joined(separator: " ")
@@ -157,7 +157,7 @@ final class MacLink {
 
     /// Siri's "Check": Mochi Cloud looks now. Returns why it couldn't, or nil.
     func checkInCloudNow() async -> String? {
-        guard let trigger = cloudTrigger else { return "Mochi Cloud isn't set up yet. Set it up on your Mac (Settings › Agent)." }
+        guard let trigger = cloudTrigger else { return "Mochi Cloud isn't set up yet. Set it up on \(PocketLink.shared.host.yours) (Settings › Agent)." }
         return await fireCloud(trigger)
     }
 
@@ -178,7 +178,7 @@ final class MacLink {
             log("asked Mochi Cloud (\(text.split(separator: " ").first ?? "")): HTTP \(status)")
             switch status {
             case 200..<300: problem = nil
-            case 401, 403: problem = "Mochi Cloud refused the request. Save a fresh API token on your Mac (Settings › Agent › Mochi Cloud)."
+            case 401, 403: problem = "Mochi Cloud refused the request. Save a fresh API token on \(PocketLink.shared.host.yours) (Settings › Agent › Mochi Cloud)."
             case 429: problem = "Mochi Cloud is busy (too many requests this hour). Try again in a few minutes."
             default: problem = "Couldn't reach Mochi Cloud (HTTP \(status))."
             }

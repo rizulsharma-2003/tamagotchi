@@ -67,7 +67,7 @@ struct UpdatesView: View {
                     .textCase(nil)
                 } footer: {
                     if let looked = link.agent?.lookedAt {
-                        Text("Checked by \(link.lastCheckedBy == "cloud" ? "Mochi Cloud" : "your Mac") "
+                        Text("Checked by \(link.lastCheckedBy == "cloud" ? "Mochi Cloud" : PocketLink.shared.host.yours) "
                              + Date(timeIntervalSince1970: looked).formatted(.relative(presentation: .named))
                              + ". Pull down to check again.")
                             .font(.mochi(.footnote))

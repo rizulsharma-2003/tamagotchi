@@ -105,7 +105,7 @@ final class TalkModel {
     private func send(_ text: String, project: String? = nil, session: String? = nil, typed: Bool = false) {
         // Unpaired, there's no way to the Mac at all: say so now rather than wait for an answer that can't come.
         guard PocketLink.shared.paired else {
-            fail("Pair me with your Mac first: Settings › Mochi Link.")
+            fail("Pair me with your Mac or PC first: Settings › Mochi Link.")
             return
         }
         set(.sending, bubble: .some(project.map { "To Claude in \($0): “\(text)”" } ?? "“\(text)”"))
@@ -113,11 +113,11 @@ final class TalkModel {
         timeoutTask = Task {
             try? await Task.sleep(for: .seconds(1.1))
             guard !Task.isCancelled else { return }
-            if phase == .sending { set(.waiting, bubble: .some("Sending to your Mac…")) }
+            if phase == .sending { set(.waiting, bubble: .some("Sending to \(PocketLink.shared.host.yours)…")) }
             try? await Task.sleep(for: .seconds(Self.answerTimeout))
             guard !Task.isCancelled, phase == .waiting || phase == .sending else { return }
             waitingFor = nil
-            fail("Your Mac didn't answer — is it awake and online?")
+            fail("\(PocketLink.shared.host.yoursCapitalized) didn't answer — is it awake and online?")
         }
     }
 
@@ -135,7 +135,7 @@ final class TalkModel {
         waitingFor = nil
         timeoutTask?.cancel()
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        set(.replied, bubble: .some("Your Mac is away, so Mochi Cloud is checking — your news arrives as a notification in a minute or two."))
+        set(.replied, bubble: .some("\(PocketLink.shared.host.yoursCapitalized) is away, so Mochi Cloud is checking — your news arrives as a notification in a minute or two."))
         settle(after: 10)
     }
 
@@ -152,7 +152,7 @@ final class TalkModel {
         switch exchange.state {
         case .sending: break
         case .working:
-            if phase == .waiting || phase == .sending { bubble = "Your Mac is on it…" }
+            if phase == .waiting || phase == .sending { bubble = "\(PocketLink.shared.host.yoursCapitalized) is on it…" }
         case .done, .failed:
             self.waitingFor = nil
             timeoutTask?.cancel()

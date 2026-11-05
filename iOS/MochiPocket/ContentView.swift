@@ -68,8 +68,9 @@ struct ContentView: View {
             if let text = UserDefaults.standard.string(forKey: "sendCommand") { talk.send(typed: text) }
             #if DEBUG
             if UserDefaults.standard.bool(forKey: "kokoroTest") { await KokoroVoice.shared.selfTest() }
-            // Simulator screenshots: `-demoContent 1`, and `-openSheet settings|updates`.
+            // Simulator screenshots: `-demoContent 1`, `-demoLink mac|macAway|pc|both`, and `-openSheet settings|updates`.
             if UserDefaults.standard.bool(forKey: "demoContent") { link.showDemoContent() }
+            if let room = UserDefaults.standard.string(forKey: "demoLink") { pairing.showDemo(room) }
             switch UserDefaults.standard.string(forKey: "openSheet") {
             case "settings": showSettings = true
             case "updates": showUpdates = true
@@ -105,7 +106,7 @@ struct ContentView: View {
                         .font(.mochi(.largeTitle, .heavy))
                         .foregroundStyle(Theme.ink)
                         .accessibilityAddTraits(.isHeader)
-                    Text("and \(phone.world.settings.companionName), from your Mac")
+                    Text("and \(phone.world.settings.companionName), from \(pairing.host.yours)")
                         .font(.mochi(.subheadline))
                         .foregroundStyle(Theme.inkSecondary)
                 }
@@ -113,11 +114,15 @@ struct ContentView: View {
                 RoundIconButton(symbol: "gearshape.fill", label: "Settings", tint: Theme.inkSecondary) { showSettings = true }
             }
             HStack(spacing: Theme.Space.s) {
-                // Mochi Link is the only way to the Mac: unpaired, the app works on its own.
-                let linked = pairing.paired
-                StatusPill(text: linked ? "Mac linked" : "Not paired with your Mac",
-                           symbol: linked ? "link" : "link.badge.plus",
-                           tint: linked ? Theme.success : Theme.inkSecondary)
+                // Mochi Link is the only way to the computer: unpaired, the app works on its own.
+                if !pairing.paired {
+                    StatusPill(text: "Not paired yet", symbol: "link.badge.plus", tint: Theme.inkSecondary)
+                } else if pairing.status == .online {
+                    StatusPill(text: pairing.hostPill, symbol: pairing.hostOnline ? "link" : "moon.zzz.fill",
+                               tint: pairing.hostOnline ? Theme.success : Theme.inkSecondary)
+                } else {
+                    StatusPill(text: "\(pairing.host.short) linked", symbol: "link", tint: Theme.success)
+                }
                 if phone.friendshipLevel > 0 {
                     StatusPill(text: "Friendship \(phone.friendshipLevel)", symbol: "heart.fill", tint: Theme.pet)
                 }
@@ -179,7 +184,7 @@ struct ContentView: View {
 
     private var typingField: some View {
         HStack(spacing: Theme.Space.s) {
-            TextField("Tell \(phone.world.settings.petName) what to do on your Mac", text: $typed, axis: .vertical)
+            TextField("Tell \(phone.world.settings.petName) what to do on \(pairing.host.yours)", text: $typed, axis: .vertical)
                 .font(.mochi(.body))
                 .lineLimit(1...4)
                 .textFieldStyle(.plain)
@@ -253,8 +258,8 @@ struct ContentView: View {
 
     private func status(for state: MacLink.State) -> String {
         switch state {
-        case .sending: return "Sending to your Mac…"
-        case .working: return "Your Mac is on it…"
+        case .sending: return "Sending to \(pairing.host.yours)…"
+        case .working: return "\(pairing.host.yoursCapitalized) is on it…"
         case .done: return "Done"
         case .failed: return "Didn't work"
         }
@@ -264,13 +269,13 @@ struct ContentView: View {
 
     private var claude: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
-            SectionTitle(title: "Claude on your Mac",
+            SectionTitle(title: "Claude on \(pairing.host.yours)",
                          note: link.sessions.isEmpty ? nil : "\(link.sessions.count) session\(link.sessions.count == 1 ? "" : "s")")
             if link.summariesShared != true {
                 Label {
                     Text(link.summariesShared == false
-                         ? "Turn on “Send Claude's summaries to my iPhone” in \(phone.world.settings.petName)'s Settings › iPhone on your Mac to see what each session did and reply to it here."
-                         : "Waiting to hear from your Mac…")
+                         ? "Turn on “Send Claude's summaries to my phones” in \(phone.world.settings.petName)'s Settings › Phones on \(pairing.host.yours) to see what each session did and reply to it here."
+                         : "Waiting to hear from \(pairing.host.yours)…")
                 } icon: {
                     IconTile(symbol: "text.bubble.fill", tint: Theme.inkSecondary)
                 }
@@ -295,7 +300,7 @@ struct ContentView: View {
     }
 }
 
-/// A small pill under the name: whether the Mac is linked, the friendship level.
+/// A small pill under the name: whether the computer is online, the friendship level.
 struct StatusPill: View {
     let text: String
     let symbol: String

@@ -1,10 +1,11 @@
 import AVFoundation
 import SwiftUI
+import TamagotchiCore
 import UIKit
 import UserNotifications
 
 /// Mochi Pocket's settings: the Lock Screen and Dynamic Island preview, notifications for Claude's
-/// summaries, and how the phone is linked with the Mac.
+/// summaries, and how the phone is linked with its computer (a Mac or a PC).
 struct PocketSettingsView: View {
     let coordinator: ActivityCoordinator
     let link: MacLink
@@ -22,6 +23,8 @@ struct PocketSettingsView: View {
     @State private var personalVoice = AVSpeechSynthesizer.personalVoiceAuthorizationStatus
     @State private var reader = UpdatesReader.shared
     @Environment(\.dismiss) private var dismiss
+    /// The computer this phone is paired with, by name ("your Mac", "your PC").
+    private var host: LinkHostName { PocketLink.shared.host }
 
     var body: some View {
         NavigationStack {
@@ -38,6 +41,8 @@ struct PocketSettingsView: View {
                     }
                     .padding(16)
                 }
+                // Simulator screenshots: `-demoScroll 1` opens at the bottom.
+                .defaultScrollAnchor(UserDefaults.standard.bool(forKey: "demoScroll") ? .bottom : .top)
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -84,7 +89,7 @@ struct PocketSettingsView: View {
                 }
             }
             Text(coordinator.activitiesEnabled
-                 ? "Your Mac shows Mochi here automatically while Claude works."
+                 ? "\(host.yoursCapitalized) shows Mochi here automatically while Claude works."
                  : "Live Activities are off — turn them on in Settings › Mochi.")
                 .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         }
@@ -274,8 +279,8 @@ struct PocketSettingsView: View {
     private var summariesCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Claude's summaries").font(.mochi(.headline)).foregroundStyle(Theme.ink)
-            row("Shared by your Mac", ok: link.summariesShared == true,
-                detail: link.summariesShared == true ? "On" : link.summariesShared == false ? "Off on the Mac" : "Waiting for your Mac")
+            row("Shared by \(host.yours)", ok: link.summariesShared == true,
+                detail: link.summariesShared == true ? "On" : link.summariesShared == false ? "Off on \(host.yours)" : "Waiting for \(host.yours)")
             row("Notifications", ok: notificationsAllowed, detail: notificationText)
             switch notifications.status {
             case .notDetermined:
@@ -288,9 +293,9 @@ struct PocketSettingsView: View {
             default:
                 EmptyView()
             }
-            Text("When a Claude session on your Mac finishes, you get what it did and the files it changed. Reply from the "
+            Text("When a Claude session on \(host.yours) finishes, you get what it did and the files it changed. Reply from the "
                  + "notification, or from the session's card, and your words go to that session. Turn it on in "
-                 + "\(phone.world.settings.petName)'s Settings › iPhone on your Mac.")
+                 + "\(phone.world.settings.petName)'s Settings › Phones on \(host.yours).")
                 .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         }
         .mochiCard()
@@ -308,18 +313,18 @@ struct PocketSettingsView: View {
         }
     }
 
-    // MARK: Your Mac
+    // MARK: Your computer
 
     private var macCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Your Mac").font(.mochi(.headline)).foregroundStyle(Theme.ink)
+            Text(host.yoursCapitalized).font(.mochi(.headline)).foregroundStyle(Theme.ink)
             row("Mochi Link", ok: PocketLink.shared.paired, detail: PocketLink.shared.paired ? "Paired" : "Not paired yet")
-            row("Room and pet", ok: phone.linkedToMac, detail: phone.linkedToMac ? "Following your Mac" : "Waiting for your Mac")
+            row("Room and pet", ok: phone.linkedToMac, detail: phone.linkedToMac ? "Following \(host.yours)" : "Waiting for \(host.yours)")
             row("Live Activity address", ok: coordinator.hasPushToStartToken,
                 detail: coordinator.hasPushToStartToken
                     ? "Shared" + (coordinator.lastSaved.map { " · \($0.formatted(.relative(presentation: .named)))" } ?? "")
                     : "Not shared yet")
-            Text("Your iPhone and Mac talk through Mochi Link (above): your own relay, end-to-end encrypted, no account.")
+            Text("This iPhone and \(host.yours) talk through Mochi Link (above): your own relay, end-to-end encrypted, no account.")
                 .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         }
         .mochiCard()
@@ -332,15 +337,15 @@ struct PocketSettingsView: View {
             Text("Mochi Cloud").font(.mochi(.headline)).foregroundStyle(Theme.ink)
             row("Hourly checks", ok: link.cloudSeenAt != nil,
                 detail: link.cloudSeenAt.map { "Last news \($0.formatted(.relative(presentation: .named)))" } ?? "No news from the cloud yet")
-            row("Check now without your Mac", ok: link.cloudAvailable, detail: link.cloudAvailable ? "Ready" : "Add the API trigger on your Mac")
+            row("Check now without \(host.yours)", ok: link.cloudAvailable, detail: link.cloudAvailable ? "Ready" : "Add the API trigger on \(host.yours)")
             Toggle("Check now always asks Mochi Cloud", isOn: $checkNowUsesCloud)
                 .font(.mochi(.subheadline))
             Text(checkNowUsesCloud
-                 ? "Check now goes straight to the cloud, whether your Mac is on or off. Answers take a minute or two and arrive as a notification."
-                 : "Check now asks your Mac first (faster when it's on) and the cloud only when your Mac doesn't answer.")
+                 ? "Check now goes straight to the cloud, whether \(host.yours) is on or off. Answers take a minute or two and arrive as a notification."
+                 : "Check now asks \(host.yours) first (faster when it's on) and the cloud only when it doesn't answer.")
                 .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
-            Text("While your Mac is off, a Claude task in Anthropic's cloud checks your mail, calendar and Notion every hour from 8 am "
-                 + "to 11 pm and notifies you here. News your Mac already gave you arrives quietly. Set it up in your Mac's "
+            Text("While \(host.yours) is off, a Claude task in Anthropic's cloud checks your mail, calendar and Notion every hour from 8 am "
+                 + "to 11 pm and notifies you here. News \(host.yours) already gave you arrives quietly. Set it up in \(host.yours)'s "
                  + "Settings › Agent › Mochi Cloud.")
                 .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
         }

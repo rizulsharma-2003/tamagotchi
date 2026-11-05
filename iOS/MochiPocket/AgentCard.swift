@@ -32,6 +32,8 @@ struct AgentCard: View {
 
     private static let shown = 4
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// The computer this phone is paired with, by name ("your Mac", "your PC").
+    private var host: LinkHostName { PocketLink.shared.host }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
@@ -107,8 +109,8 @@ struct AgentCard: View {
             }
             if !cloudAvailable {
                 Label(cloudSeen
-                      ? "Mochi Cloud keeps checking while your Mac is off. Add its API trigger on your Mac (Settings › Agent › Mochi Cloud) so Check now works then too."
-                      : "Only your Mac can check right now. Set up Mochi Cloud on your Mac (Settings › Agent) to check while it's off.",
+                      ? "Mochi Cloud keeps checking while \(host.yours) is off. Add its API trigger on \(host.yours) (Settings › Agent › Mochi Cloud) so Check now works then too."
+                      : "Only \(host.yours) can check right now. Set up Mochi Cloud on \(host.yours) (Settings › Agent) to check while it's off.",
                       systemImage: cloudSeen ? "cloud" : "cloud.slash")
                     .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
             }
@@ -162,7 +164,7 @@ struct AgentCard: View {
     @ViewBuilder
     private var checkedText: some View {
         if let looked = pending.lookedAt {
-            Text("Checked by \(checkedBy == "cloud" ? "Mochi Cloud" : "your Mac") · \(Date(timeIntervalSince1970: looked).formatted(.relative(presentation: .named)))")
+            Text("Checked by \(checkedBy == "cloud" ? "Mochi Cloud" : host.yours) · \(Date(timeIntervalSince1970: looked).formatted(.relative(presentation: .named)))")
                 .font(.mochi(.footnote)).foregroundStyle(Theme.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

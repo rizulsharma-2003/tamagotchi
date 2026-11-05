@@ -146,7 +146,7 @@ final class PhoneWorld: WorldEffects {
         eventCount += 1
         var event = WireEvent(id: "mirror-\(eventCount)-\(UUID().uuidString.prefix(6))", ts: Date().timeIntervalSince1970,
                               origin: .simulator, event: name, session: session)
-        event.project = "Your Mac"
+        event.project = PocketLink.shared.host.yoursCapitalized
         event.projectKey = "macmirror0"
         if let tool {
             event.tool = tool
