@@ -123,10 +123,17 @@ struct PhoneSettingsView: View {
                     status("Your iPhone", ok: false, detail: "Not paired yet")
                 }
                 ForEach(link.devices, id: \.device) { peer in
-                    status(peer.name ?? (peer.role == "pocket" ? "iPhone" : peer.role.capitalized), ok: peer.online,
-                           detail: peer.online ? "Online" : "Away" + (peer.lastSeen.map {
-                               " · \(Date(timeIntervalSince1970: $0 > 10_000_000_000 ? $0 / 1000 : $0).formatted(.relative(presentation: .named)))"
-                           } ?? ""))
+                    let seen = peer.lastSeen.map {
+                        Date(timeIntervalSince1970: $0 > 10_000_000_000 ? $0 / 1000 : $0).formatted(.relative(presentation: .named))
+                    }
+                    if peer.role == "cloud" {
+                        // The cloud never stays connected: it posts when a check runs, so "away" would look like a fault.
+                        status(peer.name ?? "Mochi Cloud", ok: seen != nil,
+                               detail: seen.map { "Last check \($0)" } ?? "Hasn't checked in yet")
+                    } else {
+                        status(peer.name ?? (peer.role == "pocket" ? "iPhone" : peer.role.capitalized), ok: peer.online,
+                               detail: peer.online ? "Online" : "Away" + (seen.map { " · \($0)" } ?? ""))
+                    }
                 }
             }
             if let code = link.code {
