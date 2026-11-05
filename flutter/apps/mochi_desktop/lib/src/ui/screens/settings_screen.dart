@@ -3,22 +3,29 @@ import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_wire/mochi_wire.dart';
 
 import '../../desktop.dart';
+import '../../platform/taskbar.dart';
+import '../pet/taskbar_stroll.dart';
 
 /// Settings: Claude Code, phones, appearance, the desktop pet, Ask Mochi, about.
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key, required this.desktop, required this.onPair});
+  const SettingsScreen({super.key, required this.desktop, required this.onPair, this.stroll});
 
   final MochiDesktop desktop;
   final VoidCallback onPair;
 
+  /// The pet's stroll along the taskbar: why it isn't roaming, if it isn't.
+  final TaskbarStroll? stroll;
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([desktop.settings, desktop.hooks, desktop.link, desktop.motion]),
+    listenable: Listenable.merge([desktop.settings, desktop.hooks, desktop.link, desktop.motion, ?stroll]),
     builder: (context, _) {
       final p = context.palette;
       final settings = desktop.settings;
       final hooks = desktop.hooks;
       final inspection = hooks.inspection;
+      final roamBlock = stroll?.block;
+      final roamNote = settings.roamTaskbar && roamBlock != null && roamBlock != RoamBlock.turnedOff ? roamBlock.note : null;
       return Scrollbar(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(Space.l, Space.xs, Space.l, Space.xl),
@@ -150,10 +157,26 @@ class SettingsScreen extends StatelessWidget {
                     value: settings.showPet,
                     onChanged: (value) => settings.showPet = value,
                   ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Roam along the taskbar'),
+                    subtitle: Text(
+                      'Mochi strolls in the taskbar’s empty stretches, naps there, and stops to face you when Claude '
+                      'needs you. Drag it off the taskbar to leave it somewhere else.',
+                      style: context.type.footnote,
+                    ),
+                    value: settings.roamTaskbar,
+                    onChanged: settings.showPet ? (value) => settings.roamTaskbar = value : null,
+                  ),
+                  if (roamNote != null) ...[
+                    NoteLabel(icon: Icons.info_outline_rounded, text: roamNote),
+                    const SizedBox(height: Space.s),
+                  ],
                   NoteLabel(
                     icon: Icons.motion_photos_paused_outlined,
                     text: desktop.motion.reduced
-                        ? 'Animation effects are off on this computer, so Mochi moves more calmly.'
+                        ? 'Animation effects are off on this computer, so Mochi moves more calmly and stays put on the '
+                              'taskbar.'
                         : 'Mochi moves more calmly when you turn animation effects off in your system settings.',
                   ),
                 ],

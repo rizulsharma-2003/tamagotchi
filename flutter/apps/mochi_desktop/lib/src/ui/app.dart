@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,7 +9,9 @@ import 'package:mochi_ui/mochi_ui.dart';
 
 import '../core/pet_cues.dart';
 import '../desktop.dart';
+import '../platform/taskbar.dart';
 import 'pet/pet_surface.dart';
+import 'pet/taskbar_stroll.dart';
 import 'screens/home_screen.dart';
 import 'screens/pairing_screen.dart';
 import 'screens/settings_screen.dart';
@@ -26,10 +30,20 @@ class DesktopApp extends StatefulWidget {
     this.library,
     this.initialSurface = Surface.pet,
     this.initialPage = MainPage.home,
+    this.taskbar,
+    this.strollClock,
+    this.strollRandom,
   });
 
   final MochiDesktop desktop;
   final DesktopShell shell;
+
+  /// Where the taskbar is (Win32 on Windows, none elsewhere, a fake in tests).
+  final TaskbarInfo? taskbar;
+
+  /// The stroll's clock (seconds) and dice, for tests.
+  final double Function()? strollClock;
+  final math.Random? strollRandom;
 
   /// The recorded animations; loaded from the assets when not given.
   final Future<PoseLibrary?>? library;
@@ -48,10 +62,39 @@ class DesktopAppState extends State<DesktopApp> {
   PoseLibrary? _library;
   late DateTime _lastActivity = widget.desktop.sessions.now;
   final List<StreamSubscription<Object?>> _subscriptions = [];
+  late final TaskbarStroll _stroll = TaskbarStroll(
+    shell: widget.shell,
+    taskbar: widget.taskbar ?? systemTaskbar(),
+    settings: desktop.settings,
+    motion: desktop.motion,
+    cues: desktop.cues,
+    idle: () => desktop.sessions.now.difference(_lastActivity),
+    clock: widget.strollClock,
+    random: widget.strollRandom,
+    log: _strollLog(),
+  );
+  late bool _trayRoaming = desktop.settings.roamTaskbar;
 
   MochiDesktop get desktop => widget.desktop;
   Surface get surface => _surface;
   MainPage get page => _page;
+
+  /// Mochi's stroll along the taskbar (and every change to the window).
+  TaskbarStroll get stroll => _stroll;
+
+  /// Development: with a `stroll-debug` file in Mochi's folder, the stroll writes what it sees to `stroll.log` there.
+  void Function(String)? _strollLog() {
+    final folder = desktop.paths.home;
+    if (!File('$folder${Platform.pathSeparator}stroll-debug').existsSync()) return null;
+    final file = File('$folder${Platform.pathSeparator}stroll.log');
+    return (message) {
+      try {
+        file.writeAsStringSync('${DateTime.now().toIso8601String()} $message\n', mode: FileMode.append);
+      } on Object {
+        // Diagnostics only.
+      }
+    };
+  }
 
   @override
   void initState() {
@@ -61,7 +104,8 @@ class DesktopAppState extends State<DesktopApp> {
     _subscriptions.add(desktop.cues.listen(_noteActivity));
     desktop.sessions.addListener(_sessionsChanged);
     desktop.settings.addListener(_settingsChanged);
-    unawaited(widget.shell.show(_surface, petPosition: desktop.settings.petPosition));
+    unawaited(widget.shell.setRoaming(_trayRoaming));
+    unawaited(_stroll.show(_surface));
   }
 
   Future<void> _loadLibrary() async {
@@ -80,8 +124,12 @@ class DesktopAppState extends State<DesktopApp> {
     if (last != null && last.isAfter(_lastActivity)) _lastActivity = last;
   }
 
-  /// "Mochi on the desktop" switched while the main window is closed.
+  /// "Mochi on the desktop" switched while the main window is closed; "Roam along the taskbar" ticks in the tray.
   void _settingsChanged() {
+    if (desktop.settings.roamTaskbar != _trayRoaming) {
+      _trayRoaming = desktop.settings.roamTaskbar;
+      unawaited(widget.shell.setRoaming(_trayRoaming));
+    }
     if (_surface == Surface.main) return;
     final wanted = desktop.settings.showPet ? Surface.pet : Surface.hidden;
     if (wanted != _surface) _show(wanted);
@@ -96,6 +144,12 @@ class DesktopAppState extends State<DesktopApp> {
         open(MainPage.pairing);
       case ShellAction.settings:
         open(MainPage.settings);
+      case ShellAction.toggleRoaming:
+        desktop.settings.roamTaskbar = !desktop.settings.roamTaskbar;
+      case ShellAction.backToTaskbar:
+        desktop.settings
+          ..roamTaskbar = true
+          ..showPet = true;
       case ShellAction.closeWindow:
         if (_surface == Surface.main) {
           closeMain();
@@ -117,12 +171,18 @@ class DesktopAppState extends State<DesktopApp> {
 
   void _show(Surface surface) {
     setState(() => _surface = surface);
-    unawaited(widget.shell.show(surface, petPosition: desktop.settings.petPosition));
+    unawaited(_stroll.show(surface));
   }
 
-  Future<void> _rememberPetPosition() async {
-    final position = await widget.shell.position();
-    if (position != null) desktop.settings.petPosition = position;
+  /// Moves the pet with the mouse until it's dropped (window_manager's drag returns then): off the taskbar, Mochi
+  /// stays where it's dropped.
+  Future<void> _drag() async {
+    _stroll.dragStarted();
+    try {
+      await widget.shell.startDragging();
+    } finally {
+      _stroll.dragEnded(await widget.shell.position());
+    }
   }
 
   Future<void> _quit() async {
@@ -137,12 +197,13 @@ class DesktopAppState extends State<DesktopApp> {
     }
     desktop.sessions.removeListener(_sessionsChanged);
     desktop.settings.removeListener(_settingsChanged);
+    _stroll.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([desktop.settings, desktop.motion]),
+    listenable: Listenable.merge([desktop.settings, desktop.motion, _stroll]),
     builder: (context, _) => MaterialApp(
       title: 'Mochi',
       debugShowCheckedModeBanner: false,
@@ -158,12 +219,13 @@ class DesktopAppState extends State<DesktopApp> {
       home: switch (_surface) {
         Surface.pet => PetSurface(
           desktop: desktop,
+          stroll: _stroll,
           library: _library,
           lastActivity: () => _lastActivity,
           onAction: handle,
-          onDragStart: () => unawaited(widget.shell.startDragging()),
-          onDragEnd: () => unawaited(_rememberPetPosition()),
+          onDragStart: () => unawaited(_drag()),
           onHide: () => desktop.settings.showPet = false,
+          onNativeMenu: () => unawaited(widget.shell.popUpMenu()),
         ),
         Surface.main => _MainSurface(state: this),
         Surface.hidden => const SizedBox.shrink(),
@@ -225,7 +287,11 @@ class _MainSurface extends StatelessWidget {
                         onTestNotification: desktop.phone.sendTestNotification,
                         clock: () => desktop.sessions.now,
                       ),
-                      MainPage.settings => SettingsScreen(desktop: desktop, onPair: () => state.open(MainPage.pairing)),
+                      MainPage.settings => SettingsScreen(
+                        desktop: desktop,
+                        stroll: state.stroll,
+                        onPair: () => state.open(MainPage.pairing),
+                      ),
                     },
                   ),
                 ],

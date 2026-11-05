@@ -32,6 +32,9 @@ dependencies:
   tray_manager: 0.5.3
   # The frameless, transparent, always-on-top pet window and the main window (0.5.2: 2026-07-04; 0.6 needs Dart 3.13).
   window_manager: 0.5.2
+  # Win32 calls for the taskbar stroll: monitors, DPI, moving the pet's window (5.15.0: the version already in the
+  # workspace's lock file, through mochi_pocket's flutter_secure_storage_windows; nothing new is downloaded).
+  win32: 5.15.0
 
 dev_dependencies:
   flutter_test:

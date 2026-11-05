@@ -3,7 +3,8 @@
 // Flutter 3.35 has one window per app, so the window has two forms: the desktop pet (small, frameless, transparent,
 // always on top, not in the taskbar) and the main window (Mochi's sessions, Ask Mochi, pairing, settings). The window
 // is frameless in both: the main window draws its own title bar and rounded corners. Closing it brings the pet back;
-// Quit is in the tray menu.
+// Quit is in the tray menu. On Windows the pet strolls along the taskbar in a smaller window (ui/pet/taskbar_stroll.dart),
+// moved through Win32 (`petWindow`).
 
 import 'dart:async';
 import 'dart:io';
@@ -13,15 +14,40 @@ import 'package:flutter/services.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../platform/taskbar.dart';
+import '../platform/win32_taskbar.dart';
+
 /// Which form the window has.
 enum Surface { pet, main, hidden }
 
 /// What the tray menu (and the pet's menu) can ask for.
-enum ShellAction { showMain, closeWindow, pair, settings, quit }
+enum ShellAction {
+  showMain,
+  closeWindow,
+  pair,
+  settings,
+
+  /// "Roam along the taskbar", switched on or off.
+  toggleRoaming,
+
+  /// "Back to the taskbar": roaming on again after Mochi was dragged off it.
+  backToTaskbar,
+  quit,
+}
 
 abstract interface class DesktopShell {
-  /// Shows [surface]: the pet at [petPosition] (screen coordinates; null: bottom left, just above the taskbar).
-  Future<void> show(Surface surface, {Offset? petPosition});
+  /// Shows [surface]: the pet at [petPosition] (screen coordinates; null: bottom left, just above the taskbar), with
+  /// the window [petSize] big.
+  Future<void> show(Surface surface, {Offset? petPosition, Size petSize = SurfaceSizes.pet});
+
+  /// The pet's window for Win32 moves (Windows only; null elsewhere, where Mochi doesn't roam).
+  PetWindow? get petWindow;
+
+  /// Ticks (or unticks) "Roam along the taskbar" in the tray menu.
+  Future<void> setRoaming(bool roaming);
+
+  /// Shows the tray's menu at the pointer (right-clicking Mochi in the taskbar, whose window is too small for its own).
+  Future<void> popUpMenu();
 
   /// Moves the window with the mouse (call on a drag start).
   Future<void> startDragging();
@@ -38,7 +64,29 @@ abstract interface class DesktopShell {
 
 /// The size of each form, in logical pixels.
 abstract final class SurfaceSizes {
+  /// The pet standing still: Mochi with room for its speech bubble above.
   static const Size pet = Size(176, 200);
+
+  /// The pet's window in the taskbar is Mochi's box (TaskbarStage.box, sized by the taskbar); with a speech bubble it
+  /// grows upwards by [bubble] and widens to this.
+  static const double taskbarBubbleWidth = 176;
+
+  /// Never smaller than this in any pet form (Mochi's box in a small taskbar).
+  static const Size petMinimum = Size(24, 24);
+
+  /// Mochi's own box at the bottom of every pet window, and the bubble's room above it.
+  static const double petStage = 144;
+  static const double bubble = 56;
+
+  /// How high Mochi's feet are above the bottom of its box, as a part of the box's height: room for its shadow when it
+  /// stands still, barely any in the taskbar.
+  static const double standingFeet = 0.06;
+  static const double taskbarFeet = 0.03;
+
+  /// How much of its box's height Mochi fills, standing and in the taskbar.
+  static const double standingFill = 0.78;
+  static const double taskbarFill = 0.92;
+
   static const Size main = Size(460, 720);
   static const Size mainMinimum = Size(400, 520);
 }
@@ -49,8 +97,13 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
 
   final StreamController<ShellAction> _actions = StreamController.broadcast();
   Surface _surface = Surface.hidden;
+  PetWindow? _petWindow;
+  bool _roaming = true;
 
   Surface get surface => _surface;
+
+  @override
+  PetWindow? get petWindow => _petWindow;
 
   /// The Windows runner sends `showMain` here when Mochi is launched a second time (windows/runner/flutter_window.cpp).
   static const MethodChannel _instance = MethodChannel('mochi/instance');
@@ -77,6 +130,7 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
     _instance.setMethodCallHandler((call) async {
       if (call.method == 'showMain') _actions.add(ShellAction.showMain);
     });
+    if (Platform.isWindows) _petWindow = Win32PetWindow(await windowManager.getId());
     await _initTray();
   }
 
@@ -84,21 +138,30 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
     trayManager.addListener(this);
     await trayManager.setIcon(Platform.isWindows ? 'assets/tray/tray_icon.ico' : 'assets/tray/tray_icon.png');
     if (!Platform.isLinux) await trayManager.setToolTip('Mochi');
-    await trayManager.setContextMenu(
-      Menu(
-        items: [
-          MenuItem(key: ShellAction.showMain.name, label: 'Show Mochi'),
-          MenuItem(key: ShellAction.pair.name, label: 'Pair a Phone…'),
-          MenuItem(key: ShellAction.settings.name, label: 'Settings'),
-          MenuItem.separator(),
-          MenuItem(key: ShellAction.quit.name, label: 'Quit Mochi'),
-        ],
-      ),
-    );
+    await trayManager.setContextMenu(Menu(items: trayItems(roaming: _roaming)));
+  }
+
+  /// The tray menu.
+  static List<MenuItem> trayItems({required bool roaming}) => [
+    MenuItem(key: ShellAction.showMain.name, label: 'Show Mochi'),
+    MenuItem(key: ShellAction.pair.name, label: 'Pair a Phone…'),
+    MenuItem(key: ShellAction.settings.name, label: 'Settings'),
+    MenuItem.separator(),
+    MenuItem.checkbox(key: ShellAction.toggleRoaming.name, label: 'Roam along the taskbar', checked: roaming),
+    MenuItem(key: ShellAction.backToTaskbar.name, label: 'Back to the taskbar', disabled: roaming),
+    MenuItem.separator(),
+    MenuItem(key: ShellAction.quit.name, label: 'Quit Mochi'),
+  ];
+
+  @override
+  Future<void> setRoaming(bool roaming) async {
+    if (roaming == _roaming) return;
+    _roaming = roaming;
+    await trayManager.setContextMenu(Menu(items: trayItems(roaming: roaming)));
   }
 
   @override
-  Future<void> show(Surface surface, {Offset? petPosition}) async {
+  Future<void> show(Surface surface, {Offset? petPosition, Size petSize = SurfaceSizes.pet}) async {
     final previous = _surface;
     _surface = surface;
     switch (surface) {
@@ -109,8 +172,8 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
         await windowManager.setSkipTaskbar(true);
         await windowManager.setResizable(false);
         await windowManager.setHasShadow(false);
-        await windowManager.setMinimumSize(SurfaceSizes.pet);
-        await windowManager.setSize(SurfaceSizes.pet);
+        await windowManager.setMinimumSize(SurfaceSizes.petMinimum);
+        await windowManager.setSize(petSize);
         if (petPosition != null) {
           await windowManager.setPosition(petPosition);
         } else {
@@ -180,6 +243,6 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
     if (action != null) _actions.add(action);
   }
 
-  /// Development (`MOCHI_DESKTOP_OPEN=tray`): pops the tray menu up without a click, for screenshots.
-  Future<void> popUpTrayMenu() => trayManager.popUpContextMenu();
+  @override
+  Future<void> popUpMenu() => trayManager.popUpContextMenu();
 }

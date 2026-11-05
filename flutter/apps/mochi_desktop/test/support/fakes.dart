@@ -15,6 +15,7 @@ import 'package:mochi_desktop/src/desktop.dart';
 import 'package:mochi_desktop/src/link/link_host.dart';
 import 'package:mochi_desktop/src/platform/credential_vault.dart';
 import 'package:mochi_desktop/src/platform/system.dart';
+import 'package:mochi_desktop/src/platform/taskbar.dart';
 import 'package:mochi_desktop/src/ui/shell.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_wire/mochi_wire.dart';
@@ -153,27 +154,164 @@ class FakeClaude implements ClaudeRunner {
   }
 }
 
-/// The native window: records what was shown.
+/// The native window: records what was shown (and where the pet went).
 class FakeShell implements DesktopShell {
+  FakeShell({this.petWindow});
+
   final List<Surface> shown = [];
+  final List<({Surface surface, Offset? position, Size size})> shows = [];
   final StreamController<ShellAction> controller = StreamController.broadcast();
+  final List<bool> trayRoaming = [];
   int drags = 0;
+  int menus = 0;
   bool quit_ = false;
+
+  /// Where a drag leaves the window (window_manager's logical top-left).
+  Offset dropAt = const Offset(100, 200);
+
+  @override
+  final FakePetWindow? petWindow;
 
   @override
   Stream<ShellAction> get actions => controller.stream;
 
   @override
-  Future<void> show(Surface surface, {Offset? petPosition}) async => shown.add(surface);
+  Future<void> show(Surface surface, {Offset? petPosition, Size petSize = SurfaceSizes.pet}) async {
+    shown.add(surface);
+    shows.add((surface: surface, position: petPosition, size: petSize));
+  }
+
+  @override
+  Future<void> setRoaming(bool roaming) async => trayRoaming.add(roaming);
+
+  @override
+  Future<void> popUpMenu() async => menus++;
 
   @override
   Future<void> startDragging() async => drags++;
 
   @override
-  Future<Offset?> position() async => const Offset(100, 200);
+  Future<Offset?> position() async => dropAt;
 
   @override
   Future<void> quit() async => quit_ = true;
+}
+
+/// The pet's window in physical pixels: records every move and resize, and whether clicks go through it.
+class FakePetWindow implements PetWindow {
+  PixelRect? current;
+  final List<PixelRect> frames = [];
+  final List<PixelRect> moves = [];
+  final List<bool> clickThrough = [];
+  int raises = 0;
+
+  @override
+  void move(int left, int top) {
+    final now = current!;
+    current = PixelRect.ltwh(left, top, now.width, now.height);
+    moves.add(current!);
+  }
+
+  @override
+  Future<void> setFrame(PixelRect frame) async {
+    current = frame;
+    frames.add(frame);
+  }
+
+  @override
+  PixelRect? frame() => current;
+
+  @override
+  void raise() => raises++;
+
+  @override
+  void setClickThrough(bool through) => clickThrough.add(through);
+
+  int settles = 0;
+
+  @override
+  void settle() => settles++;
+}
+
+/// A taskbar the test sets up: at the bottom of a 1920×1080 screen at 100% by default, with the tray at the right,
+/// the widgets tile at the left and the buttons centred.
+class FakeTaskbar implements TaskbarInfo {
+  FakeTaskbar([TaskbarReading? reading, this.measured]) : reading = reading ?? bottomTaskbar();
+
+  TaskbarReading? reading;
+
+  /// What UI Automation finds (null: nothing, so the zones are estimated).
+  List<PixelRect>? measured;
+  bool busy = false;
+  bool inFront = false;
+  (int, int)? pointer;
+  int reads = 0;
+  int measures = 0;
+
+  /// A [width]×[height] screen at [scale] with a 48-logical-pixel taskbar along the bottom (and a 280-wide tray).
+  static TaskbarReading bottomTaskbar({
+    int width = 1920,
+    int height = 1080,
+    double scale = 1,
+    bool autoHide = false,
+    bool centred = true,
+    bool widgets = true,
+    TaskbarEdge edge = TaskbarEdge.bottom,
+  }) {
+    final bar = (48 * scale).round();
+    return TaskbarReading(
+      edge: edge,
+      bounds: PixelRect(0, height - bar, width, height),
+      monitor: PixelRect(0, 0, width, height),
+      workArea: PixelRect(0, 0, width, autoHide ? height : height - bar),
+      autoHide: autoHide,
+      scale: scale,
+      tray: PixelRect(width - (280 * scale).round(), height - bar, width, height),
+      centred: centred,
+      widgets: widgets,
+    );
+  }
+
+  /// Windows 11's buttons as UI Automation reports them on [reading]'s taskbar: the widgets tile (0–150), Start to
+  /// the last app (a centred group [group] logical pixels wide) and the tray.
+  static List<PixelRect> windows11Buttons(TaskbarReading reading, {double group = 480}) {
+    final bar = reading.bounds;
+    int px(double logical) => (logical * reading.scale).round();
+    final centre = bar.left + bar.width ~/ 2;
+    return [
+      // The taskbar itself and a full-width frame: not buttons.
+      bar,
+      PixelRect(bar.left, bar.top, bar.right - 4, bar.bottom),
+      PixelRect(bar.left, bar.top + px(4), bar.left + px(150), bar.bottom - px(4)),
+      for (var i = 0; i < (group / 48).floor(); i++)
+        PixelRect(centre - px(group / 2) + px(48.0 * i), bar.top + px(4), centre - px(group / 2) + px(48.0 * i + 44), bar.bottom - px(4)),
+      reading.tray!,
+    ];
+  }
+
+  @override
+  bool get available => true;
+
+  @override
+  TaskbarReading? read() {
+    reads++;
+    return reading;
+  }
+
+  @override
+  Future<List<PixelRect>?> buttons() async {
+    measures++;
+    return measured;
+  }
+
+  @override
+  bool fullscreenBusy() => busy;
+
+  @override
+  bool taskbarInFront() => inFront;
+
+  @override
+  (int, int)? cursor() => pointer;
 }
 
 /// A desktop wired from fakes in a temporary folder.

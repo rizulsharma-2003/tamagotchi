@@ -6,6 +6,7 @@ import 'package:mochi_art/pose_tracks.dart';
 import '../../core/pet_cues.dart';
 import '../../core/session_store.dart';
 import '../../core/sessions.dart';
+import 'stroller.dart';
 
 /// Mochi's mood, from what Claude is doing (TamagotchiCore's EventToAnimationMapper picks the same loops).
 enum PetMood {
@@ -119,20 +120,70 @@ class PetDirector {
     return interaction && time - current.start < 3;
   }
 
+  /// A one-shot is playing at [time].
+  bool playing(PoseLibrary? library, double time) {
+    final current = shot;
+    if (current == null || library == null) return false;
+    final track = library.petTrack(current.animation, current.variant);
+    return track != null && time - current.start < track.length;
+  }
+
   void _play(PetAnimation animation, double time, {int variants = 1}) {
     shot = (animation: animation, variant: variants > 1 ? _random.nextInt(variants) : 0, start: time);
   }
 
-  /// Mochi's pose at [time]: calmer (slower, smaller) when [calm].
-  PetPose pose(PoseLibrary? library, double time, {bool calm = false}) {
-    if (library == null) return PetPose();
+  /// Mochi's pose at [time]: calmer (slower, smaller) when [calm]. On the taskbar, [roam] says what Mochi is doing
+  /// there (walking, sitting, napping…) and which way it faces; a one-shot (a pet, a finished turn) still plays over it.
+  PetPose pose(PoseLibrary? library, double time, {bool calm = false, StrollSample? roam}) {
+    final pose = _pose(library, time, calm: calm, roam: roam);
+    return roam == null ? pose : _strolling(pose, roam);
+  }
+
+  PetPose _pose(PoseLibrary? library, double time, {required bool calm, StrollSample? roam}) {
+    if (library == null) return roam == null ? PetPose() : _bob(PetPose(), roam);
     final current = shot;
     if (current != null) {
       final track = library.petTrack(current.animation, current.variant);
       if (track != null && time - current.start < track.length) return track.calmed(time - current.start, calm: calm, oneShot: true);
       shot = null;
     }
+    if (roam != null) {
+      final track = library.petTrack(roam.animation);
+      if (track != null) return track.calmed(roam.animationTime, calm: calm, oneShot: roam.oneShot);
+      // No recorded walk: a gentle bob on the idle loop.
+      final idle = library.petTrack(PetAnimation.idle);
+      return _bob(idle == null ? PetPose() : idle.calmed(time, calm: calm), roam);
+    }
     final loop = library.petTrack(mood.loop);
     return loop == null ? PetPose() : loop.calmed(time, calm: calm);
+  }
+
+  static PetPose _bob(PetPose pose, StrollSample roam) {
+    if (roam.travelling) pose.y += 0.05 * math.sin(math.pi * 2 * roam.animationTime).abs();
+    return pose;
+  }
+
+  /// Mochi's pose turned the way it walks (the recorded tracks face right), with the stroll's accents (the Mac's
+  /// attentive and notice styles).
+  static PetPose _strolling(PetPose input, StrollSample roam) {
+    final pose = roam.facing < 0 ? input.mirrored() : input;
+    // Fading out and in, hopping to another stretch of the taskbar.
+    pose.opacity *= roam.opacity;
+    switch (roam.style) {
+      case StrollStyle.attentive:
+        pose
+          ..lookX = 0.02
+          ..lookY = -0.12
+          ..earPerk = math.max(pose.earPerk, 0.4);
+        if (pose.eyes == PetEyes.happy) pose.eyes = PetEyes.open;
+      case StrollStyle.notice:
+        pose
+          ..earPerk = math.max(pose.earPerk, 0.85)
+          ..lookX = 0.85 * roam.facing
+          ..lookY = -0.05;
+      case StrollStyle.plain:
+        break;
+    }
+    return pose;
   }
 }
