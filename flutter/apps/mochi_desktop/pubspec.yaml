@@ -1,0 +1,46 @@
+name: mochi_desktop
+description: >-
+  Mochi for Windows: the desktop `host` app (docs/MOCHI_LINK_PLAN.md 5.4, phase 10). A tray icon and a desktop pet that
+  follows your Claude Code sessions through Claude Code hooks, a Mochi Link room your iPhone or Android phone pairs
+  with, and Ask Mochi through `claude -p`. Developed as a macOS build; the Windows parts sit behind interfaces.
+publish_to: none
+version: 0.1.0+1
+resolution: workspace
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=3.35.0"
+
+# New packages are pinned to exact versions at least two weeks old, each checked against this Flutter (3.35, Dart 3.9).
+# Dates are pub.dev's publication dates.
+dependencies:
+  flutter:
+    sdk: flutter
+  mochi_art:
+    path: ../../packages/mochi_art
+  mochi_link:
+    path: ../../packages/mochi_link
+  mochi_ui:
+    path: ../../packages/mochi_ui
+  mochi_wire:
+    path: ../../packages/mochi_wire
+  # Win32 calls (DPAPI, the Animation effects setting) through dart:ffi (2.2.0: 2026-02-11; already in the workspace).
+  ffi: 2.2.0
+  # The pairing QR code, drawn by our own painter (3.0.2: 2024-07-16; 3.0.3 is days old, 4.x needs Dart 3.11+).
+  qr: 3.0.2
+  # The tray icon and its menu (0.5.3: 2026-06-09; 0.6+ moved onto the new `nativeapi` layer, 0.7+ needs Dart 3.13).
+  tray_manager: 0.5.3
+  # The frameless, transparent, always-on-top pet window and the main window (0.5.2: 2026-07-04; 0.6 needs Dart 3.13).
+  window_manager: 0.5.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    # Mochi's animations recorded from the Swift app (the same file as mochi_pocket's and mochi_gallery's).
+    - assets/pose_tracks.json.deflate
+    # The tray icon: .ico for Windows, a template PNG for the macOS menu bar.
+    - assets/tray/

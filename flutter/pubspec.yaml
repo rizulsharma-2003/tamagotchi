@@ -8,5 +8,8 @@ environment:
 workspace:
   - packages/mochi_art
   - packages/mochi_link
+  - packages/mochi_ui
+  - packages/mochi_wire
   - apps/mochi_gallery
   - apps/mochi_pocket
+  - apps/mochi_desktop
