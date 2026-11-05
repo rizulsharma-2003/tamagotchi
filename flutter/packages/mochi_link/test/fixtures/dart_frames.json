@@ -1,0 +1,30 @@
+{
+  "about": "Frames sealed by the Dart client (RelayLink.frame) with fixed ids, times and nonces. Swift RelayLinkStore.open must open them (Tests/TamagotchiCoreTests/LinkTests.swift). Regenerate with MOCHI_WRITE_DART_FRAMES=1 dart test test/frame_test.dart.",
+  "credentials": {
+    "relay": "localhost:8787",
+    "room": "room_1",
+    "device": "dev_win",
+    "secret": "s1",
+    "key": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "role": "host"
+  },
+  "frames": [
+    {
+      "value": {
+        "id": "cmd-1",
+        "text": "What's pending? — मोची 🐾",
+        "at": 1762243200,
+        "typed": true
+      },
+      "frame": "{\"v\":1,\"op\":\"send\",\"key\":\"command\",\"id\":\"dart-0\",\"to\":[\"host\"],\"at\":1762243200,\"ttl\":600,\"nonce\":\"AAECAwQFBgcICQoL\",\"box\":\"PJMAbvWbf2dV51yEhITj2I7yUhxNutpsPKcrPew8bwQWX1H_U2MQYTM4cOiz0gGaELpfDXh9aWpb4RT4j2jfNHZHpLschtsNzFcp7UGkjUJUwo4qj0uapm5Tx3yKGXOqEgCnnUhLFDeKC5xi--kaTQ\"}"
+    },
+    {
+      "value": "{\"petName\":\"Mochi\",\"companionName\":\"Patch\"}",
+      "frame": "{\"v\":1,\"op\":\"put\",\"key\":\"look\",\"id\":\"dart-1\",\"at\":1762243200,\"nonce\":\"EBESExQVFhcYGRob\",\"box\":\"6kXZS5k_ivMlvtDJHg35PVKSUsno7akD56Nxg-_TlUkVRE_FvF0YIJ4fncSXa_R0xl6cisXhB_-_8U2jfTIs6HpuWwoKaWsUFiS3\"}"
+    },
+    {
+      "value": null,
+      "frame": "{\"v\":1,\"op\":\"put\",\"key\":\"approval\",\"id\":\"dart-2\",\"at\":1762243200,\"nonce\":\"ICEiIyQlJicoKSor\",\"box\":\"qHL1pwOZID-I0lNI-DEno9Knat-M06RvtKg\"}"
+    }
+  ]
+}

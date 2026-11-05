@@ -1,0 +1,22 @@
+name: mochi_link
+description: >-
+  Mochi Link for the Flutter apps: the Dart client of the end-to-end encrypted relay that the Swift Mac
+  and iPhone apps use (docs/MOCHI_LINK_PLAN.md). AES-256-GCM matching link-spec/vectors.json, pairing,
+  the relay socket with outbox, acks and reconnects, and payload models checked against link-spec/fixtures.
+  Pure Dart (no Flutter SDK), so it runs in CLI tests, on Android and on Windows.
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  # Pinned: the AES-GCM implementation every sealed frame depends on (the spike checked 2.7.0 against
+  # link-spec/vectors.json; 2.9.0 is from 2025-11).
+  cryptography: 2.9.0
+  http: ^1.5.0
+  web_socket_channel: ^3.0.3
+
+dev_dependencies:
+  test: ^1.26.2
