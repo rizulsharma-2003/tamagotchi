@@ -266,6 +266,9 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     return next;
   }
 
+  /// A full-screen app or a presentation has the screen (asked only where the pet's window is a Win32 one).
+  bool _fullscreenBusy() => taskbar.available && shell.petWindow != null && taskbar.fullscreenBusy();
+
   /// Roaming is on and there's a taskbar and a window to move.
   bool get _canRoam => settings.roamTaskbar && taskbar.available && shell.petWindow != null;
 
@@ -526,7 +529,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     if (_observing) return;
     _observing = true;
     WidgetsBinding.instance.addObserver(this);
-    _fullscreen = taskbar.available && taskbar.fullscreenBusy();
+    _fullscreen = _fullscreenBusy();
     _checkTimer = Timer.periodic(checkInterval, (_) => _check());
   }
 
@@ -550,7 +553,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   void _check() {
     if (_dragging) return;
     _checks++;
-    final busy = taskbar.available && taskbar.fullscreenBusy();
+    final busy = _fullscreenBusy();
     if (busy != _fullscreen) {
       _fullscreen = busy;
       unawaited(_enqueue(_place));
@@ -565,7 +568,9 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   void didChangeMetrics() {
     _metricsTimer?.cancel();
     _metricsTimer = Timer(const Duration(milliseconds: 400), () {
-      if (!_dragging) unawaited(refresh());
+      if (_dragging) return;
+      if (_canRoam) unawaited(_measure());
+      unawaited(refresh());
     });
   }
 
