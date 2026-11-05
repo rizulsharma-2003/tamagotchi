@@ -9,10 +9,24 @@ import os
 public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDelegate, @unchecked Sendable {
     public struct Peer: Equatable, Sendable {
         public var device: String
+        /// host · pocket · cloud
         public var role: String
         public var name: String?
+        /// The relay's tag, as the device gave it: `macOS`, `windows`, `iOS`, `android`, `cloud` (see `LinkPlatform`).
+        public var platform: String?
         public var online: Bool
+        /// Seconds.
         public var lastSeen: Double?
+
+        public init(device: String, role: String, name: String? = nil, platform: String? = nil, online: Bool = false,
+                    lastSeen: Double? = nil) {
+            self.device = device
+            self.role = role
+            self.name = name
+            self.platform = platform
+            self.online = online
+            self.lastSeen = lastSeen
+        }
     }
 
     public enum Status: String, Sendable { case connecting, online, offline }
@@ -342,24 +356,29 @@ public final class RelayLinkStore: NSObject, LinkStore, URLSessionWebSocketDeleg
 
     /// `devices` frames list everyone with their names; `presence` frames only who's online. Merged by device id.
     private func updatePeers(_ raw: Any, names: Bool) {
-        let list = raw as? [[String: Any]] ?? []
-        lock.withLock {
-            var merged = names ? [] : _peers
-            for item in list {
-                guard let device = (item["id"] ?? item["device"]) as? String else { continue }
-                var peer = merged.first { $0.device == device }
-                    ?? _peers.first { $0.device == device }
-                    ?? Peer(device: device, role: "", name: nil, online: false, lastSeen: nil)
-                if let role = item["role"] as? String { peer.role = role }
-                if let name = item["name"] as? String { peer.name = name }
-                if let online = item["online"] as? Bool { peer.online = online }
-                if let seen = item["lastSeen"] as? Double { peer.lastSeen = seen }
-                merged.removeAll { $0.device == device }
-                merged.append(peer)
-            }
-            _peers = merged
-        }
+        lock.withLock { _peers = Self.merge(_peers, with: raw, names: names) }
         DispatchQueue.main.async { NotificationCenter.default.post(name: .linkPresenceDidChange, object: nil) }
+    }
+
+    /// `peers` after a `devices` list (`names`: the whole room, replacing it) or a `presence` list (who's online,
+    /// merged in).
+    static func merge(_ peers: [Peer], with raw: Any, names: Bool) -> [Peer] {
+        let list = raw as? [[String: Any]] ?? []
+        var merged = names ? [] : peers
+        for item in list {
+            guard let device = (item["id"] ?? item["device"]) as? String else { continue }
+            var peer = merged.first { $0.device == device }
+                ?? peers.first { $0.device == device }
+                ?? Peer(device: device, role: "")
+            if let role = item["role"] as? String { peer.role = role }
+            if let name = item["name"] as? String { peer.name = name }
+            if let platform = item["platform"] as? String { peer.platform = platform }
+            if let online = item["online"] as? Bool { peer.online = online }
+            if let seen = (item["lastSeen"] as? NSNumber)?.doubleValue { peer.lastSeen = seen }
+            merged.removeAll { $0.device == device }
+            merged.append(peer)
+        }
+        return merged
     }
 
     /// State keys with a write from this device still waiting or unacknowledged (call with the lock held).

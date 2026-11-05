@@ -11,6 +11,8 @@
 /// - Models for every value ([PetLook], [ClaudeMirror], [PhoneSessions], [AgentPending], [AgentDoneList],
 ///   [LinkCommand], [LinkReply], …), checked against `link-spec/fixtures`.
 /// - [LinkAlert]: sealed notifications for the phones (4.6.1), on [RelayLink.alerts] and [RelayLink.sendAlert].
+/// - [LinkPeerNames], [LinkHostName], [LinkPlatform]: what every screen calls the devices in the room ("your Mac",
+///   "your PC", "realme RMX3242 · Android"), as the Swift apps do.
 ///
 /// - [RelayLink.register]: push addresses for the relay's push gateway (an FCM token on Android).
 ///
@@ -23,6 +25,7 @@ export 'src/link_credentials.dart';
 export 'src/link_crypto.dart';
 export 'src/link_envelope.dart';
 export 'src/link_key.dart';
+export 'src/link_names.dart';
 export 'src/link_pairing.dart';
 export 'src/link_socket.dart';
 export 'src/models.dart';
