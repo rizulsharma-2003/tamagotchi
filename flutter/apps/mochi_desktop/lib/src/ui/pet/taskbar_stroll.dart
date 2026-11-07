@@ -279,6 +279,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   /// Shows [surface]: the main window or nothing as before, the pet in the taskbar or standing where it was left, or
   /// the popover above where Mochi is ([popoverFrame]).
   Future<void> show(Surface surface) {
+    log?.call('show: ${surface.name}');
     _surface = surface;
     if (surface == Surface.pet) {
       _start();

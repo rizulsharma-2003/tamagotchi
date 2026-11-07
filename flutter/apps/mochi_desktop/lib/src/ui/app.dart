@@ -172,6 +172,7 @@ class DesktopAppState extends State<DesktopApp> {
 
   /// The tray menu, the pet's menu and the window's close button.
   void handle(ShellAction action) {
+    _stroll.log?.call('action: ${action.name} (showing ${_surface.name})');
     switch (action) {
       case ShellAction.showMain:
         open(MainPage.home);
@@ -194,7 +195,10 @@ class DesktopAppState extends State<DesktopApp> {
           _show(Surface.hidden);
         }
       case ShellAction.dismissPopover:
-        if (_surface == Surface.popover) closePopover();
+        // Windows can take the focus away for a moment while the window changes form: only a click elsewhere after
+        // it opened closes it.
+        final opened = _popoverOpenedAt;
+        if (_surface == Surface.popover && (opened == null || _clock() - opened > popoverSettle)) closePopover();
       case ShellAction.quit:
         unawaited(_quit());
     }
@@ -246,8 +250,14 @@ class DesktopAppState extends State<DesktopApp> {
   /// The popover (the Mac's menu-bar popover): clicking Mochi on the taskbar opens it above where Mochi is; clicking
   /// again (anywhere outside it, Mochi's spot included) or Escape closes it, and Mochi is back where it was.
   void openPopover() {
-    if (_surface == Surface.pet) _show(Surface.popover);
+    if (_surface != Surface.pet) return;
+    _popoverOpenedAt = _clock();
+    _show(Surface.popover);
   }
+
+  /// When the popover opened (the stroll's clock), and how long a lost focus doesn't count as a click elsewhere.
+  double? _popoverOpenedAt;
+  static const double popoverSettle = 0.6;
 
   /// Back to the taskbar (or nothing, if the desktop pet was switched off in the popover).
   void closePopover() {
