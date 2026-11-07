@@ -11,6 +11,7 @@ import 'link_credentials.dart';
 import 'link_crypto.dart';
 import 'link_envelope.dart';
 import 'link_key.dart';
+import 'link_live_activity.dart';
 import 'link_pairing.dart';
 import 'link_socket.dart';
 
@@ -211,6 +212,10 @@ class RelayLink {
   final StreamController<LinkIncoming> _incoming = StreamController.broadcast();
   final StreamController<LinkRelayError> _errors = StreamController.broadcast();
   final StreamController<LinkAlert> _alerts = StreamController.broadcast();
+  final StreamController<LinkLiveActivity> _liveActivities = StreamController.broadcast();
+
+  /// K_la, for the Live Activities an Android phone gets on its socket.
+  late final Uint8List _liveActivityKey = LinkCrypto.liveActivityKey(_key);
 
   static const int _maxOutbox = 64;
   static const int _maxUnacked = 128;
@@ -259,6 +264,10 @@ class RelayLink {
   /// Notifications another device sealed for the phones ([LinkAlert]), once each. iPhones get them as pushes; an app
   /// that has no push yet (Android) shows these.
   Stream<LinkAlert> get alerts => _alerts.stream;
+
+  /// The computer's Live Activity updates, opened with K_la, once each by id. Only Android phones get them on the
+  /// socket (relay 1.4.0; the same ones come as pushes too); iPhones get them as ActivityKit pushes only.
+  Stream<LinkLiveActivity> get liveActivities => _liveActivities.stream;
 
   /// The latest value of [key]: JSON-compatible (String, num, bool, `Map<String, dynamic>`, List), in the shapes the
   /// Swift apps write (see the models).
@@ -326,6 +335,16 @@ class RelayLink {
     _send(_Outgoing(id, null, frame));
   }
 
+  /// Sends a Live Activity update to the phones (Swift `RelayLinkStore.sendLiveActivity`): [apns] is the ActivityKit
+  /// payload with the title and detail sealed ([LinkLiveActivity.apns]). For hosts (and test tools); the relay refuses
+  /// it from a pocket. Only the newest waiting update matters; a start or end always goes.
+  void sendLiveActivity(Map<String, Object?> apns, {int priority = 5}) {
+    final id = newId();
+    final frame = LinkLiveActivity.hostFrame(apns, id: id, priority: priority);
+    _remember(id);
+    _send(_Outgoing(id, null, frame, slot: apns['event'] == 'update' ? LinkLiveActivity.key : null));
+  }
+
   // MARK: Connection
 
   void start() {
@@ -360,7 +379,14 @@ class RelayLink {
   /// Stops and closes the streams.
   Future<void> dispose() async {
     await stop();
-    await Future.wait([_changes.close(), _presence.close(), _incoming.close(), _errors.close(), _alerts.close()]);
+    await Future.wait([
+      _changes.close(),
+      _presence.close(),
+      _incoming.close(),
+      _errors.close(),
+      _alerts.close(),
+      _liveActivities.close(),
+    ]);
   }
 
   void _open() {
@@ -511,6 +537,19 @@ class RelayLink {
   void _apply(Map<String, Object?> envelope, LinkSocket socket) {
     final name = jsonString(envelope['key']), id = jsonString(envelope['id']), from = jsonString(envelope['from']);
     if (name == null || id == null || from == null) return;
+    if (name == LinkLiveActivity.key) {
+      // Never queued (nothing to ack), and repeats of an id are dropped.
+      if (envelope['op'] != 'send' || _applied.contains(id)) return;
+      _remember(id);
+      final activity = LinkLiveActivity.fromEnvelope(envelope, liveActivityKey: _liveActivityKey, room: credentials.room);
+      if (activity == null) {
+        _log("couldn't read a Live Activity from the relay");
+      } else {
+        if (!activity.opened) _log("couldn't open a Live Activity's title");
+        _liveActivities.add(activity);
+      }
+      return;
+    }
     final key = LinkKey.tryParse(name);
     final isMessage = envelope['op'] == 'send' || key?.kind == LinkKeyKind.message;
     // Acked on arrival (as in Swift), so one that can't be opened or used isn't delivered again and again.
