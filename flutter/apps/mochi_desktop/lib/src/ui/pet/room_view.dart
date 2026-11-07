@@ -166,6 +166,7 @@ class _RoomViewState extends State<RoomView> {
         final layout = widget.layout(constraints.biggest);
         return Semantics(
           container: true,
+          explicitChildNodes: true,
           label: "$pet's room. ${_pet.mood.describe(pet)}. ${companion.describe(patch)}.",
           child: Stack(
             children: [
@@ -189,6 +190,7 @@ class _RoomViewState extends State<RoomView> {
               Positioned.fromRect(
                 rect: layout.petFrame.inflate(10),
                 child: Semantics(
+                  container: true,
                   button: true,
                   label: '$pet. Click to pet.',
                   child: MouseRegion(
@@ -201,6 +203,7 @@ class _RoomViewState extends State<RoomView> {
                 Positioned.fromRect(
                   rect: layout.companionFrame,
                   child: Semantics(
+                    container: true,
                     button: true,
                     label: '$patch. Click for a wave.',
                     child: MouseRegion(
