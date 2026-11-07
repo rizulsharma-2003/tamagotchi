@@ -37,23 +37,43 @@ void main() {
     expect(control.waitForExit(0x7FFFFFF0, const Duration(milliseconds: 10)), isTrue);
   });
 
-  test("the swap waits while Mochi runs, and works once it's gone", () async {
+  test('a file held open in the app folder holds the swap back (nothing changes); once closed it goes through', () {
     final app = '${temp.path}\\Programs\\Mochi';
     final staged = '${temp.path}\\staged\\Mochi';
-    final running = await fakeMochi(app);
+    Directory('$app\\data').createSync(recursive: true);
+    File('$app\\Mochi.exe').writeAsStringSync('old');
+    final held = File('$app\\data\\app.so')..writeAsStringSync('old');
     Directory(staged).createSync(recursive: true);
     File('$staged\\Mochi.exe').writeAsStringSync('new');
 
+    final handle = held.openSync(mode: FileMode.append);
     final busy = FolderSwap(retryFor: const Duration(milliseconds: 500)).swap(incoming: staged, target: app, requiredFile: 'Mochi.exe');
+    handle.closeSync();
     expect(busy.ok, isFalse);
     expect(busy.error, contains('still in use'));
-    expect(File('$app\\Mochi.exe').lengthSync(), greaterThan(1000), reason: 'nothing changed');
+    expect(File('$app\\Mochi.exe').readAsStringSync(), 'old', reason: 'nothing changed');
+    expect(File('$staged\\Mochi.exe').readAsStringSync(), 'new');
 
-    Win32ProcessControl().terminate(running.pid);
     final swapped = FolderSwap().swap(incoming: staged, target: app, requiredFile: 'Mochi.exe');
     expect(swapped.ok, isTrue, reason: swapped.error);
     expect(File('$app\\Mochi.exe').readAsStringSync(), 'new');
-    expect(File('$app.old\\Mochi.exe').existsSync(), isTrue);
+    expect(File('$app.old\\Mochi.exe').readAsStringSync(), 'old');
+  });
+
+  test('Windows lets the folder of a running program move (the helper still waits for Mochi to quit first)', () async {
+    final app = '${temp.path}\\Programs\\Mochi';
+    final staged = '${temp.path}\\staged\\Mochi';
+    final running = await fakeMochi(app);
+    try {
+      Directory(staged).createSync(recursive: true);
+      File('$staged\\Mochi.exe').writeAsStringSync('new');
+      final swapped = FolderSwap(retryFor: const Duration(seconds: 2)).swap(incoming: staged, target: app, requiredFile: 'Mochi.exe');
+      expect(swapped.ok, isTrue, reason: swapped.error);
+      expect(File('$app\\Mochi.exe').readAsStringSync(), 'new');
+      expect(File('$app.old\\Mochi.exe').lengthSync(), greaterThan(1000), reason: 'the running copy moved with its folder');
+    } finally {
+      Win32ProcessControl().terminate(running.pid);
+    }
   });
 
   test('the registry values the uninstall reads and removes (a scratch key)', () {
