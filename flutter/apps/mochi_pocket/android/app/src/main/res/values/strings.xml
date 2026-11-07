@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The home-screen widget (widget/MochiWidgetProvider.kt). What it says about Claude and the computer comes from
+         the app, which names the real computer; these are the fixed words around it. -->
+    <string name="mochi_widget_label">Mochi &amp; Claude</string>
+    <string name="mochi_widget_description">Mochi, what Claude is doing on your computer, and what\'s waiting for you.</string>
+    <string name="mochi_widget_open_mochi">Open Mochi to see Claude here.</string>
+    <string name="mochi_widget_waiting">Waiting for you</string>
+    <plurals name="mochi_widget_waiting_short">
+        <item quantity="one">%d waiting for you</item>
+        <item quantity="other">%d waiting for you</item>
+    </plurals>
+    <string name="mochi_widget_more">and %d more</string>
+    <string name="mochi_widget_vip">VIP: %s</string>
+    <string name="mochi_widget_updated">Updated %s</string>
+    <string name="mochi_widget_opens_sessions">Opens Claude\'s sessions in Mochi.</string>
+    <string name="mochi_widget_opens_updates">Opens your updates in Mochi.</string>
+    <!-- The widget picker's preview. -->
+    <string name="mochi_widget_sample_title">Claude is working</string>
+    <string name="mochi_widget_sample_text">mochi-link · on your Mac</string>
+    <string name="mochi_widget_sample_meeting">Design review · 4:00 PM</string>
+    <string name="mochi_widget_sample_mail">Priya Sharma: Invoice for October</string>
+</resources>

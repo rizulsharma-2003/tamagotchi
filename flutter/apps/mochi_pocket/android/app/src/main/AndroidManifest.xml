@@ -52,6 +52,18 @@
         <receiver
             android:exported="false"
             android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"/>
+        <!-- The home-screen widget, "Mochi & Claude" (widget/MochiWidgetProvider.kt). Only Android talks to it. -->
+        <receiver
+            android:name=".widget.MochiWidgetProvider"
+            android:exported="false"
+            android:label="@string/mochi_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/mochi_widget_info"/>
+        </receiver>
         <!-- MainActivity hands pairing links to the app itself; Flutter's own deep linking would treat them as routes. -->
         <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
         <!-- Don't delete the meta-data below.

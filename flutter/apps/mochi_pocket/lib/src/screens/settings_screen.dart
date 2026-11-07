@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:mochi_home_widget/mochi_home_widget.dart';
 import 'package:mochi_link/mochi_link.dart';
 
 import '../live/live_notifier.dart';
@@ -11,6 +12,7 @@ import '../services/alert_notifier.dart';
 import '../theme.dart';
 import '../voice/mochi_voice.dart';
 import '../voice/updates_reader.dart';
+import '../widget/home_widget.dart';
 import '../widgets/clay.dart';
 import 'home_screen.dart' show connectionPill;
 
@@ -18,10 +20,18 @@ import 'home_screen.dart' show connectionPill;
 const String appVersion = '0.1.0';
 
 /// Settings: Mochi Link (who this phone is paired with, the relay and the Mac's presence, Unpair), notifications, Mochi
-/// on the lock screen, appearance, Mochi's voice and Mochi Cloud (iOS/MochiPocket/PocketLink.swift `LinkCard`,
-/// PocketSettingsView).
+/// on the lock screen, the home-screen widget, appearance, Mochi's voice and Mochi Cloud (iOS/MochiPocket/PocketLink.swift
+/// `LinkCard`, PocketSettingsView).
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.model, required this.notifier, required this.settings, required this.reader, this.live});
+  const SettingsScreen({
+    super.key,
+    required this.model,
+    required this.notifier,
+    required this.settings,
+    required this.reader,
+    this.live,
+    this.homeWidget,
+  });
 
   final PocketModel model;
   final AlertNotifier notifier;
@@ -31,6 +41,9 @@ class SettingsScreen extends StatefulWidget {
   /// Mochi on the lock screen while Claude works: the sample, and taking it away when the switch goes off.
   final LiveUpdates? live;
 
+  /// The home-screen widget: whether it's there, and Add to Home Screen.
+  final HomeWidget? homeWidget;
+
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -39,6 +52,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   bool? _notificationsOn;
   late Future<List<VoiceInfo>> _voices = widget.reader.voices();
   LiveUpdateStatus? _liveStatus;
+  HomeWidgetPlacement? _widgetPlacement;
   String _samplePhase = 'working';
   bool _sampleShown = false;
 
@@ -72,10 +86,12 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   Future<void> _checkNotifications() async {
     final on = await widget.notifier.enabled();
     final live = await widget.live?.notifier.status();
+    final placement = await widget.homeWidget?.surface.status();
     if (mounted) {
       setState(() {
         _notificationsOn = on;
         _liveStatus = live;
+        _widgetPlacement = placement;
       });
     }
   }
@@ -130,6 +146,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
             const SizedBox(height: Space.l),
             _notifications(),
             if (widget.live != null) ...[const SizedBox(height: Space.l), _lockScreen()],
+            if (widget.homeWidget != null) ...[const SizedBox(height: Space.l), _homeScreen()],
             const SizedBox(height: Space.l),
             _appearance(),
             const SizedBox(height: Space.l),
@@ -427,6 +444,65 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
               style: context.type.footnote,
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  // MARK: Home screen
+
+  /// The "Mochi & Claude" widget (the iPhone's Lock Screen and Home Screen widget): what it shows, whether it's on the
+  /// home screen, and Add to Home Screen when the launcher can be asked.
+  Widget _homeScreen() {
+    final p = context.palette;
+    final placement = _widgetPlacement;
+    final placed = (placement?.placed ?? 0) > 0;
+    return ClayCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          OverflowBar(
+            alignment: MainAxisAlignment.spaceBetween,
+            overflowAlignment: OverflowBarAlignment.start,
+            spacing: Space.s,
+            overflowSpacing: Space.s,
+            children: [
+              Semantics(header: true, child: Text('Home screen', style: context.type.headline)),
+              if (placement != null)
+                Tag(
+                  text: placed ? 'Widget added' : 'No widget yet',
+                  icon: placed ? Icons.check_rounded : Icons.widgets_outlined,
+                  tint: placed ? p.success : p.inkSecondary,
+                ),
+            ],
+          ),
+          const SizedBox(height: Space.s),
+          Text(
+            'The “Mochi & Claude” widget shows ${model.petName}, what Claude is doing on ${model.host.yours}, and what’s waiting '
+            'for you. It keeps itself up to date, even while ${model.petName} is closed. Tap it to open ${model.petName}.',
+            style: context.type.footnote,
+          ),
+          const SizedBox(height: Space.m),
+          if (placement?.canPin ?? false)
+            FilledButton.icon(
+              onPressed: () async {
+                final asked = await widget.homeWidget!.surface.pin();
+                if (!asked && mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('Long-press your home screen, tap Widgets, and find Mochi.')));
+                }
+              },
+              icon: const Icon(Icons.add_to_home_screen_rounded, size: 18),
+              label: Text(placed ? 'Add Another' : 'Add to Home Screen'),
+            )
+          else
+            NoteLabel(
+              text: 'To add it: long-press your home screen, tap Widgets, and find Mochi.',
+              icon: Icons.widgets_outlined,
+              tint: p.tint,
+              textColor: p.ink,
+            ),
         ],
       ),
     );

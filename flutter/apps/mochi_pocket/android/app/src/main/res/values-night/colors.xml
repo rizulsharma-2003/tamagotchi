@@ -2,4 +2,17 @@
 <resources>
     <!-- The dark theme's backdrop (MochiPalette.dark backgroundTop). -->
     <color name="mochi_background">#1C1511</color>
+    <!-- The home-screen widget in the dark: MochiPalette.dark. -->
+    <color name="mochi_widget_surface">#2A201A</color>
+    <color name="mochi_widget_sunken">#382B23</color>
+    <color name="mochi_widget_stroke">#45362C</color>
+    <color name="mochi_widget_ink">#F8EEE6</color>
+    <color name="mochi_widget_ink_secondary">#C4B2A5</color>
+    <color name="mochi_widget_tint">#F2895B</color>
+    <color name="mochi_widget_on_tint">#2A1006</color>
+    <color name="mochi_widget_success">#6BD39C</color>
+    <color name="mochi_widget_warning">#F5A85E</color>
+    <color name="mochi_widget_danger">#FF8F85</color>
+    <color name="mochi_widget_vip">#E9B95C</color>
+    <color name="mochi_widget_indigo">#A9A4FF</color>
 </resources>

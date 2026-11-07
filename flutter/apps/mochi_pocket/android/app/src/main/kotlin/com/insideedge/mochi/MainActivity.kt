@@ -15,8 +15,9 @@ import io.flutter.plugin.common.MethodChannel
  * the pairing link the app was opened with (`mochi://pair?…`, from a QR code app, a browser or `adb`), links that
  * arrive while it runs (`link`, sent to Dart), this phone's model for the Mac's device list, the app's files folder,
  * audio focus while Mochi reads aloud (`audioFocusLost` tells Dart when a call or another app takes the audio), and
- * the button of Mochi's ongoing notification that opened the app (`liveAction`: `open`, or `session` for Open the
- * Session). Hold to talk has a channel of its own ([SpeechChannel]).
+ * where the app should open (`place`): `home`, `sessions` or `updates`, from the home-screen widget (`mochi://<place>`)
+ * or the buttons of Mochi's ongoing notification (Open, Open the Session). Hold to talk has a channel of its own
+ * ([SpeechChannel]).
  */
 class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
@@ -24,8 +25,16 @@ class MainActivity : FlutterActivity() {
     /** A pairing link not yet handed to Dart: the launch intent's, until Dart asks for it once. */
     private var pendingLink: String? = null
 
-    /** The ongoing notification's button that opened the app, until Dart asks for it once. */
-    private var pendingLiveAction: String? = null
+    /** Where the app was opened to (see [place]), until Dart asks for it once. */
+    private var pendingPlace: String? = null
+
+    /**
+     * Dart has asked for the launch's link and place, so it's listening for more. Until then a new intent's link or
+     * place waits here: when Android recreates the activity for a widget tap or a shortcut (the app wasn't running),
+     * it calls [onNewIntent] before Dart has set up its side of the channel, and a message sent then would be lost.
+     */
+    private var dartAskedForLink = false
+    private var dartAskedForPlace = false
 
     private var focusRequest: AudioFocusRequest? = null
 
@@ -34,7 +43,7 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         pendingLink = pairingLink(intent)
-        pendingLiveAction = liveAction(intent)
+        pendingPlace = place(intent)
         speech = SpeechChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).also {
             it.setMethodCallHandler { call, result ->
@@ -42,10 +51,12 @@ class MainActivity : FlutterActivity() {
                     "initialLink" -> {
                         result.success(pendingLink)
                         pendingLink = null
+                        dartAskedForLink = true
                     }
-                    "initialLiveAction" -> {
-                        result.success(pendingLiveAction)
-                        pendingLiveAction = null
+                    "initialPlace" -> {
+                        result.success(pendingPlace)
+                        pendingPlace = null
+                        dartAskedForPlace = true
                     }
                     "deviceName" -> result.success(deviceName())
                     "filesDir" -> result.success(filesDir.absolutePath)
@@ -63,13 +74,13 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        liveAction(intent)?.let { action ->
+        place(intent)?.let { place ->
             val channel = channel
-            if (channel == null) pendingLiveAction = action else channel.invokeMethod("liveAction", action)
+            if (channel == null || !dartAskedForPlace) pendingPlace = place else channel.invokeMethod("place", place)
         }
         val link = pairingLink(intent) ?: return
         val channel = channel
-        if (channel == null) {
+        if (channel == null || !dartAskedForLink) {
             pendingLink = link
         } else {
             channel.invokeMethod("link", link)
@@ -119,8 +130,19 @@ class MainActivity : FlutterActivity() {
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
-    /** `open` or `session`, when Mochi's ongoing notification (plugins/mochi_live_update) opened the app. */
-    private fun liveAction(intent: Intent?): String? = intent?.getStringExtra(LIVE_ACTION)
+    /**
+     * Where the app was opened to: a `mochi://<place>` link from the widget (explicit intents only: there's no intent
+     * filter for them, so a web page can't open one), or Mochi's ongoing notification's button (plugins/mochi_live_update:
+     * `open` is home, `session` is Claude's sessions). Not when Android reopens the app from Recents with the intent
+     * that first started it: that place was already visited.
+     */
+    private fun place(intent: Intent?): String? {
+        if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
+        intent.getStringExtra(LIVE_ACTION)?.let { return if (it == "session") "sessions" else "home" }
+        val data = intent.data ?: return null
+        if (intent.action != Intent.ACTION_VIEW || data.scheme != "mochi") return null
+        return data.host?.takeIf { it in PLACES }
+    }
 
     private fun pairingLink(intent: Intent?): String? {
         val data = intent?.data ?: return null
@@ -144,5 +166,8 @@ class MainActivity : FlutterActivity() {
 
         /** `LiveNotification.EXTRA_ACTION` in plugins/mochi_live_update. */
         const val LIVE_ACTION = "com.insideedge.mochi.LIVE_ACTION"
+
+        /** The places `mochi://<place>` can open (the app's `AppPlace`). */
+        val PLACES = setOf("home", "sessions", "updates")
     }
 }

@@ -8,6 +8,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:mochi_link/mochi_link.dart';
 
 import '../../model/done_marks.dart';
+import '../../widget/home_widget.dart';
 import '../alert_notifier.dart';
 import '../credential_store.dart';
 import '../local_file.dart';
@@ -71,6 +72,13 @@ Future<void> handleBackgroundAction(NotificationResponse response) async {
   try {
     final result = await dispatcher.run(action);
     _log('notification ${kind.id} in the background${testing ? ' (debug action room)' : ''}: ${result.name}');
+    // What you marked done leaves the home-screen widget too.
+    final room = action.payload.room;
+    if (kind == AlertAction.markDone && room != null) {
+      await HomeWidget.inFolder(
+        folder,
+      ).doneChanged(room, done: AppFiles.document(folder, testing ? DebugActionRoom.doneFile : AppFiles.done));
+    }
   } on Object catch (error) {
     _log('notification ${kind.id} in the background failed (${error.runtimeType})');
   }

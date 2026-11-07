@@ -11,9 +11,11 @@ import '../scene/pose_library.dart';
 import '../scene/room_view.dart';
 import '../services/alert_notifier.dart';
 import '../services/link_opener.dart';
+import '../services/platform_bridge.dart';
 import '../talk/talk_model.dart';
 import '../theme.dart';
 import '../voice/updates_reader.dart';
+import '../widget/home_widget.dart';
 import '../widgets/agent_card.dart';
 import '../widgets/cards.dart';
 import '../widgets/clay.dart';
@@ -35,8 +37,9 @@ class HomeScreen extends StatefulWidget {
     required this.settings,
     required this.reader,
     this.live,
-    this.liveActions,
+    this.places,
     this.talk,
+    this.homeWidget,
   });
 
   final PocketModel model;
@@ -51,11 +54,14 @@ class HomeScreen extends StatefulWidget {
   /// Mochi on the lock screen while Claude works (for Settings).
   final LiveUpdates? live;
 
-  /// The ongoing notification's buttons: Open the Session scrolls to Claude's sessions.
-  final Stream<String>? liveActions;
+  /// Where the app is asked to go ([AppPlace]): the widget's taps and the ongoing notification's buttons.
+  final Stream<String>? places;
 
   /// Hold to talk (none: Mochi can only be petted and typed to).
   final TalkModel? talk;
+
+  /// The home-screen widget (for Settings).
+  final HomeWidget? homeWidget;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -71,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _bubbleFor;
   Timer? _bubbleTimer;
   MacConnection? _announced;
-  StreamSubscription<String>? _liveActions;
+  StreamSubscription<String>? _places;
   StreamSubscription<void>? _cloudTookOver;
 
   /// Claude's sessions on the computer, where Open the Session brings you.
@@ -84,7 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _announced = model.connection;
     model.addListener(_modelChanged);
-    _liveActions = widget.liveActions?.listen(_liveAction);
+    _places = widget.places?.listen(_open);
     // The computer didn't pick up "Check now", so Mochi Cloud did: say so rather than wait for it (the iPhone's
     // `cloudTookOver`).
     _cloudTookOver = model.cloudTookOver.listen(
@@ -96,12 +102,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Open the Session in Mochi's ongoing notification (Claude needs you): to Claude's sessions on the computer, where
-  /// you can answer the session.
-  void _liveAction(String action) {
-    if (action != 'session') return;
+  /// Opened to a place: the top (the widget, Open), Claude's sessions (Open the Session when Claude needs you, the
+  /// widget's sessions), or Updates (the widget's "Waiting for you").
+  void _open(String place) {
     Navigator.of(context).popUntil((route) => route.isFirst);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSessions());
+    switch (place) {
+      case AppPlace.sessions:
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSessions());
+      case AppPlace.updates:
+        _openUpdates();
+      default:
+        if (_scroll.hasClients) _scroll.jumpTo(0);
+    }
   }
 
   /// The list builds what's on screen only: until the section is built, jump towards the end, then bring it in.
@@ -126,7 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     model.removeListener(_modelChanged);
-    unawaited(_liveActions?.cancel());
+    unawaited(_places?.cancel());
     unawaited(_cloudTookOver?.cancel());
     _bubbleTimer?.cancel();
     _typed.dispose();
@@ -223,8 +235,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openSettings() => Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) =>
-          SettingsScreen(model: model, notifier: widget.notifier, settings: widget.settings, reader: widget.reader, live: widget.live),
+      builder: (_) => SettingsScreen(
+        model: model,
+        notifier: widget.notifier,
+        settings: widget.settings,
+        reader: widget.reader,
+        live: widget.live,
+        homeWidget: widget.homeWidget,
+      ),
     ),
   );
 

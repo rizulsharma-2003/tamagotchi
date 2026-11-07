@@ -33,6 +33,7 @@ import 'src/services/push/push_service.dart';
 import 'src/talk/speech_listener.dart';
 import 'src/voice/speech_engine.dart';
 import 'src/voice/updates_reader.dart';
+import 'src/widget/home_widget.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,8 +77,9 @@ Future<void> main() async {
   );
   actions = AppNotificationActions(model: model, opener: const UrlLinkOpener(), notifier: notifier)..start();
   // Development builds with a throwaway test room (DebugActionRoom): its pushes reach this phone too, and its Live
-  // Activities while the app is open.
+  // Activities while the app is open. With its `debug_room_ui` file, the whole app shows the test room instead.
   PocketModel? debugRoom;
+  var showTestRoom = false;
   if (kDebugMode) {
     unawaited(DebugActionRoom.registerPush(files, push));
     final debugLive = LiveUpdates(
@@ -85,8 +87,14 @@ Future<void> main() async {
       record: AppFiles.document(files, LiveUpdates.debugFile),
       enabled: () async => settings.showOnLockScreen,
     );
-    debugRoom = await DebugActionRoom.model(files, live: debugLive);
+    showTestRoom = DebugActionRoom.showsUi(files);
+    debugRoom = await DebugActionRoom.model(files, live: debugLive, connect: !showTestRoom);
+    showTestRoom = showTestRoom && debugRoom != null;
   }
+  final shown = showTestRoom ? debugRoom! : model;
+  // The home-screen widget follows the room while the app runs (the push handler keeps it fresh while it doesn't).
+  final homeWidget = HomeWidget.inFolder(files);
+  HomeWidgetSync(model: shown, widget: homeWidget).start();
   await notifier.start();
   final reader = UpdatesReader(
     engine: FlutterTtsEngine(),
@@ -99,7 +107,7 @@ Future<void> main() async {
   MochiArtText.family = 'Nunito';
   runApp(
     MochiApp(
-      model: model,
+      model: shown,
       bridge: bridge,
       notifier: notifier,
       settings: settings,
@@ -108,7 +116,8 @@ Future<void> main() async {
       // Hold to talk (A3): Android's speech recognizer, on the phone when it can be. A development build with a test
       // room talks to that room's fake Mac instead of the real computer.
       speech: PlatformSpeechListener(),
-      talkTo: debugRoom,
+      talkTo: showTestRoom ? null : debugRoom,
+      homeWidget: homeWidget,
     ),
   );
   // A tap on a meeting heads-up (or its Join) that started the app opens the meeting, as on the iPhone.

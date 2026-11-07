@@ -41,8 +41,8 @@ abstract final class PushMessages {
   /// - Not an alert, no pairing, or another room's: ignored.
   /// - Already shown: a duplicate, nothing shown.
   /// - Opens with the room key: shown with its buttons (and recorded, so a second copy is dropped). A card that rides
-  ///   along (Mochi's news) goes to [record], for the Updates history, and the opened alert to [opened] (the app's
-  ///   "Waiting for you" card, the home-screen widget).
+  ///   along (Mochi's news) goes to [record], for the Updates history, and the opened alert and its room to [opened]
+  ///   (the app's "Waiting for you" card, the home-screen widget).
   /// - For this phone but can't be opened (a damaged message, unreadable credentials): "Mochi" / "Mochi has news",
   ///   under the alert's own notification id, so the real text replaces it if it arrives over the socket later.
   ///
@@ -54,7 +54,7 @@ abstract final class PushMessages {
     required ShownAlerts shown,
     bool Function(String id)? isDone,
     Future<void> Function(List<AgentNote> notes)? record,
-    Future<void> Function(LinkAlert alert)? opened,
+    Future<void> Function(LinkAlert alert, String room)? opened,
   }) async {
     final sealed = sealedAlert(data);
     if (sealed == null) return PushOutcome.ignored;
@@ -97,7 +97,7 @@ abstract final class PushMessages {
     }
     if (opened != null) {
       try {
-        await opened(alert);
+        await opened(alert, saved.room);
       } on Object {
         // So are the card and the widget.
       }

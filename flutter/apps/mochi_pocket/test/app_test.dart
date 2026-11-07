@@ -496,7 +496,7 @@ void main() {
     await macShares(tester);
     final sessions = find.text('Claude on your Mac');
     expect(sessions, findsNothing, reason: 'below the first screen, so not built yet');
-    bridge.liveActionController.add('session');
+    bridge.placeController.add('sessions');
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }

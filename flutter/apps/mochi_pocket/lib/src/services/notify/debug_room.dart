@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:mochi_link/mochi_link.dart';
 
@@ -25,8 +27,14 @@ import 'notification_plan.dart';
 ///
 /// Its done marks and outbox are files of their own, and its cards stay out of the Updates history. Release builds
 /// never read the file.
+///
+/// With [uiFile] there too (`adb shell run-as com.insideedge.mochi touch files/debug_room_ui`), the whole app shows the
+/// test room instead of the real one: the home screen, the home-screen widget, shortcuts and the Quick Settings tile,
+/// and Mochi Cloud, whose trigger may then be a stand-in on this phone (tool/fake_cloud.dart through `adb reverse`).
+/// The real pairing stays as it is, unused until the file goes.
 abstract final class DebugActionRoom {
   static const String file = 'debug_action_room.json';
+  static const String uiFile = 'debug_room_ui';
   static const String doneFile = 'debug_action_done.json';
   static const String outboxFile = 'debug_action_outbox.json';
 
@@ -41,21 +49,26 @@ abstract final class DebugActionRoom {
     }
   }
 
-  /// The test room as a room of its own, connected: its Live Activities and `activityEnded` go to [live] (its own
-  /// record, [LiveUpdates.debugFile]), and hold to talk uses it instead of the real room. Null without a test room.
-  static Future<PocketModel?> model(String? folder, {required LiveUpdates live}) async {
+  /// The whole app shows the test room ([uiFile]).
+  static bool showsUi(String? folder) => kDebugMode && folder != null && File('$folder/$uiFile').existsSync();
+
+  /// The test room as a room of its own: its Live Activities and `activityEnded` go to [live] (its own record,
+  /// [LiveUpdates.debugFile]), and hold to talk uses it instead of the real room. Connected now, unless [connect] is
+  /// off (the app connects it when it shows it). Null without a test room.
+  static Future<PocketModel?> model(String? folder, {required LiveUpdates live, bool connect = true}) async {
     final room = await load(folder);
     if (room == null) return null;
     final model = PocketModel(
       credentialStore: MemoryCredentialStore(room),
-      doneDocument: MemoryDocument(),
+      doneDocument: AppFiles.document(folder, doneFile),
       notifier: const _Quiet(),
       connect: (credentials) => RelayLink(credentials, platform: 'android', app: 'debug'),
       live: live,
       deviceName: 'Mochi action test',
+      allowLocalCloud: true,
     );
-    await model.load();
-    debugPrint('Mochi: the debug action room is connected; hold to talk goes there');
+    if (connect) await model.load();
+    debugPrint('Mochi: the debug action room is ${connect ? 'connected; hold to talk goes there' : 'what the app shows'}');
     return model;
   }
 

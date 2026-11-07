@@ -514,7 +514,7 @@ class PocketModel extends ChangeNotifier {
       shown: _shown,
       isDone: _done.isDone,
       record: (notes) async => _record(notes),
-      opened: (alert) async => _cardFrom(alert),
+      opened: (alert, room) async => _cardFrom(alert),
     );
     if (outcome == PushOutcome.shown || outcome == PushOutcome.fallback) _lastAlertAt = _clock();
     _log('push while open: ${outcome.name}');
