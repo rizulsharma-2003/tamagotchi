@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_art/pose_tracks.dart';
 
+import '../../core/notifications.dart' show AttentionLevel;
+import '../../core/pc_rhythm.dart';
 import '../../core/pet_cues.dart';
 import '../../core/session_store.dart';
 import 'companion_director.dart';
@@ -41,6 +43,8 @@ class MochiView extends StatefulWidget {
     this.companionAccessory,
     this.deskAccessory,
     this.burst = false,
+    this.rhythm,
+    this.badge,
   });
 
   final SessionStore sessions;
@@ -88,6 +92,12 @@ class MochiView extends StatefulWidget {
   /// Claude's finishes get a burst of confetti (on the taskbar, as in the Mac's menu bar).
   final bool burst;
 
+  /// The PC's rhythm: Mochi naps while the PC rests (null: after a long quiet stretch).
+  final PcRhythm? rhythm;
+
+  /// The dot beside Mochi while something waits for you (the Mac's menu-bar badge), by how much it matters.
+  final AttentionLevel? badge;
+
   @override
   State<MochiView> createState() => _MochiViewState();
 
@@ -130,6 +140,7 @@ class _MochiViewState extends State<MochiView> {
     _frame();
     _cues = widget.cues.listen(_cue);
     widget.sessions.addListener(_follow);
+    widget.rhythm?.addListener(_follow);
     // The mood also changes with time alone (a finish fades, a nap begins).
     _moodTimer = Timer.periodic(const Duration(seconds: 5), (_) => _follow());
     widget.companion?.addListener(_frame);
@@ -142,6 +153,10 @@ class _MochiViewState extends State<MochiView> {
     if (old.sessions != widget.sessions) {
       old.sessions.removeListener(_follow);
       widget.sessions.addListener(_follow);
+    }
+    if (old.rhythm != widget.rhythm) {
+      old.rhythm?.removeListener(_follow);
+      widget.rhythm?.addListener(_follow);
     }
     if (old.cues != widget.cues) {
       unawaited(_cues?.cancel());
@@ -186,7 +201,7 @@ class _MochiViewState extends State<MochiView> {
   }
 
   void _follow() {
-    final mood = PetMood.of(widget.sessions, now: widget.sessions.now, lastActivity: widget.lastActivity());
+    final mood = PetMood.of(widget.sessions, now: widget.sessions.now, lastActivity: widget.lastActivity(), rhythm: widget.rhythm);
     if (mood == _director.mood) return;
     _director.follow(mood, time: _time);
     if (mounted) _frame();
@@ -200,6 +215,7 @@ class _MochiViewState extends State<MochiView> {
   @override
   void dispose() {
     widget.sessions.removeListener(_follow);
+    widget.rhythm?.removeListener(_follow);
     widget.companion?.removeListener(_frame);
     unawaited(_cues?.cancel());
     _moodTimer?.cancel();
@@ -241,6 +257,7 @@ class _MochiViewState extends State<MochiView> {
             companionAccessory: widget.companionAccessory,
             deskAccessory: widget.deskAccessory,
             burst: widget.burst,
+            badge: widget.badge,
           ),
           size: Size.infinite,
         ),
@@ -268,7 +285,27 @@ class _MochiPainter extends CustomPainter {
     required this.companionAccessory,
     required this.deskAccessory,
     required this.burst,
+    required this.badge,
   }) : super(repaint: clock);
+
+  final AttentionLevel? badge;
+
+  /// The Mac's badge colours: grey for a note, orange when Claude needs you, red for an API error.
+  static Color badgeColor(AttentionLevel level) => switch (level) {
+    AttentionLevel.info => const Color(0xFF9A93A6),
+    AttentionLevel.attention => const Color(0xFFFF9F0A),
+    AttentionLevel.alert => const Color(0xFFFF453A),
+  };
+
+  /// A dot at the top right of Mochi, on a light (or, in the dark, dark) rim.
+  void _paintBadge(Canvas canvas, Offset feet, double petHeight) {
+    final level = badge;
+    if (level == null) return;
+    final radius = math.max(3.2, petHeight * 0.085);
+    final centre = Offset(feet.dx + petHeight * 0.42, feet.dy - petHeight * 0.92);
+    canvas.drawCircle(centre, radius * 1.28, Paint()..color = dark ? const Color(0x8C000000) : const Color(0xEBFFFFFF));
+    canvas.drawCircle(centre, radius, Paint()..color = badgeColor(level));
+  }
 
   final PetDirector director;
   final PoseLibrary? library;
@@ -299,6 +336,7 @@ class _MochiPainter extends CustomPainter {
     final pose = director.pose(library, clock.value, calm: calm, roam: roam);
     final scale = size.height * fill / 66;
     PetRenderer.draw(pose, g, Offset(size.width / 2, baseline), scale, PetPalette(color), accessory: accessory, dark: dark, detail: detail);
+    _paintBadge(canvas, Offset(size.width / 2, baseline), PetRenderer.bodyHeight * scale);
     final elapsed = burst ? patch?.burstAt(patch.time) : null;
     if (elapsed != null) {
       Celebration.draw(
@@ -349,6 +387,7 @@ class _MochiPainter extends CustomPainter {
       x = roam?.x ?? home.petHome;
     }
     PetRenderer.draw(pet, g, Offset(layout.local(x), baseline), k, PetPalette(color), accessory: accessory, dark: dark, detail: detail);
+    _paintBadge(g.canvas, Offset(layout.local(x), baseline), PetRenderer.bodyHeight * k);
     for (final prop in scene?.props ?? const <SceneProp>[]) {
       final point = Offset(layout.local(home.petHome + prop.x * home.span), baseline - prop.y * PetRenderer.bodyHeight * k);
       EffectRenderer.drawProp(prop, g, point, k, dark);
@@ -385,5 +424,6 @@ class _MochiPainter extends CustomPainter {
       old.theme != theme ||
       old.companionAccessory != companionAccessory ||
       old.deskAccessory != deskAccessory ||
-      old.burst != burst;
+      old.burst != burst ||
+      old.badge != badge;
 }

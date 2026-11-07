@@ -138,6 +138,15 @@ class ClaudeSession {
   /// "Tests passed — unit" from a build/test the session ran, or a `mochi_hook report`.
   String? lastBuildTest;
 
+  /// This turn's build or test result, if one came in (the Mac's `buildTestThisTurn`).
+  BuildTestResult? buildTestThisTurn;
+
+  /// Several tool errors in a row this turn sent Mochi investigating (the Mac's `investigatedThisTurn`).
+  bool investigatedThisTurn = false;
+
+  /// The turn's start was seen as it happened, so its length can be trusted.
+  bool turnStartObservedLive = false;
+
   /// Claude's summary of the last finished turn, while summaries are shared.
   TurnSummary? summary;
   DateTime? summaryAt;
@@ -211,6 +220,47 @@ class ClaudeSession {
   }
 }
 
+/// A build or test result (the Mac's `BuildTestOutcome`): from a command Claude ran whose exit status can be trusted,
+/// or reported by your script with `mochi_hook report`.
+class BuildTestResult {
+  const BuildTestResult({required this.kind, required this.passed, required this.reported, this.label});
+
+  /// `test` or `build`.
+  final String kind;
+  final bool passed;
+
+  /// Your script reported it (not a command Claude ran).
+  final bool reported;
+  final String? label;
+
+  /// The Mac's wording.
+  String get summary {
+    final noun = kind == 'test' ? 'Test' : 'Build';
+    if (reported) {
+      final name = label == null ? '' : ' ($label)';
+      return passed ? '$noun passed$name — reported by your script' : '$noun failed$name — reported by your script';
+    }
+    return passed
+        ? 'A ${noun.toLowerCase()} command Claude ran exited successfully'
+        : 'A ${noun.toLowerCase()} command Claude ran exited with an error';
+  }
+
+  /// A recognised build or test command with a trustworthy exit status (never one left in the background).
+  static BuildTestResult? ofCommand(WireEvent event, {required bool failed}) {
+    final kind = event.commandKind;
+    if (kind == null || event.commandReliable != true || event.backgrounded == true) return null;
+    if (event.event != 'PostToolUse' && event.event != 'PostToolUseFailure') return null;
+    return BuildTestResult(kind: kind == 'test' ? 'test' : 'build', passed: !failed, reported: false);
+  }
+
+  /// A build or test your script reported.
+  static BuildTestResult? ofReport(WireEvent event) {
+    final report = event.report;
+    if (report == null || (report.kind != 'build' && report.kind != 'test')) return null;
+    return BuildTestResult(kind: report.kind, passed: report.status != 'failed', reported: true, label: report.label);
+  }
+}
+
 /// What changed when an event was applied.
 class SessionTransition {
   const SessionTransition({
@@ -220,6 +270,8 @@ class SessionTransition {
     required this.isNew,
     required this.delivery,
     this.turnDuration,
+    this.event,
+    this.startedInvestigating = false,
   });
 
   final ClaudeSession session;
@@ -227,7 +279,15 @@ class SessionTransition {
   final EventKind kind;
   final bool isNew;
   final Delivery delivery;
+
+  /// How long the turn took, only when both its start and its end were seen live (the Mac's `turnDurationTrusted`).
   final Duration? turnDuration;
+
+  /// The event that made this change.
+  final WireEvent? event;
+
+  /// This tool error was the third in a row: Mochi starts investigating.
+  final bool startedInvestigating;
 
   SessionPhase get phase => session.phase;
   bool get phaseChanged => previous != session.phase;
@@ -283,6 +343,7 @@ class SessionRegistry {
     if (event.host != null) session.host = event.host;
     if (delivery == Delivery.late) session.lateEvents++;
     Duration? turnDuration;
+    var startedInvestigating = false;
 
     if (!outOfOrder || isNew) {
       switch (kind) {
@@ -300,6 +361,9 @@ class SessionRegistry {
         case EventKind.promptSubmitted:
           session.phase = SessionPhase.promptSubmitted;
           session.turnStartedAt = at;
+          session.turnStartObservedLive = delivery == Delivery.live;
+          session.buildTestThisTurn = null;
+          session.investigatedThisTurn = false;
           session.runningTools.clear();
           session.currentTool = null;
           session.waitingFor = null;
@@ -332,11 +396,15 @@ class SessionRegistry {
           if (kind == EventKind.toolFailed && event.isInterrupt != true) {
             session.consecutiveFailures++;
             session.lastFailureAt = at;
+            startedInvestigating = session.consecutiveFailures == detectiveFailureThreshold;
+            if (startedInvestigating) session.investigatedThisTurn = true;
           } else if (kind == EventKind.toolSucceeded) {
             session.consecutiveFailures = 0;
           }
           final outcome = buildTestOutcome(event, failed: kind == EventKind.toolFailed);
           if (outcome != null) session.lastBuildTest = outcome;
+          final result = BuildTestResult.ofCommand(event, failed: kind == EventKind.toolFailed);
+          if (result != null) session.buildTestThisTurn = result;
           if (session.phase != SessionPhase.turnCompleted && session.phase != SessionPhase.ended) {
             session.phase = session.runningTools.isEmpty ? SessionPhase.thinking : SessionPhase.runningTool;
           }
@@ -362,7 +430,7 @@ class SessionRegistry {
           }
         case EventKind.turnCompleted:
           final start = session.turnStartedAt;
-          if (start != null) turnDuration = at.difference(start);
+          if (start != null && session.turnStartObservedLive && delivery == Delivery.live) turnDuration = at.difference(start);
           session.phase = SessionPhase.turnCompleted;
           session.lastTurnCompletedAt = at;
           session.turnsCompleted++;
@@ -388,6 +456,8 @@ class SessionRegistry {
         case EventKind.report:
           final report = event.report;
           if (report != null) session.lastBuildTest = reportSummary(report);
+          final result = BuildTestResult.ofReport(event);
+          if (result != null) session.buildTestThisTurn = result;
         case EventKind.permissionDenied || EventKind.notification || EventKind.unknown:
           break;
       }
@@ -399,6 +469,8 @@ class SessionRegistry {
       isNew: isNew,
       delivery: delivery,
       turnDuration: turnDuration,
+      event: event,
+      startedInvestigating: startedInvestigating,
     );
   }
 

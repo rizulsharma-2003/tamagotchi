@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 
+import '../../core/notifications.dart';
+import '../../core/toasts.dart';
 import '../../link/link_host.dart';
 import 'panes_claude.dart' show ago;
 import 'settings_kit.dart';
@@ -147,11 +149,17 @@ class PhonesPane extends StatelessWidget {
               ),
               if (settings.shareSummaries && !link.paired)
                 const NoteRow(text: 'Pair a phone (Mochi Link, above) to get them.', icon: Icons.link_rounded),
-              if (lastSummary != null) NoteRow(text: lastSummary, icon: Icons.chat_bubble_outline_rounded),
-              SoonRow(
-                title: 'Only when I’m away from this PC',
-                detail: 'Notifying your phones only while you’re away from the computer works with a Mac for now.',
+              ToggleRow(
+                title: 'Only notify me when I’m away from this PC',
+                subtitle:
+                    'Your phones ring for a finished turn only after 3 minutes without typing or clicking here, or while this '
+                    'PC is locked or its display is off. The sessions on your phones stay up to date either way.',
+                value: settings.notifyOnlyWhenAway,
+                onChanged: settings.shareSummaries ? (value) => settings.notifyOnlyWhenAway = value : null,
               ),
+              if (settings.shareSummaries && settings.notifyOnlyWhenAway && !desktop.rhythm.available)
+                const NoteRow(text: 'Mochi can’t tell whether you’re at this computer here, so every summary is sent.', icon: Icons.info_outline_rounded),
+              if (lastSummary != null) NoteRow(text: lastSummary, icon: Icons.chat_bubble_outline_rounded),
             ],
           ),
           if (iPhone != null)
@@ -213,47 +221,142 @@ class _DeviceRow extends StatelessWidget {
 
 // MARK: - Notifications
 
-class NotificationsPane extends StatelessWidget {
+/// The Mac's NotificationSettings: sound, Windows notifications (the Mac's Notification Center) and, per category,
+/// whether Mochi animates, wears a badge, shows a Windows notification and plays a sound. Then what the phones get.
+class NotificationsPane extends StatefulWidget {
   const NotificationsPane({super.key, required this.host});
 
   final SettingsHost host;
 
   @override
+  State<NotificationsPane> createState() => _NotificationsPaneState();
+}
+
+class _NotificationsPaneState extends State<NotificationsPane> {
+  @override
+  void initState() {
+    super.initState();
+    // Windows Settings may have changed while Mochi's Settings was closed.
+    widget.host.desktop.toasts.refresh();
+  }
+
+  void _refresh() => setState(widget.host.desktop.toasts.refresh);
+
+  @override
   Widget build(BuildContext context) {
+    final host = widget.host;
     final p = context.palette;
-    final settings = host.desktop.settings;
-    final link = host.desktop.link;
+    final desktop = host.desktop;
+    final settings = desktop.settings;
+    final link = desktop.link;
     final pet = host.pet;
     final paused = settings.pauseReactions;
     final phones = LinkPeerNames.phones(link.peers, me: link.credentials?.device);
+    final output = desktop.sounds.output;
+    final toasts = desktop.toasts.availability;
+    final quiet = settings.quietHours;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SettingsGroup(
-          title: 'On this PC',
-          children: [
-            if (paused) ...[
-              NoteRow(text: 'Reactions are paused (General › Reactions).', icon: Icons.pause_circle_outline_rounded, tint: p.warning),
-              ActionsRow(children: [OutlinedButton(onPressed: () => settings.pauseReactions = false, child: const Text('Resume Reactions'))]),
+        if (paused || settings.quietMode)
+          SettingsGroup(
+            children: [
+              if (paused) ...[
+                NoteRow(
+                  text: 'Reactions are paused (General › Reactions): $pet doesn’t react, and nothing plays a sound or shows a notification.',
+                  icon: Icons.pause_circle_outline_rounded,
+                  tint: p.warning,
+                ),
+                ActionsRow(children: [OutlinedButton(onPressed: () => settings.pauseReactions = false, child: const Text('Resume Reactions'))]),
+              ] else ...[
+                NoteRow(text: 'Quiet mode is on (General › Reactions): no sounds and no notifications.', icon: Icons.do_not_disturb_on_outlined, tint: p.warning),
+                ActionsRow(children: [OutlinedButton(onPressed: () => settings.quietMode = false, child: const Text('Turn Off Quiet Mode'))]),
+              ],
             ],
+          ),
+        SettingsGroup(
+          title: 'Sound',
+          children: [
             ToggleRow(
-              title: 'Celebrate when Claude finishes',
-              subtitle: '$pet bounces and says “Claude finished!”, on the desktop and on the taskbar.',
-              value: settings.celebrateFinished,
-              onChanged: paused ? null : (value) => settings.celebrateFinished = value,
+              title: 'Play sounds',
+              subtitle: 'Soft chimes made by $pet for Claude’s moments, with each one’s Sound below.',
+              value: settings.soundEnabled,
+              onChanged: (value) => settings.soundEnabled = value,
             ),
+            _VolumeRow(host: host),
             ToggleRow(
-              title: 'Worry when a turn fails',
-              subtitle: '$pet looks concerned and says “Claude hit a snag”.',
-              value: settings.showSnags,
-              onChanged: paused ? null : (value) => settings.showSnags = value,
+              title: 'Tiny keyboard taps while Claude edits or runs commands',
+              value: settings.workSounds,
+              onChanged: settings.soundEnabled ? (value) => settings.workSounds = value : null,
             ),
+            if (!output.supported)
+              const NoteRow(text: 'Sounds play in Mochi for Windows.', icon: Icons.info_outline_rounded)
+            else if (!output.systemSoundsOn)
+              NoteRow(
+                text: 'Windows’ sound scheme is “No Sounds” (Settings › System › Sound › More sound settings), so $pet stays silent too.',
+                icon: Icons.volume_off_rounded,
+                tint: p.warning,
+                textColor: p.warning,
+              ),
+          ],
+        ),
+        SettingsGroup(
+          title: 'Windows notifications',
+          footer:
+              'Banners are off for every category by default. Repeated events are batched, and nothing is sent for '
+              'simulated or late events. Clicking one opens the session in Mochi’s window.',
+          children: [
             StatusRow(
-              title: 'When Claude needs you',
-              ok: true,
-              icon: Icons.front_hand_outlined,
-              tint: p.tint,
-              detail: '$pet keeps a bubble up until you answer',
+              title: 'Notifications from $pet',
+              ok: toasts.works,
+              icon: toasts.works ? Icons.notifications_active_rounded : Icons.notifications_off_outlined,
+              tint: toasts.works ? p.success : null,
+              detail: switch (toasts) {
+                ToastAvailability.ready => 'Allowed',
+                ToastAvailability.notInstalled => 'Needs Mochi installed',
+                ToastAvailability.offForMochi => 'Off for Mochi in Windows Settings',
+                ToastAvailability.offForAll => 'Off in Windows Settings',
+                ToastAvailability.failed => 'Windows refused them',
+                ToastAvailability.unsupported => 'Mochi for Windows only',
+              },
+            ),
+            if (toasts == ToastAvailability.notInstalled) ...[
+              const NoteRow(
+                text:
+                    'Mochi is running from where you downloaded it. Windows only shows notifications from an installed app '
+                    '(with its Start menu entry), so they can’t work reliably until Mochi is installed.',
+                icon: Icons.download_rounded,
+              ),
+              if (host.onInstall != null)
+                ActionsRow(children: [FilledButton(onPressed: host.onInstall, child: const Text('Install Mochi…'))]),
+            ],
+            if (toasts == ToastAvailability.offForMochi || toasts == ToastAvailability.offForAll)
+              ActionsRow(
+                children: [
+                  OutlinedButton(onPressed: () => desktop.toasts.openSystemSettings().ignore(), child: const Text('Open Notification Settings')),
+                  TextButton(onPressed: _refresh, child: const Text('Check Again')),
+                ],
+              ),
+            if (toasts == ToastAvailability.failed)
+              NoteRow(text: 'Restart Mochi to try again. $pet’s bubble and your phones still tell you.', icon: Icons.warning_amber_rounded),
+            StatusRow(
+              title: 'Quiet hours',
+              ok: quiet.enabled,
+              icon: Icons.bedtime_outlined,
+              tint: quiet.enabled ? p.tint : null,
+              detail: quiet.enabled ? '${QuietHours.format(quiet.startMinute)}–${QuietHours.format(quiet.endMinute)}' : 'Off',
+            ),
+            ActionsRow(children: [PaneLink(host: host, tab: SettingsTab.general, label: 'Quiet hours and quiet mode')]),
+          ],
+        ),
+        SettingsGroup(
+          title: 'Per category',
+          children: [
+            _DeliveryGrid(host: host),
+            ActionsRow(
+              children: [
+                OutlinedButton(onPressed: settings.deliveryAtDefaults ? null : settings.restoreDeliveryDefaults, child: const Text('Restore Defaults')),
+              ],
             ),
           ],
         ),
@@ -272,18 +375,164 @@ class NotificationsPane extends StatelessWidget {
             ActionsRow(children: [PaneLink(host: host, tab: SettingsTab.phones)]),
           ],
         ),
-        SettingsGroup(
-          title: 'From the Mac',
-          children: [
-            SoonRow(
-              title: 'Windows notifications',
-              detail: 'Banners in the notification centre when Claude finishes or needs you. For now $pet’s bubble and your phones tell you.',
+      ],
+    );
+  }
+}
+
+/// The volume: a slider between two speakers, and Test (the Mac's success chime).
+class _VolumeRow extends StatelessWidget {
+  const _VolumeRow({required this.host});
+
+  final SettingsHost host;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final settings = host.desktop.settings;
+    final enabled = settings.soundEnabled && host.desktop.sounds.output.supported;
+    return Padding(
+      padding: rowPadding,
+      child: Row(
+        children: [
+          ExcludeSemantics(child: Icon(Icons.volume_down_rounded, size: 18, color: p.inkSecondary)),
+          Expanded(
+            child: Slider(
+              value: settings.soundVolume,
+              label: '${(settings.soundVolume * 100).round()}%',
+              semanticFormatterCallback: (value) => 'Volume ${(value * 100).round()}%',
+              onChanged: enabled ? (value) => settings.soundVolume = value : null,
             ),
-            SoonRow(title: 'Sounds', detail: 'A soft chime for Claude’s moments, and tiny keyboard taps while Claude works.'),
-            SoonRow(title: 'Quiet hours', detail: 'Times when nothing makes a sound or shows a banner.'),
+          ),
+          ExcludeSemantics(child: Icon(Icons.volume_up_rounded, size: 18, color: p.inkSecondary)),
+          const SizedBox(width: Space.s),
+          OutlinedButton(onPressed: enabled ? host.desktop.reactions.testSound : null, child: const Text('Test')),
+        ],
+      ),
+    );
+  }
+}
+
+/// Each category's Animate, Badge, Banner and Sound (the Mac's grid of checkboxes). Side by side when there's room;
+/// at large text sizes each category's four come under its name.
+class _DeliveryGrid extends StatelessWidget {
+  const _DeliveryGrid({required this.host});
+
+  final SettingsHost host;
+
+  static const List<String> columns = ['Animate', 'Badge', 'Banner', 'Sound'];
+  static const double cell = 66;
+
+  @override
+  Widget build(BuildContext context) {
+    final desktop = host.desktop;
+    final settings = desktop.settings;
+    final toasts = desktop.toasts.availability.works;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 520 && MediaQuery.textScalerOf(context).scale(14) <= 18;
+        final rows = <Widget>[
+          if (wide)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Space.m + 2, Space.s, Space.m + 2, 0),
+              child: ExcludeSemantics(
+                child: Row(
+                  children: [
+                    const Expanded(child: SizedBox()),
+                    for (final column in columns)
+                      SizedBox(width: cell, child: Text(column, textAlign: TextAlign.center, style: context.type.caption)),
+                  ],
+                ),
+              ),
+            ),
+          for (final category in NotificationCategory.values)
+            _CategoryRow(
+              category: category,
+              delivery: settings.delivery(category),
+              wide: wide,
+              enabled: [
+                category.availableOnWindows,
+                category.availableOnWindows && category.allowsBadge,
+                category.availableOnWindows && category.allowsBanner && toasts,
+                category.availableOnWindows && settings.soundEnabled,
+              ],
+              onChanged: (delivery) => settings.setDelivery(category, delivery),
+            ),
+        ];
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
+      },
+    );
+  }
+}
+
+class _CategoryRow extends StatelessWidget {
+  const _CategoryRow({required this.category, required this.delivery, required this.wide, required this.enabled, required this.onChanged});
+
+  final NotificationCategory category;
+  final CategoryDelivery delivery;
+  final bool wide;
+
+  /// Animate, Badge, Banner, Sound.
+  final List<bool> enabled;
+  final ValueChanged<CategoryDelivery> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final values = [delivery.animate, delivery.badge, delivery.banner, delivery.sound];
+    CategoryDelivery changed(int index, bool value) => switch (index) {
+      0 => delivery.copyWith(animate: value),
+      1 => delivery.copyWith(badge: value),
+      2 => delivery.copyWith(banner: value),
+      _ => delivery.copyWith(sound: value),
+    };
+    Widget box(int index) => Semantics(
+      label: '${category.title}: ${_DeliveryGrid.columns[index]}',
+      child: Checkbox(
+        value: values[index] && enabled[index],
+        onChanged: enabled[index] ? (value) => onChanged(changed(index, value ?? false)) : null,
+      ),
+    );
+    final title = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: Space.s,
+          runSpacing: Space.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(category.title, style: context.type.subheadline.copyWith(fontWeight: FontWeight.w600)),
+            if (!category.availableOnWindows) Tag(text: SoonRow.tag, icon: Icons.schedule_rounded, tint: context.palette.inkSecondary),
           ],
         ),
+        const SizedBox(height: 2),
+        Text(category.explanation, style: context.type.caption),
       ],
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Space.m + 2, vertical: Space.xs),
+      child: wide
+          ? Row(
+              children: [
+                Expanded(child: title),
+                for (var index = 0; index < 4; index++) SizedBox(width: _DeliveryGrid.cell, child: Center(child: box(index))),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                title,
+                Wrap(
+                  spacing: Space.s,
+                  children: [
+                    for (var index = 0; index < 4; index++)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [box(index), ExcludeSemantics(child: Text(_DeliveryGrid.columns[index], style: context.type.caption))],
+                      ),
+                  ],
+                ),
+              ],
+            ),
     );
   }
 }

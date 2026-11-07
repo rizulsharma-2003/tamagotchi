@@ -41,6 +41,11 @@ dependencies:
   cryptography: 2.9.0
   http: 1.6.0
   archive: 4.0.7
+  # Windows notifications (W1): flutter_local_notifications' Windows implementation on its own, C++/WinRT toasts for an
+  # unpackaged app with an AppUserModelID and a COM activator for clicks (2.0.1: 2026-02-11; already in the workspace's
+  # lock file through mochi_pocket's flutter_local_notifications 20.1.0, so nothing new is downloaded; 3.x needs a newer
+  # platform interface than the pocket's).
+  flutter_local_notifications_windows: 2.0.1
 
 dev_dependencies:
   flutter_test:

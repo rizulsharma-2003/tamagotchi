@@ -9,7 +9,9 @@ import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_wire/mochi_wire.dart' show HookStatus;
 
+import '../core/hotkeys.dart';
 import '../core/pet_cues.dart';
+import '../core/toasts.dart';
 import '../desktop.dart';
 import '../platform/taskbar.dart';
 import 'pet/companion_director.dart';
@@ -94,6 +96,7 @@ class DesktopAppState extends State<DesktopApp> {
     clock: _clock,
     random: widget.strollRandom,
     reducedMotion: () => desktop.motion.reduced,
+    petAsleep: () => desktop.rhythm.asleep(now: desktop.sessions.now, lastActivity: _lastActivity),
   );
   late final TaskbarStroll _stroll = TaskbarStroll(
     shell: widget.shell,
@@ -155,6 +158,10 @@ class DesktopAppState extends State<DesktopApp> {
     unawaited(_loadLibrary());
     _subscriptions.add(widget.shell.actions.listen(handle));
     _subscriptions.add(desktop.cues.listen(_noteActivity));
+    _subscriptions.add(desktop.opens.listen(openFromNotification));
+    _subscriptions.add(desktop.shortcuts.listen(shortcut));
+    // With Mochi's window or popover open you're looking already: no badge or Windows notification (the Mac's popover).
+    desktop.reactions.lookingAtMochi = () => _surface == Surface.main || _surface == Surface.popover;
     desktop.sessions.addListener(_sessionsChanged);
     desktop.settings.addListener(_settingsChanged);
     desktop.updater.addListener(_updatesChanged);
@@ -369,10 +376,49 @@ class DesktopAppState extends State<DesktopApp> {
 
   bool _askFirst = false;
 
+  /// The session a Windows notification was about: its card is outlined in Mochi's window.
+  String? _focusSession;
+  String? get focusSession => _focusSession;
+
+  /// A Windows notification was clicked: the session's card in Mochi's window, Mochi's window, or the Agent's card.
+  void openFromNotification(ToastTarget target) {
+    switch (target.kind) {
+      case ToastTargetKind.session:
+        final id = target.sessionId;
+        _focusSession = id != null && desktop.sessions.registry[id] != null ? id : null;
+        open(MainPage.home);
+      case ToastTargetKind.main:
+        _focusSession = null;
+        open(MainPage.home);
+      case ToastTargetKind.agent:
+        open(MainPage.settings, pane: SettingsTab.agent);
+    }
+  }
+
+  /// One of Mochi's global shortcuts: show or hide the desktop pet (the Mac's ⌃⌥⌘P), or Ask Mochi (the Mac's ⌥Space:
+  /// the question box, or closing it again).
+  void shortcut(MochiShortcut shortcut) {
+    switch (shortcut) {
+      case MochiShortcut.pet:
+        desktop.settings.showPet = !desktop.settings.showPet;
+      case MochiShortcut.ask:
+        if (_surface == Surface.main && _page == MainPage.home) {
+          closeMain();
+        } else {
+          openAsk();
+        }
+    }
+  }
+
   void _show(Surface surface) {
     if (surface != Surface.popover) {
       _popover = null;
       _popoverClosing = false;
+    }
+    if (surface == Surface.main || surface == Surface.popover) {
+      desktop.reactions.acknowledge();
+    } else {
+      _focusSession = null;
     }
     setState(() => _surface = surface);
     final shown = _stroll.show(surface);
@@ -460,7 +506,7 @@ class DesktopAppState extends State<DesktopApp> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([desktop.settings, desktop.motion, _stroll, _companion]),
+    listenable: Listenable.merge([desktop.settings, desktop.motion, desktop.reactions, _stroll, _companion]),
     builder: (context, _) => MaterialApp(
       title: 'Mochi',
       debugShowCheckedModeBanner: false,
@@ -626,6 +672,7 @@ class _MainSurface extends StatelessWidget {
                 onPair: () => state.open(MainPage.pairing),
                 onSettings: () => state.open(MainPage.settings, pane: SettingsTab.claude),
                 onInstall: () => unawaited(state.installMochi()),
+                focusSession: state._focusSession,
               ),
               MainPage.pairing => PairingScreen(
                 link: desktop.link,

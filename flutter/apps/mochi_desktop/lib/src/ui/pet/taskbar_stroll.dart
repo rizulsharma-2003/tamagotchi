@@ -875,12 +875,18 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
       PetCue.finished => 2.6,
       PetCue.snag => 2.4,
       PetCue.replied => 1.0,
+      PetCue.celebrate => 2.6,
+      PetCue.cheer => 2.0,
+      PetCue.worry => 2.4,
+      PetCue.greet => 1.6,
+      PetCue.goodbye => 1.4,
       _ => null,
     };
     // A moment with Patch is the reaction itself: Mochi is on its way over to him, or already there.
     final together = companion?.pending != null || companion?.interaction != null;
     if (hold == null || !onTaskbar || _dragging || together) return;
-    stroller.react(_clock(), hold, attentive: cue == PetCue.finished || cue == PetCue.snag || cue == PetCue.replied);
+    const news = {PetCue.finished, PetCue.snag, PetCue.replied, PetCue.celebrate, PetCue.cheer, PetCue.worry, PetCue.greet};
+    stroller.react(_clock(), hold, attentive: news.contains(cue));
     _tick();
   }
 

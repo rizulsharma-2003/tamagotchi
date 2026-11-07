@@ -7,10 +7,15 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show Uint8List;
 import 'package:mochi_desktop/src/core/claude_cli.dart';
 import 'package:mochi_desktop/src/core/desktop_settings.dart';
 import 'package:mochi_desktop/src/core/hook_setup.dart';
+import 'package:mochi_desktop/src/core/hotkeys.dart';
+import 'package:mochi_desktop/src/core/pc_rhythm.dart';
 import 'package:mochi_desktop/src/core/session_store.dart';
+import 'package:mochi_desktop/src/core/sounds.dart';
+import 'package:mochi_desktop/src/core/toasts.dart';
 import 'package:mochi_desktop/src/desktop.dart';
 import 'package:mochi_desktop/src/link/link_host.dart';
 import 'package:mochi_desktop/src/platform/credential_vault.dart';
@@ -444,9 +449,132 @@ class MemoryStartupRegistry implements StartupRegistry {
   }
 }
 
+/// Windows notifications: records each toast; [availability] is whatever the test says.
+class FakeToasts implements ToastService {
+  FakeToasts({this.availability = ToastAvailability.ready});
+
+  @override
+  ToastAvailability availability;
+  final List<Toast> shown = [];
+  void Function(ToastTarget target)? onOpen;
+  int refreshes = 0;
+  int settingsOpened = 0;
+
+  /// The user clicks a toast.
+  void click(ToastTarget target) => onOpen?.call(target);
+
+  @override
+  Future<void> start(void Function(ToastTarget target) onOpen) async => this.onOpen = onOpen;
+
+  @override
+  void refresh() => refreshes++;
+
+  @override
+  Future<bool> show(Toast toast) async {
+    if (!availability.works) return false;
+    shown.add(toast);
+    return true;
+  }
+
+  @override
+  Future<void> openSystemSettings() async => settingsOpened++;
+
+  @override
+  void dispose() {}
+}
+
+/// The speakers: records each WAV played.
+class FakeSound implements SoundOutput {
+  final List<Uint8List> played = [];
+
+  @override
+  bool supported = true;
+
+  @override
+  bool systemSoundsOn = true;
+
+  @override
+  void play(Uint8List wav) => played.add(wav);
+}
+
+/// The PC's state, as the test sets it.
+class FakeUsage implements UsageSampler {
+  FakeUsage([this.activity]);
+
+  SystemActivity? activity;
+  final StreamController<void> _changes = StreamController.broadcast();
+
+  /// Something changed (the display went off): the rhythm samples at once.
+  void change(SystemActivity next) {
+    activity = next;
+    _changes.add(null);
+  }
+
+  @override
+  bool get supported => true;
+
+  @override
+  SystemActivity? sample() => activity;
+
+  @override
+  Stream<void> get changes => _changes.stream;
+
+  @override
+  void dispose() => unawaited(_changes.close());
+}
+
+/// RegisterHotKey: [taken] combinations belong to another app.
+class FakeHotkeys implements HotkeyRegistrar {
+  final Map<int, Hotkey> registered = {};
+  final Set<Hotkey> taken = {};
+  final List<String> calls = [];
+  final StreamController<int> _pressed = StreamController.broadcast(sync: true);
+
+  /// The user presses [shortcut]'s combination.
+  void press(MochiShortcut shortcut) => _pressed.add(shortcut.id);
+
+  @override
+  bool supported = true;
+
+  @override
+  Future<bool> register(int id, Hotkey hotkey) async {
+    calls.add('register $id ${hotkey.label}');
+    if (taken.contains(hotkey)) return false;
+    registered[id] = hotkey;
+    return true;
+  }
+
+  @override
+  Future<void> unregister(int id) async {
+    calls.add('unregister $id');
+    registered.remove(id);
+  }
+
+  @override
+  Stream<int> get pressed => _pressed.stream;
+}
+
 /// A desktop wired from fakes in a temporary folder.
 class TestDesktop {
-  TestDesktop._(this.temp, this.desktop, this.sockets, this.api, this.claude, this.vault, this.document, this.startup);
+  TestDesktop._(
+    this.temp,
+    this.desktop,
+    this.sockets,
+    this.api,
+    this.claude,
+    this.vault,
+    this.document,
+    this.startup,
+    this.toasts,
+    this.sound,
+    this.usage,
+    this.hotkeys,
+  );
+
+  final FakeToasts toasts;
+  final FakeSound sound;
+  final FakeUsage usage;
+  final FakeHotkeys hotkeys;
 
   final Directory temp;
   final MochiDesktop desktop;
@@ -472,8 +600,14 @@ class TestDesktop {
     String? claudePath = '/usr/local/bin/claude',
     Updater? updater,
     SelfInstaller? installer,
+    FakeToasts? toasts,
+    SystemActivity? activity,
   }) {
     final temp = Directory.systemTemp.createTempSync('mochi_desktop_test');
+    final toastService = toasts ?? FakeToasts();
+    final sound = FakeSound();
+    final usage = FakeUsage(activity);
+    final hotkeys = FakeHotkeys();
     final paths = BridgePaths(home ?? '${temp.path}/mochi', windows: false);
     final sockets = <FakeSocket>[];
     final api = FakeLinkApi();
@@ -515,8 +649,12 @@ class TestDesktop {
       clock: clock,
       updater: updater,
       installer: installer,
+      toasts: toastService,
+      sound: sound,
+      usage: usage,
+      hotkeys: hotkeys,
     );
-    return TestDesktop._(temp, desktop, sockets, api, claude, vault, document, start);
+    return TestDesktop._(temp, desktop, sockets, api, claude, vault, document, start, toastService, sound, usage, hotkeys);
   }
 
   Future<void> dispose() async {

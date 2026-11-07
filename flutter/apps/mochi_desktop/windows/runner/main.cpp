@@ -1,6 +1,7 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
+#include <shobjidl.h>
 
 #include "flutter_window.h"
 #include "utils.h"
@@ -13,6 +14,10 @@ constexpr const wchar_t kSingleInstanceMutex[] =
     L"Local\\InsideEdge.Mochi.SingleInstance";
 constexpr const wchar_t kWindowClass[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 constexpr const wchar_t kWindowTitle[] = L"Mochi";
+
+// Mochi's AppUserModelID: the installed copy's Start-menu shortcut carries it (lib/src/update/self_install.dart), and
+// Windows attributes toasts, the taskbar button and jump lists by it.
+constexpr const wchar_t kAppUserModelId[] = L"InsideEdge.Mochi";
 
 // Asks the copy that's already running to show its main window.
 void ShowRunningCopy() {
@@ -39,6 +44,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::CloseHandle(single_instance);
     return EXIT_SUCCESS;
   }
+
+  // Before any window: this process is Mochi, the app of the Start-menu shortcut, so its notifications and taskbar
+  // button are attributed to Mochi.
+  ::SetCurrentProcessExplicitAppUserModelID(kAppUserModelId);
 
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.

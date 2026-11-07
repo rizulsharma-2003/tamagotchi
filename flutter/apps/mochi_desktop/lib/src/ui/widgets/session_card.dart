@@ -17,10 +17,13 @@ import '../../core/sessions.dart';
 
 /// One Claude Code session: project, phase, what it's doing, and the summary of its last turn (when shared).
 class SessionCard extends StatelessWidget {
-  const SessionCard({super.key, required this.session, required this.now});
+  const SessionCard({super.key, required this.session, required this.now, this.highlighted = false});
 
   final ClaudeSession session;
   final DateTime now;
+
+  /// Opened from a Windows notification about this session: outlined in Mochi's colour.
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +46,7 @@ class SessionCard extends StatelessWidget {
         excludeSemantics: true,
         child: ClayCard(
           padding: const EdgeInsets.all(Space.m),
-          outline: session.phoneSessionPhase == 'waiting' ? p.warning.withValues(alpha: 0.6) : null,
+          outline: highlighted ? p.tint : (session.phoneSessionPhase == 'waiting' ? p.warning.withValues(alpha: 0.6) : null),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

@@ -56,15 +56,17 @@ class SessionReports {
 abstract final class TurnSummarizer {
   static const String model = 'haiku';
 
+  /// The Mac's system prompt, character for character (one instruction per line). ProcessClaudeRunner turns the line
+  /// breaks into spaces only for npm's `claude.cmd`, which runs through cmd.exe.
   static const String systemPrompt =
       'You write short notes for a phone about what Claude, a coding assistant, just did in one of the user\'s '
-      'projects, so the user can decide what to ask next. Reply with JSON only, no code fence: '
-      '{"done": "...", "session": "...", "next": ["..."]} '
+      'projects, so the user can decide what to ask next. Reply with JSON only, no code fence:\n'
+      '{"done": "...", "session": "...", "next": ["..."]}\n'
       '- done: at most 160 characters. What Claude did or found this turn, the most important part first. '
-      'Plain words: no markdown, no file paths. '
-      '- session: at most 110 characters. What this session is working on overall, using the earlier notes. '
+      'Plain words: no markdown, no file paths.\n'
+      '- session: at most 110 characters. What this session is working on overall, using the earlier notes.\n'
       '- next: up to 2 requests of at most 40 characters the user could send next, in the user\'s voice '
-      '("Run the tests", "Yes, do the migration too"). If Claude asked a question, offer the likely answers. '
+      '("Run the tests", "Yes, do the migration too"). If Claude asked a question, offer the likely answers.\n'
       'Never invent work the message doesn\'t mention.';
 
   static List<String> get arguments => [

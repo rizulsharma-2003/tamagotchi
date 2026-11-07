@@ -123,7 +123,8 @@ class ProcessClaudeRunner implements ClaudeRunner {
     Directory(workingDirectory).createSync(recursive: true);
     final process = await Process.start(
       executable,
-      arguments,
+      // cmd.exe ends a command at a line break: through npm's shim, an argument's lines are joined with spaces.
+      _viaShell ? [for (final argument in arguments) argument.replaceAll(RegExp(r'\r?\n'), ' ')] : arguments,
       workingDirectory: workingDirectory,
       environment: environment,
       includeParentEnvironment: false,

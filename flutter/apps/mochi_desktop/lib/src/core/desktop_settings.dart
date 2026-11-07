@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart' show Accessory, AccessorySlot, OfficeTheme, PetColor, SeasonDecor, SeasonalEvent, Wearer;
 
+import 'hotkeys.dart';
+import 'notifications.dart';
 import 'seasons.dart';
 
 /// Where the settings live: a JSON file in the app's private folder, or memory in tests.
@@ -62,7 +64,7 @@ enum CompanionVisibility {
 
 /// The app's settings (the Settings window), saved as they change. Every field has a safe default, so a file from an
 /// older version (or a damaged one) loads with the new fields at their defaults; names follow the Mac's AppSettings.
-class DesktopSettings extends ChangeNotifier {
+class DesktopSettings extends ChangeNotifier implements NotificationPreferences {
   DesktopSettings(this._document, {DateTime Function()? clock}) {
     final json = _document.read() ?? const {};
     _load(json);
@@ -73,8 +75,13 @@ class DesktopSettings extends ChangeNotifier {
   }
 
   /// The file's format. Version 1 had no number (theme, the pet, phones, Ask Mochi); 2 adds the names, the look,
-  /// holidays, reactions and the day Mochi arrived; 3 the companion (when he's around, and on the taskbar).
-  static const int version = 3;
+  /// holidays, reactions and the day Mochi arrived; 3 the companion (when he's around, and on the taskbar); 4 the Mac's
+  /// notifications (quiet mode and hours, each category's animate/badge/banner/sound, sounds), naps that follow the
+  /// PC, "only when I'm away" for the phones, and the global shortcuts.
+  static const int version = 4;
+
+  /// The Mac's stepper for "Rests after … min without typing or clicking".
+  static const int maxRestAfterMinutes = 60;
 
   static const String defaultPetName = 'Mochi';
   static const String defaultCompanionName = 'Patch';
@@ -110,8 +117,17 @@ class DesktopSettings extends ChangeNotifier {
   int? _birthdayMonth;
   int? _birthdayDay;
   bool _pauseReactions = false;
-  bool _celebrateFinished = true;
-  bool _showSnags = true;
+  bool _quietMode = false;
+  QuietHours _quietHours = const QuietHours();
+  final Map<NotificationCategory, CategoryDelivery> _categoryDelivery = {};
+  bool _soundEnabled = false;
+  double _soundVolume = 0.45;
+  bool _workSounds = false;
+  bool _followSystem = true;
+  int _restAfterMinutes = 5;
+  bool _notifyOnlyWhenAway = false;
+  Hotkey? _petShortcut = Hotkey.petDefault;
+  Hotkey? _askShortcut = Hotkey.askDefault;
   CompanionVisibility _companionVisibility = CompanionVisibility.duringSessions;
   int _companionLingerMinutes = 10;
   int _companionSleepAfterMinutes = 6;
@@ -156,8 +172,32 @@ class DesktopSettings extends ChangeNotifier {
     _birthdayMonth = valid ? month : null;
     _birthdayDay = valid ? day : null;
     _pauseReactions = flag('pauseReactions', false);
-    _celebrateFinished = flag('celebrateFinished', true);
-    _showSnags = flag('showSnags', true);
+    _quietMode = flag('quietMode', false);
+    _quietHours = QuietHours.fromJson(json['quietHours']);
+    _categoryDelivery.clear();
+    final saved = json['categoryDelivery'];
+    if (saved is Map) {
+      for (final category in NotificationCategory.values) {
+        if (saved[category.name] != null) _categoryDelivery[category] = CategoryDelivery.fromJson(saved[category.name], category.defaultDelivery);
+      }
+    }
+    // Before version 4, Notifications › On this PC had two switches: they're the animations of these categories now.
+    void stillOff(NotificationCategory category) =>
+        _categoryDelivery.putIfAbsent(category, () => category.defaultDelivery.copyWith(animate: false));
+    if (json['celebrateFinished'] == false) stillOff(NotificationCategory.turnCompleted);
+    if (json['showSnags'] == false) {
+      stillOff(NotificationCategory.turnError);
+      stillOff(NotificationCategory.toolFailure);
+    }
+    _soundEnabled = flag('soundEnabled', false);
+    final volume = json['soundVolume'];
+    _soundVolume = volume is num && volume.isFinite ? volume.toDouble().clamp(0, 1) : 0.45;
+    _workSounds = flag('workSounds', false);
+    _followSystem = flag('followSystem', true);
+    _restAfterMinutes = _minutes(json['restAfterMinutes'], 5, 1, maxRestAfterMinutes);
+    _notifyOnlyWhenAway = flag('notifyOnlyWhenAway', false);
+    _petShortcut = _shortcut(json['petShortcut'], Hotkey.petDefault);
+    _askShortcut = _shortcut(json['askShortcut'], Hotkey.askDefault);
     _companionVisibility = named(CompanionVisibility.values, json['companionVisibility']) ?? CompanionVisibility.duringSessions;
     _companionLingerMinutes = _minutes(json['companionLingerMinutes'], 10, 0, maxLingerMinutes);
     _companionSleepAfterMinutes = _minutes(json['companionSleepAfterMinutes'], 6, 1, maxSleepAfterMinutes);
@@ -167,6 +207,12 @@ class DesktopSettings extends ChangeNotifier {
   }
 
   static int _minutes(Object? value, int fallback, int min, int max) => value is int ? value.clamp(min, max) : fallback;
+
+  /// A saved shortcut: "Ctrl+Alt+Space", "none" (turned off), or missing (the default).
+  static Hotkey? _shortcut(Object? value, Hotkey fallback) {
+    if (value == 'none') return null;
+    return value is String ? Hotkey.parse(value) ?? fallback : fallback;
+  }
 
   static String _name(Object? value, String fallback) =>
       value is String ? value.substring(0, value.length.clamp(0, maxNameLength)) : fallback;
@@ -292,17 +338,92 @@ class DesktopSettings extends ChangeNotifier {
   /// What the companion wears on [date].
   Accessory? wornByCompanion(DateTime date) => _companionAccessory ?? SeasonDecor.costume(holidayOn(date), Wearer.companion);
 
-  /// Mochi stops reacting to Claude's moments (no celebration, worry or wave); the sessions keep updating.
+  /// Mochi stops reacting to Claude's moments (no celebration, worry or wave), and nothing plays a sound or shows a
+  /// Windows notification; the sessions keep updating.
+  @override
   bool get pauseReactions => _pauseReactions;
   set pauseReactions(bool value) => _set(() => _pauseReactions = value);
 
-  /// Mochi bounces and says "Claude finished!" when a turn ends.
-  bool get celebrateFinished => _celebrateFinished;
-  set celebrateFinished(bool value) => _set(() => _celebrateFinished = value);
+  /// Quiet mode: no sounds and no Windows notifications until you turn it off. Animations and badges still show.
+  @override
+  bool get quietMode => _quietMode;
+  set quietMode(bool value) => _set(() => _quietMode = value);
 
-  /// Mochi looks worried and says "Claude hit a snag" when a turn ends with an error.
-  bool get showSnags => _showSnags;
-  set showSnags(bool value) => _set(() => _showSnags = value);
+  /// The daily quiet window (off by default, 22:00–08:00).
+  @override
+  QuietHours get quietHours => _quietHours;
+  set quietHours(QuietHours value) => _set(() => _quietHours = value);
+
+  /// How [category] may reach you: your choice, else its default (banners and badges only where the category allows
+  /// them).
+  @override
+  CategoryDelivery delivery(NotificationCategory category) {
+    final chosen = _categoryDelivery[category] ?? category.defaultDelivery;
+    return chosen.copyWith(banner: chosen.banner && category.allowsBanner, badge: chosen.badge && category.allowsBadge);
+  }
+
+  void setDelivery(NotificationCategory category, CategoryDelivery delivery) => _set(() => _categoryDelivery[category] = delivery);
+
+  /// Settings › Notifications › Restore Defaults.
+  void restoreDeliveryDefaults() => _set(_categoryDelivery.clear);
+
+  /// Every category is at its default.
+  bool get deliveryAtDefaults =>
+      _categoryDelivery.entries.every((entry) => entry.value == entry.key.defaultDelivery);
+
+  /// Mochi bounces and says "Claude finished!" when a turn ends (Turn completed › Animate).
+  bool get celebrateFinished => delivery(NotificationCategory.turnCompleted).animate;
+  set celebrateFinished(bool value) =>
+      setDelivery(NotificationCategory.turnCompleted, delivery(NotificationCategory.turnCompleted).copyWith(animate: value));
+
+  /// Mochi looks worried when a turn ends with an error or a tool reports one (API errors and Tool errors › Animate).
+  bool get showSnags => delivery(NotificationCategory.turnError).animate;
+  set showSnags(bool value) => _set(() {
+    for (final category in const [NotificationCategory.turnError, NotificationCategory.toolFailure]) {
+      _categoryDelivery[category] = delivery(category).copyWith(animate: value);
+    }
+  });
+
+  /// Mochi's sounds (off by default, as on the Mac).
+  @override
+  bool get soundEnabled => _soundEnabled;
+  set soundEnabled(bool value) => _set(() => _soundEnabled = value);
+
+  /// 0–1.
+  double get soundVolume => _soundVolume;
+  set soundVolume(double value) => _set(() => _soundVolume = value.isFinite ? value.clamp(0, 1) : 0.45);
+
+  /// Tiny keyboard taps while Claude edits or runs commands.
+  @override
+  bool get workSounds => _workSounds;
+  set workSounds(bool value) => _set(() => _workSounds = value);
+
+  /// Mochi sleeps while this PC rests and is awake while you work (Settings › Characters › Naps).
+  bool get followSystem => _followSystem;
+  set followSystem(bool value) => _set(() => _followSystem = value);
+
+  /// Minutes without typing or clicking before the PC counts as resting (1–60).
+  int get restAfterMinutes => _restAfterMinutes;
+  set restAfterMinutes(int value) => _set(() => _restAfterMinutes = value.clamp(1, maxRestAfterMinutes));
+
+  /// Claude's summaries go to the phones only while you're away from this PC.
+  bool get notifyOnlyWhenAway => _notifyOnlyWhenAway;
+  set notifyOnlyWhenAway(bool value) => _set(() => _notifyOnlyWhenAway = value);
+
+  /// The global shortcut for [shortcut] (null: none).
+  Hotkey? shortcut(MochiShortcut shortcut) => switch (shortcut) {
+    MochiShortcut.pet => _petShortcut,
+    MochiShortcut.ask => _askShortcut,
+  };
+
+  void setShortcut(MochiShortcut shortcut, Hotkey? hotkey) => _set(() {
+    switch (shortcut) {
+      case MochiShortcut.pet:
+        _petShortcut = hotkey;
+      case MochiShortcut.ask:
+        _askShortcut = hotkey;
+    }
+  });
 
   /// When the coding companion is around: while Claude Code is active (the Mac's default), always or never.
   CompanionVisibility get companionVisibility => _companionVisibility;
@@ -377,8 +498,20 @@ class DesktopSettings extends ChangeNotifier {
     'officeTheme': _officeTheme.name,
     'seasonal': {'enabled': _holidays, 'birthdayMonth': ?_birthdayMonth, 'birthdayDay': ?_birthdayDay},
     'pauseReactions': _pauseReactions,
-    'celebrateFinished': _celebrateFinished,
-    'showSnags': _showSnags,
+    // Kept for an older Mochi reading this file: the animations of their categories.
+    'celebrateFinished': celebrateFinished,
+    'showSnags': showSnags,
+    'quietMode': _quietMode,
+    'quietHours': _quietHours.toJson(),
+    'categoryDelivery': {for (final entry in _categoryDelivery.entries) entry.key.name: entry.value.toJson()},
+    'soundEnabled': _soundEnabled,
+    'soundVolume': _soundVolume,
+    'workSounds': _workSounds,
+    'followSystem': _followSystem,
+    'restAfterMinutes': _restAfterMinutes,
+    'notifyOnlyWhenAway': _notifyOnlyWhenAway,
+    'petShortcut': _petShortcut?.label ?? 'none',
+    'askShortcut': _askShortcut?.label ?? 'none',
     'companionVisibility': _companionVisibility.name,
     'companionLingerMinutes': _companionLingerMinutes,
     'companionSleepAfterMinutes': _companionSleepAfterMinutes,
