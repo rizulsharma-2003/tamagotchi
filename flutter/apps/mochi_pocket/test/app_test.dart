@@ -424,6 +424,8 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+    // Further down the page, under Hands-free.
+    await tester.scrollUntilVisible(find.text('Hear a sample'), 300, scrollable: find.byType(Scrollable).last);
     for (final title in ['Mochi', 'Tiny', 'Calm', 'Plain']) {
       expect(find.widgetWithText(ChoiceChip, title), findsOneWidget);
     }
@@ -472,7 +474,8 @@ void main() {
     // Off: saved, and nothing stays.
     await tester.tap(find.text('Show on Lock Screen'));
     await tester.pump();
-    await tester.tap(find.byType(Switch));
+    // The lock screen's switch (Mochi Cloud has one further down).
+    await tester.tap(find.byType(Switch).first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(settings.showOnLockScreen, isFalse);
@@ -495,7 +498,7 @@ void main() {
     await macShares(tester);
     final sessions = find.text('Claude on your Mac');
     expect(sessions, findsNothing, reason: 'below the first screen, so not built yet');
-    bridge.liveActionController.add('session');
+    bridge.placeController.add('sessions');
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The "Talk to Mochi" app shortcut's icon: on the launcher icon's peach, like Mochi's own icon. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground>
+        <inset
+            android:drawable="@drawable/mochi_shortcut_glyph_talk"
+            android:inset="32%" />
+    </foreground>
+</adaptive-icon>

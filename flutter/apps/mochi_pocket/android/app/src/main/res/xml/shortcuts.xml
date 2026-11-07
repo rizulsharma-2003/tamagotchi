@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hands-free Mochi (A4), the Android side of the iPhone's Siri phrases (iOS/MochiPocket/MochiIntents.swift):
+
+     - App shortcuts: press and hold Mochi's icon for Talk to Mochi, What's waiting and Check now. Each opens Mochi with
+       a mochi://<place> link that MainActivity hands to the app.
+     - Google Assistant App Actions: "Hey Google, what's waiting on Mochi?" opens What's waiting, where Mochi reads it
+       out in its own voice; "Hey Google, check Mochi" asks for a check (Mochi Cloud or your computer) and Mochi says
+       so; "Hey Google, talk to Mochi" opens Mochi listening. Assistant's links carry voice=1 so Mochi answers out loud.
+       "Hey Google, open What's waiting in Mochi" works through the shortcuts too (OPEN_APP_FEATURE).
+
+     Assistant only uses these for an app installed from Google Play; a sideloaded build has the shortcuts only. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <capability
+        android:name="custom.actions.intent.WHATS_WAITING"
+        app:queryPatterns="@array/mochi_whats_waiting_queries">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.insideedge.mochi.MainActivity"
+            android:targetPackage="com.insideedge.mochi">
+            <url-template android:value="mochi://waiting?voice=1" />
+        </intent>
+    </capability>
+
+    <capability
+        android:name="custom.actions.intent.CHECK_NOW"
+        app:queryPatterns="@array/mochi_check_now_queries">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.insideedge.mochi.MainActivity"
+            android:targetPackage="com.insideedge.mochi">
+            <url-template android:value="mochi://check?voice=1" />
+        </intent>
+    </capability>
+
+    <capability
+        android:name="custom.actions.intent.TALK_TO_MOCHI"
+        app:queryPatterns="@array/mochi_talk_queries">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.insideedge.mochi.MainActivity"
+            android:targetPackage="com.insideedge.mochi">
+            <url-template android:value="mochi://talk?voice=1" />
+        </intent>
+    </capability>
+
+    <capability android:name="actions.intent.OPEN_APP_FEATURE">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.insideedge.mochi.MainActivity"
+            android:targetPackage="com.insideedge.mochi">
+            <parameter
+                android:name="feature"
+                android:key="feature" />
+        </intent>
+    </capability>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/mochi_shortcut_talk"
+        android:shortcutId="talk"
+        android:shortcutLongLabel="@string/mochi_shortcut_talk_long"
+        android:shortcutShortLabel="@string/mochi_shortcut_talk_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="mochi://talk"
+            android:targetClass="com.insideedge.mochi.MainActivity"
+            android:targetPackage="com.insideedge.mochi" />
+        <capability-binding android:key="actions.intent.OPEN_APP_FEATURE">
+            <parameter-binding
+                android:key="feature"
+                android:value="@array/mochi_feature_talk" />
+        </capability-binding>
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/mochi_shortcut_waiting"
+        android:shortcutId="waiting"
+        android:shortcutLongLabel="@string/mochi_shortcut_waiting_long"
+        android:shortcutShortLabel="@string/mochi_shortcut_waiting_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="mochi://waiting"
+            android:targetClass="com.insideedge.mochi.MainActivity"
+            android:targetPackage="com.insideedge.mochi" />
+        <capability-binding android:key="actions.intent.OPEN_APP_FEATURE">
+            <parameter-binding
+                android:key="feature"
+                android:value="@array/mochi_feature_waiting" />
+        </capability-binding>
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/mochi_shortcut_check"
+        android:shortcutId="check"
+        android:shortcutLongLabel="@string/mochi_shortcut_check_long"
+        android:shortcutShortLabel="@string/mochi_shortcut_check_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="mochi://check"
+            android:targetClass="com.insideedge.mochi.MainActivity"
+            android:targetPackage="com.insideedge.mochi" />
+        <capability-binding android:key="actions.intent.OPEN_APP_FEATURE">
+            <parameter-binding
+                android:key="feature"
+                android:value="@array/mochi_feature_check" />
+        </capability-binding>
+    </shortcut>
+</shortcuts>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One of Claude's sessions on the widget: a dot in the status's colour, the project, and its status. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:importantForAccessibility="no"
+    android:orientation="horizontal"
+    android:paddingTop="3dp">
+
+    <ImageView
+        android:id="@+id/widget_session_dot"
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:layout_marginHorizontal="3dp"
+        android:importantForAccessibility="no" />
+
+    <TextView
+        android:id="@+id/widget_session_project"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/mochi_widget_ink"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/widget_session_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:textColor="@color/mochi_widget_ink_secondary"
+        android:textSize="12sp" />
+</LinearLayout>

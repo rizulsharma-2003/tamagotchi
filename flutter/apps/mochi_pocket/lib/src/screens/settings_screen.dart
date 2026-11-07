@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:mochi_home_widget/mochi_home_widget.dart';
 import 'package:mochi_link/mochi_link.dart';
 
 import '../live/live_notifier.dart';
@@ -8,9 +9,11 @@ import '../live/live_updates.dart';
 import '../model/app_settings.dart';
 import '../model/pocket_model.dart';
 import '../services/alert_notifier.dart';
+import '../services/platform_bridge.dart';
 import '../theme.dart';
 import '../voice/mochi_voice.dart';
 import '../voice/updates_reader.dart';
+import '../widget/home_widget.dart';
 import '../widgets/clay.dart';
 import 'home_screen.dart' show connectionPill;
 
@@ -18,9 +21,19 @@ import 'home_screen.dart' show connectionPill;
 const String appVersion = '0.1.0';
 
 /// Settings: Mochi Link (who this phone is paired with, the relay and the Mac's presence, Unpair), notifications, Mochi
-/// on the lock screen, appearance, and Mochi's voice (iOS/MochiPocket/PocketLink.swift `LinkCard`, PocketSettingsView).
+/// on the lock screen, the home-screen widget, appearance, Mochi's voice and Mochi Cloud (iOS/MochiPocket/PocketLink.swift
+/// `LinkCard`, PocketSettingsView).
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.model, required this.notifier, required this.settings, required this.reader, this.live});
+  const SettingsScreen({
+    super.key,
+    required this.model,
+    required this.notifier,
+    required this.settings,
+    required this.reader,
+    this.live,
+    this.homeWidget,
+    this.bridge,
+  });
 
   final PocketModel model;
   final AlertNotifier notifier;
@@ -30,6 +43,12 @@ class SettingsScreen extends StatefulWidget {
   /// Mochi on the lock screen while Claude works: the sample, and taking it away when the switch goes off.
   final LiveUpdates? live;
 
+  /// The home-screen widget: whether it's there, and Add to Home Screen.
+  final HomeWidget? homeWidget;
+
+  /// "Talk to Mochi" in Quick Settings: whether it's there, and Add to Quick Settings.
+  final PlatformBridge? bridge;
+
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -38,6 +57,8 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   bool? _notificationsOn;
   late Future<List<VoiceInfo>> _voices = widget.reader.voices();
   LiveUpdateStatus? _liveStatus;
+  HomeWidgetPlacement? _widgetPlacement;
+  TalkTileState? _tile;
   String _samplePhase = 'working';
   bool _sampleShown = false;
 
@@ -71,10 +92,14 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   Future<void> _checkNotifications() async {
     final on = await widget.notifier.enabled();
     final live = await widget.live?.notifier.status();
+    final placement = await widget.homeWidget?.surface.status();
+    final tile = await widget.bridge?.talkTile();
     if (mounted) {
       setState(() {
         _notificationsOn = on;
         _liveStatus = live;
+        _widgetPlacement = placement;
+        _tile = tile;
       });
     }
   }
@@ -129,10 +154,14 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
             const SizedBox(height: Space.l),
             _notifications(),
             if (widget.live != null) ...[const SizedBox(height: Space.l), _lockScreen()],
+            if (widget.homeWidget != null) ...[const SizedBox(height: Space.l), _homeScreen()],
+            if (widget.bridge != null) ...[const SizedBox(height: Space.l), _handsFree()],
             const SizedBox(height: Space.l),
             _appearance(),
             const SizedBox(height: Space.l),
             _voice(),
+            const SizedBox(height: Space.l),
+            _cloud(),
             const SizedBox(height: Space.l),
             Text(
               'Mochi for Android $appVersion · Mochi Link protocol $linkClientVersion',
@@ -429,6 +458,144 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
     );
   }
 
+  // MARK: Home screen
+
+  /// The "Mochi & Claude" widget (the iPhone's Lock Screen and Home Screen widget): what it shows, whether it's on the
+  /// home screen, and Add to Home Screen when the launcher can be asked.
+  Widget _homeScreen() {
+    final p = context.palette;
+    final placement = _widgetPlacement;
+    final placed = (placement?.placed ?? 0) > 0;
+    return ClayCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          OverflowBar(
+            alignment: MainAxisAlignment.spaceBetween,
+            overflowAlignment: OverflowBarAlignment.start,
+            spacing: Space.s,
+            overflowSpacing: Space.s,
+            children: [
+              Semantics(header: true, child: Text('Home screen', style: context.type.headline)),
+              if (placement != null)
+                Tag(
+                  text: placed ? 'Widget added' : 'No widget yet',
+                  icon: placed ? Icons.check_rounded : Icons.widgets_outlined,
+                  tint: placed ? p.success : p.inkSecondary,
+                ),
+            ],
+          ),
+          const SizedBox(height: Space.s),
+          Text(
+            'The “Mochi & Claude” widget shows ${model.petName}, what Claude is doing on ${model.host.yours}, and what’s waiting '
+            'for you. It keeps itself up to date, even while ${model.petName} is closed. Tap it to open ${model.petName}.',
+            style: context.type.footnote,
+          ),
+          const SizedBox(height: Space.m),
+          if (placement?.canPin ?? false)
+            FilledButton.icon(
+              onPressed: () async {
+                final asked = await widget.homeWidget!.surface.pin();
+                if (!asked && mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('Long-press your home screen, tap Widgets, and find Mochi.')));
+                }
+              },
+              icon: const Icon(Icons.add_to_home_screen_rounded, size: 18),
+              label: Text(placed ? 'Add Another' : 'Add to Home Screen'),
+            )
+          else
+            NoteLabel(
+              text: 'To add it: long-press your home screen, tap Widgets, and find Mochi.',
+              icon: Icons.widgets_outlined,
+              tint: p.tint,
+              textColor: p.ink,
+            ),
+        ],
+      ),
+    );
+  }
+
+  // MARK: Hands-free
+
+  /// Mochi without opening Mochi (A4; the iPhone's Siri phrases and Shortcuts): "Talk to Mochi" in Quick Settings, the
+  /// app shortcuts on Mochi's icon, and Hey Google.
+  Widget _handsFree() {
+    final p = context.palette;
+    final tile = _tile;
+    final added = tile?.added ?? false;
+    return ClayCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          OverflowBar(
+            alignment: MainAxisAlignment.spaceBetween,
+            overflowAlignment: OverflowBarAlignment.start,
+            spacing: Space.s,
+            overflowSpacing: Space.s,
+            children: [
+              Semantics(header: true, child: Text('Hands-free', style: context.type.headline)),
+              if (tile != null)
+                Tag(
+                  text: added ? 'Tile added' : 'No tile yet',
+                  icon: added ? Icons.check_rounded : Icons.mic_none_rounded,
+                  tint: added ? p.success : p.inkSecondary,
+                ),
+            ],
+          ),
+          const SizedBox(height: Space.s),
+          Text(
+            '“Talk to Mochi” in Quick Settings opens ${model.petName} listening, from anywhere: swipe down, tap it, say what '
+            'you need, then Send. It goes to ${model.host.yours}, as when you hold ${model.petName}.',
+            style: context.type.footnote,
+          ),
+          const SizedBox(height: Space.m),
+          if ((tile?.canAsk ?? false) && !added)
+            FilledButton.icon(
+              onPressed: _addTile,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Add to Quick Settings'),
+            )
+          else if (!added)
+            NoteLabel(
+              text: 'To add it: swipe down from the top twice, tap the pencil, and drag “Talk to Mochi” in.',
+              icon: Icons.edit_rounded,
+              tint: p.tint,
+              textColor: p.ink,
+            ),
+          const SizedBox(height: Space.m),
+          NoteLabel(
+            text: 'Press and hold ${model.petName}’s icon for Talk to Mochi, What’s waiting and Check now.',
+            icon: Icons.touch_app_rounded,
+            tint: p.tint,
+            textColor: p.ink,
+          ),
+          const SizedBox(height: Space.s),
+          NoteLabel(
+            text:
+                '“Hey Google, what’s waiting on Mochi?”, “Hey Google, check Mochi” and “Hey Google, talk to Mochi” work once '
+                'Mochi comes from Google Play. ${model.petName} answers in its own voice.',
+            icon: Icons.record_voice_over_rounded,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addTile() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final answer = await widget.bridge!.addTalkTile();
+    final words = switch (answer) {
+      'added' => 'Added “Talk to Mochi” to Quick Settings.',
+      'already' => '“Talk to Mochi” is already in Quick Settings.',
+      'declined' => null,
+      _ => 'Android didn’t add it. Swipe down twice, tap the pencil, and drag “Talk to Mochi” in.',
+    };
+    if (words != null) messenger.showSnackBar(SnackBar(content: Text(words)));
+    await _checkNotifications();
+  }
+
   // MARK: Appearance
 
   Widget _appearance() {
@@ -593,6 +760,105 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
             ],
           );
         },
+      ),
+    );
+  }
+
+  // MARK: Mochi Cloud
+
+  /// Mochi Cloud (the iPhone's Settings › Mochi Cloud): whether its hourly news has reached this phone, whether Check now
+  /// can use it while the computer is off, and where Check now goes.
+  Widget _cloud() {
+    final p = context.palette;
+    final host = model.host;
+    final seen = model.cloudSeenAt;
+    final available = model.cloudAvailable;
+    final always = settings.checkNowUsesCloud;
+    return ClayCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(header: true, child: Text('Mochi Cloud', style: context.type.headline)),
+          const SizedBox(height: Space.m),
+          _check(
+            'Hourly checks',
+            ok: seen != null,
+            detail: seen == null ? 'No news from the cloud yet' : 'Last news ${relativeTime(seen)}',
+          ),
+          _check('Check now without ${host.yours}', ok: available, detail: available ? 'Ready' : 'Add the API trigger on ${host.yours}'),
+          const SizedBox(height: Space.s),
+          MergeSemantics(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Check now always asks Mochi Cloud',
+                    style: context.type.subheadline.copyWith(fontWeight: FontWeight.w600, color: p.ink),
+                  ),
+                ),
+                const SizedBox(width: Space.s),
+                Switch(value: always, onChanged: (value) => settings.checkNowUsesCloud = value),
+              ],
+            ),
+          ),
+          const SizedBox(height: Space.xs),
+          Text(
+            always
+                ? 'Check now goes straight to the cloud, whether ${host.yours} is on or off. Answers take a minute or two and arrive '
+                      'as a notification.'
+                : "Check now asks ${host.yours} first (faster when it's on) and the cloud only when it doesn't answer.",
+            style: context.type.footnote,
+          ),
+          const SizedBox(height: Space.s),
+          Text(
+            "While ${host.yours} is off, a Claude task in Anthropic's cloud checks your mail, calendar and Notion every hour from "
+            '8 am to 11 pm and notifies you here. News ${host.yours} already gave you arrives quietly. Set it up in '
+            "${host.yours}'s Settings › Agent › Mochi Cloud.",
+            style: context.type.footnote,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A status line: a tick or an empty circle, what it is, and how it stands (under it when the text is large).
+  Widget _check(String title, {required bool ok, required String detail}) {
+    final p = context.palette;
+    final stacked = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final titleText = Text(title, style: context.type.subheadline.copyWith(color: p.ink));
+    final detailText = Text(detail, style: context.type.footnote);
+    return MergeSemantics(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Space.xs),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                ok ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                size: 18,
+                color: ok ? p.success : p.inkSecondary,
+                semanticLabel: ok ? 'Yes' : 'Not yet',
+              ),
+            ),
+            const SizedBox(width: Space.s),
+            Expanded(
+              child: stacked
+                  ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [titleText, detailText])
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: titleText),
+                        const SizedBox(width: Space.s),
+                        Flexible(
+                          child: Text(detail, textAlign: TextAlign.end, style: context.type.footnote),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

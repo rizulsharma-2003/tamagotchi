@@ -13,6 +13,7 @@ import '../../model/updates_history.dart';
 import '../alert_notifier.dart';
 import '../credential_store.dart';
 import '../local_file.dart';
+import '../../widget/home_widget.dart';
 import '../notify/debug_room.dart';
 import 'push_messages.dart';
 import 'shown_alerts.dart';
@@ -116,7 +117,7 @@ Future<ShownAlerts> openShownAlerts() async {
 /// FCM pushes while Mochi is in the background or closed, in their own isolate: open the sealed alert with the room
 /// key from secure storage and show it as a notification (or "Mochi has news"), with its buttons. A news card that
 /// rides along joins the Updates history in the app's files. A Live Activity update (relay 1.4.0) shows, updates or
-/// ends Mochi's ongoing notification ([LivePush]). No network, no relay.
+/// ends Mochi's ongoing notification ([LivePush]). Both bring the home-screen widget up to date. No network, no relay.
 @pragma('vm:entry-point')
 Future<void> mochiBackgroundMessage(RemoteMessage message) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -130,9 +131,10 @@ Future<void> mochiBackgroundMessage(RemoteMessage message) async {
   // Development builds: a push from the throwaway test room opens with that room's key and keeps to its own files.
   final debugRoom = await DebugActionRoom.load(folder);
   final testing = debugRoom != null && PushMessages.sealedAlert(data)?['room'] == debugRoom.room;
+  final doneDocument = AppFiles.document(folder, testing ? DebugActionRoom.doneFile : AppFiles.done);
   DoneMarks done;
   try {
-    done = DoneMarks.fromJson(await AppFiles.document(folder, testing ? DebugActionRoom.doneFile : AppFiles.done).read());
+    done = DoneMarks.fromJson(await doneDocument.read());
   } on Object {
     done = DoneMarks();
   }
@@ -143,6 +145,7 @@ Future<void> mochiBackgroundMessage(RemoteMessage message) async {
     shown: await openShownAlerts(),
     isDone: done.isDone,
     record: testing ? null : (notes) => recordHistory(AppFiles.document(folder, AppFiles.history), notes),
+    opened: (alert, room) async => HomeWidget.inFolder(folder).alertArrived(room, alert, done: doneDocument),
   );
   _log('push in the background: ${outcome.name}');
 }

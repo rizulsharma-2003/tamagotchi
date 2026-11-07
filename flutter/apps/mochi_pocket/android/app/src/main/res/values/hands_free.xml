@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Hands-free Mochi (A4): the Quick Settings tile (TalkTileService.kt), the app shortcuts and what Google
+         Assistant listens for (xml/shortcuts.xml). The phrases follow the iPhone's Siri phrases
+         (iOS/MochiPocket/MochiIntents.swift); Assistant adds "on Mochi" or "in Mochi" itself. -->
+    <string name="mochi_tile_talk">Talk to Mochi</string>
+    <string name="mochi_tile_talk_description">Talk to Mochi: opens Mochi listening.</string>
+    <!-- %s is the computer as the app names it: "your Mac", "your PC". -->
+    <string name="mochi_tile_talk_description_to">Talk to Mochi: opens Mochi listening, and what you say goes to %s.</string>
+
+    <string name="mochi_shortcut_talk_short">Talk</string>
+    <string name="mochi_shortcut_talk_long">Talk to Mochi</string>
+    <string name="mochi_shortcut_waiting_short">Waiting</string>
+    <string name="mochi_shortcut_waiting_long">What\'s waiting</string>
+    <string name="mochi_shortcut_check_short">Check now</string>
+    <string name="mochi_shortcut_check_long">Check for updates</string>
+
+    <string-array name="mochi_whats_waiting_queries">
+        <item>what\'s waiting</item>
+        <item>what\'s waiting for me</item>
+        <item>what\'s new</item>
+        <item>any updates</item>
+        <item>read my updates</item>
+        <item>what\'s pending</item>
+    </string-array>
+    <string-array name="mochi_check_now_queries">
+        <item>check</item>
+        <item>check now</item>
+        <item>check my mail</item>
+        <item>check for updates</item>
+    </string-array>
+    <string-array name="mochi_talk_queries">
+        <item>talk</item>
+        <item>talk to Mochi</item>
+        <item>ask Mochi</item>
+    </string-array>
+
+    <!-- The names a shortcut answers to in "Hey Google, open … in Mochi". -->
+    <string-array name="mochi_feature_talk">
+        <item>talk</item>
+        <item>talk to Mochi</item>
+        <item>voice</item>
+    </string-array>
+    <string-array name="mochi_feature_waiting">
+        <item>what\'s waiting</item>
+        <item>waiting for you</item>
+        <item>updates</item>
+    </string-array>
+    <string-array name="mochi_feature_check">
+        <item>check now</item>
+        <item>check for updates</item>
+    </string-array>
+</resources>

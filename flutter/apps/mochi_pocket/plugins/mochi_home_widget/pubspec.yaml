@@ -1,0 +1,22 @@
+name: mochi_home_widget
+description: >-
+  Mochi for Android's home-screen widget, "Mochi & Claude": hands what the widget shows to Android and asks it to
+  redraw. A plugin of its own (not MainActivity's channel) so the FCM push handler's background engine can update the
+  widget too: only pubspec plugins are registered there. The widget itself (its provider and layouts) lives in the app.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.insideedge.mochi.homewidget
+        pluginClass: MochiHomeWidgetPlugin

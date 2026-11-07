@@ -14,9 +14,48 @@ abstract interface class AudioFocus {
   Stream<void> get lost;
 }
 
+/// Where the app can be opened to (MainActivity.kt `PLACES`): the home-screen widget's `mochi://<place>` links, the
+/// buttons of Mochi's ongoing notification, and hands-free (the Quick Settings tile, app shortcuts, Hey Google).
+abstract final class AppPlace {
+  /// The top of the home screen.
+  static const String home = 'home';
+
+  /// Claude's sessions on the computer (Open the Session; the widget's sessions).
+  static const String sessions = 'sessions';
+
+  /// Updates: everything waiting, and the week before.
+  static const String updates = 'updates';
+
+  /// Mochi listening (Talk to Mochi).
+  static const String talk = 'talk';
+
+  /// Updates, read out in Mochi's voice (What's waiting).
+  static const String waiting = 'waiting';
+
+  /// Check now.
+  static const String check = 'check';
+
+  /// The suffix on a place Hey Google asked for (`check:voice`): Mochi answers out loud.
+  static const String voice = ':voice';
+
+  /// The place and whether it was asked for by voice.
+  static (String place, bool voice) parse(String raw) =>
+      raw.endsWith(voice) ? (raw.substring(0, raw.length - voice.length), true) : (raw, false);
+}
+
+/// "Talk to Mochi" in Quick Settings ([PlatformBridge.talkTile]).
+class TalkTileState {
+  const TalkTileState({this.added = false, this.canAsk = false});
+
+  /// It's in Quick Settings (Android tells the tile when it's added or removed).
+  final bool added;
+
+  /// Android 13+: the app can ask Android to add it.
+  final bool canAsk;
+}
+
 /// What the Android side tells the app (MainActivity.kt): the `mochi://pair` link it was opened with or that
-/// arrives while it runs, the button of Mochi's ongoing notification that opened it, this phone's model, and the app's
-/// private files folder.
+/// arrives while it runs, where it was opened to ([AppPlace]), this phone's model, and the app's private files folder.
 abstract interface class PlatformBridge {
   /// The pairing link that opened the app, once (null after the first call).
   Future<String?> initialLink();
@@ -24,31 +63,38 @@ abstract interface class PlatformBridge {
   /// Pairing links that arrive while the app runs.
   Stream<String> get links;
 
-  /// The ongoing notification's button that started the app (`open`, or `session` for Open the Session), once.
-  Future<String?> initialLiveAction();
+  /// The [AppPlace] the app was started to, once.
+  Future<String?> initialPlace();
 
   /// The same, when the app was already running.
-  Stream<String> get liveActions;
+  Stream<String> get places;
 
   /// "realme RMX3242": how the Mac lists this phone.
   Future<String> deviceName();
 
   /// The app's private files folder.
   Future<String?> filesDir();
+
+  /// Whether "Talk to Mochi" is in Quick Settings, and whether Android can be asked to add it.
+  Future<TalkTileState> talkTile();
+
+  /// Asks Android to add "Talk to Mochi" to Quick Settings: `added`, `already`, `declined`, `unsupported` or
+  /// `unavailable`.
+  Future<String> addTalkTile();
 }
 
 class MethodChannelBridge implements PlatformBridge, AudioFocus {
   MethodChannelBridge() {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'link' && call.arguments is String) _links.add(call.arguments as String);
-      if (call.method == 'liveAction' && call.arguments is String) _liveActions.add(call.arguments as String);
+      if (call.method == 'place' && call.arguments is String) _places.add(call.arguments as String);
       if (call.method == 'audioFocusLost') _focusLost.add(null);
     });
   }
 
   static const MethodChannel _channel = MethodChannel('com.insideedge.mochi/platform');
   final StreamController<String> _links = StreamController.broadcast();
-  final StreamController<String> _liveActions = StreamController.broadcast();
+  final StreamController<String> _places = StreamController.broadcast();
   final StreamController<void> _focusLost = StreamController.broadcast();
 
   @override
@@ -85,16 +131,16 @@ class MethodChannelBridge implements PlatformBridge, AudioFocus {
   Stream<String> get links => _links.stream;
 
   @override
-  Future<String?> initialLiveAction() async {
+  Future<String?> initialPlace() async {
     try {
-      return await _channel.invokeMethod<String>('initialLiveAction');
+      return await _channel.invokeMethod<String>('initialPlace');
     } on MissingPluginException {
       return null;
     }
   }
 
   @override
-  Stream<String> get liveActions => _liveActions.stream;
+  Stream<String> get places => _places.stream;
 
   @override
   Future<String> deviceName() async {
@@ -111,6 +157,25 @@ class MethodChannelBridge implements PlatformBridge, AudioFocus {
       return await _channel.invokeMethod<String>('filesDir');
     } on MissingPluginException {
       return null;
+    }
+  }
+
+  @override
+  Future<TalkTileState> talkTile() async {
+    try {
+      final map = await _channel.invokeMapMethod<String, Object?>('talkTile') ?? const {};
+      return TalkTileState(added: map['added'] == true, canAsk: map['canAsk'] == true);
+    } on MissingPluginException {
+      return const TalkTileState();
+    }
+  }
+
+  @override
+  Future<String> addTalkTile() async {
+    try {
+      return await _channel.invokeMethod<String>('addTalkTile') ?? 'unavailable';
+    } on MissingPluginException {
+      return 'unsupported';
     }
   }
 }

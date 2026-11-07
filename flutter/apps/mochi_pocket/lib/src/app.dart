@@ -17,6 +17,7 @@ import 'talk/speech_listener.dart';
 import 'talk/talk_model.dart';
 import 'theme.dart';
 import 'voice/updates_reader.dart';
+import 'widget/home_widget.dart';
 import 'widgets/clay.dart';
 
 /// Mochi for Android: the pairing screen until this phone joins your Mac's room, then the home screen. Pairing links
@@ -35,6 +36,7 @@ class MochiApp extends StatefulWidget {
     this.live,
     this.speech,
     this.talkTo,
+    this.homeWidget,
   });
 
   final PocketModel model;
@@ -63,6 +65,9 @@ class MochiApp extends StatefulWidget {
   /// Where hold to talk sends what you say: [model]'s computer, unless a development build's test room is given.
   final PocketModel? talkTo;
 
+  /// The home-screen widget (Settings adds it to the home screen).
+  final HomeWidget? homeWidget;
+
   @override
   State<MochiApp> createState() => _MochiAppState();
 }
@@ -72,10 +77,10 @@ class _MochiAppState extends State<MochiApp> {
   late final AppLifecycleListener _lifecycle = AppLifecycleListener(onResume: widget.model.resume, onHide: () => _talk?.paused());
   late final TalkModel? _talk = widget.speech == null ? null : TalkModel(model: widget.talkTo ?? widget.model, listener: widget.speech!);
   StreamSubscription<String>? _links;
-  StreamSubscription<String>? _liveActionSubscription;
+  StreamSubscription<String>? _placeSubscription;
 
-  /// The ongoing notification's buttons (Open the Session scrolls to Claude's sessions).
-  final StreamController<String> _liveActions = StreamController.broadcast();
+  /// Where the app is asked to go ([AppPlace]): the widget's taps, the ongoing notification's buttons.
+  final StreamController<String> _places = StreamController.broadcast();
   PoseLibrary? _library;
   bool _askedForNotifications = false;
 
@@ -107,12 +112,12 @@ class _MochiAppState extends State<MochiApp> {
   Future<void> _start() async {
     await model.load();
     _links = widget.bridge.links.listen(_opened);
-    _liveActionSubscription = widget.bridge.liveActions.listen(_liveActions.add);
+    _placeSubscription = widget.bridge.places.listen(_places.add);
     final initial = await widget.bridge.initialLink();
     if (initial != null) await _opened(initial);
-    final action = await widget.bridge.initialLiveAction();
-    // Once the home screen is there to scroll.
-    if (action != null) WidgetsBinding.instance.addPostFrameCallback((_) => _liveActions.add(action));
+    final place = await widget.bridge.initialPlace();
+    // Once the home screen is there to go from.
+    if (place != null) WidgetsBinding.instance.addPostFrameCallback((_) => _places.add(place));
   }
 
   /// A `mochi://pair` link opened from outside the app.
@@ -152,8 +157,8 @@ class _MochiAppState extends State<MochiApp> {
     model.removeListener(_modelChanged);
     _lifecycle.dispose();
     unawaited(_links?.cancel());
-    unawaited(_liveActionSubscription?.cancel());
-    unawaited(_liveActions.close());
+    unawaited(_placeSubscription?.cancel());
+    unawaited(_places.close());
     _talk?.dispose();
     super.dispose();
   }
@@ -194,7 +199,9 @@ class _MochiAppState extends State<MochiApp> {
             settings: widget.settings,
             reader: widget.reader,
             live: widget.live,
-            liveActions: _liveActions.stream,
+            homeWidget: widget.homeWidget,
+            bridge: widget.bridge,
+            places: _places.stream,
             talk: _talk,
           ),
         },

@@ -14,6 +14,7 @@ import '../services/push/push_messages.dart';
 import '../services/push/push_service.dart';
 import '../services/push/shown_alerts.dart';
 import 'done_marks.dart';
+import 'mochi_cloud.dart';
 import 'updates_history.dart';
 
 enum ExchangeState { sending, working, done, failed }
@@ -55,6 +56,21 @@ enum PairingPhase { loading, unpaired, paired }
 /// How this phone is connected, for the header pill and Settings.
 enum MacConnection { macOnline, macAway, connecting, noConnection, removed }
 
+/// Where "Check now" went ([PocketModel.checkNow]).
+enum CheckRoute {
+  /// Straight to Mochi Cloud: its answer comes as a notification in a minute or two.
+  cloud,
+
+  /// To the computer ("What's pending?"); Mochi Cloud takes over if the computer doesn't pick it up.
+  computer,
+
+  /// Mochi Cloud is already checking.
+  busy,
+
+  /// Mochi Cloud didn't take it ([PocketModel.cloudError] says why), or there's no room to ask in.
+  failed,
+}
+
 typedef LinkConnector = RelayLink Function(LinkCredentials credentials);
 typedef LinkJoiner = Future<LinkCredentials> Function(PairingCode code, String deviceName);
 typedef LinkLeaver = Future<void> Function(LinkCredentials credentials);
@@ -78,7 +94,11 @@ class PocketModel extends ChangeNotifier {
     LocalDocument? outboxDocument,
     this.deviceName = 'Android phone',
     DateTime Function()? clock,
+    CloudPost? cloudPost,
+    this.allowLocalCloud = false,
+    this.macSilence = const Duration(seconds: 15),
   }) : _push = push,
+       _cloudPost = cloudPost ?? postToCloud,
        _live = live,
        _shown = shown ?? MemoryShownAlerts(),
        _store = credentialStore,
@@ -116,9 +136,19 @@ class PocketModel extends ChangeNotifier {
   final LinkJoiner _join;
   final LinkLeaver _leave;
   final DateTime Function() _clock;
+  final CloudPost _cloudPost;
 
   /// How the Mac lists this phone ("realme RMX3242").
   final String deviceName;
+
+  /// A development build's throwaway test room may use a Mochi Cloud trigger on this phone ([MochiCloud.usable]).
+  final bool allowLocalCloud;
+
+  /// How long "Check now" waits for the computer before Mochi Cloud takes over (the iPhone's 15 s).
+  final Duration macSilence;
+
+  /// The question "Check now" asks the computer.
+  static const String checkText = "What's pending?";
 
   static Future<LinkCredentials> _relayJoin(PairingCode code, String name) =>
       LinkPairing.join(code, role: 'pocket', platform: 'android', name: name);
@@ -162,6 +192,14 @@ class PocketModel extends ChangeNotifier {
   final List<StreamSubscription<Object?>> _pushSubscriptions = [];
 
   final StreamController<PetCue> _cues = StreamController.broadcast();
+
+  /// Mochi Cloud's "check now" trigger, when the computer shares one that's safe to use ([MochiCloud.usable]).
+  CloudTrigger? _cloud;
+  double? _cloudAskedAt;
+  String? _cloudError;
+  double? _cloudSeenAt;
+  Timer? _macSilence;
+  final StreamController<void> _cloudTookOver = StreamController.broadcast();
 
   PairingPhase get phase => _phase;
   bool get paired => _phase == PairingPhase.paired;
@@ -226,6 +264,59 @@ class PocketModel extends ChangeNotifier {
   /// The room's reactions, as they happen.
   Stream<PetCue> get cues => _cues.stream;
 
+  // MARK: Mochi Cloud
+
+  /// Mochi Cloud is set up on the computer (Settings › Agent › Mochi Cloud), so "Check now" and "Draft reply" work
+  /// while the computer is off.
+  bool get cloudAvailable => _cloud != null;
+
+  /// Mochi Cloud can draft replies (it's set up).
+  bool get draftsAvailable => _cloud != null;
+
+  /// When "Check now" was last handed to Mochi Cloud (Unix time).
+  double? get cloudAskedAt => _cloudAskedAt;
+
+  /// Why the last "Check now" didn't reach Mochi Cloud, if it didn't.
+  String? get cloudError => _cloudError;
+
+  /// The last time Mochi Cloud's news reached this phone (kept across launches).
+  double? get cloudSeenAt => _cloudSeenAt;
+
+  /// Mochi Cloud was asked a moment ago and its answer hasn't arrived yet.
+  bool get cloudChecking {
+    final asked = _cloudAskedAt;
+    if (asked == null || _now - asked >= MochiCloud.checkingFor.inSeconds) return false;
+    return (_agent?.lookedAt ?? 0) < asked;
+  }
+
+  /// Who made the "Waiting for you" card's latest update: Mochi Cloud, or the computer.
+  bool get checkedByCloud => _agent != null && AgentCards.fromCloud(_agent!);
+
+  /// "Check now" went to the computer, which didn't pick it up in time ([macSilence]), so Mochi Cloud is checking.
+  Stream<void> get cloudTookOver => _cloudTookOver.stream;
+
+  /// The relay has sent the room's state since the app started (the card, Mochi Cloud's trigger).
+  bool get synced => _link?.lastSync != null;
+
+  /// Waits until [test] holds (checked whenever the model changes), at most [timeout]: for a shortcut or Hey Google
+  /// that opened the app, until the room has said what's waiting or how to check. Whether it held.
+  Future<bool> until(bool Function() test, {Duration timeout = const Duration(seconds: 4)}) async {
+    if (test()) return true;
+    final held = Completer<bool>();
+    void check() {
+      if (!held.isCompleted && test()) held.complete(true);
+    }
+
+    addListener(check);
+    final timer = Timer(timeout, () {
+      if (!held.isCompleted) held.complete(false);
+    });
+    final result = await held.future;
+    timer.cancel();
+    removeListener(check);
+    return result;
+  }
+
   bool isDone(String id) => _done.isDone(id);
 
   /// When [id] was marked done (Unix time), if it is.
@@ -271,6 +362,7 @@ class PocketModel extends ChangeNotifier {
     _done = DoneMarks.fromJson(await _doneDocument.read())..prune(now: _now);
     _history = UpdatesHistory.fromJson(await _readSafely(_historyDocument))..prune(now: _now);
     _knownHostPlatform = await _savedHostPlatform(saved?.room);
+    _cloudSeenAt = await _savedCloudSeenAt(saved?.room);
     _log('loaded ${saved == null ? 'no pairing' : 'the pairing'} in ${watch.elapsedMilliseconds} ms');
     if (saved != null && saved.roomKey != null) {
       _use(saved);
@@ -310,6 +402,7 @@ class PocketModel extends ChangeNotifier {
       await _disconnect();
       _clearRoom();
       _knownHostPlatform = await _savedHostPlatform(joined.room);
+      _cloudSeenAt = null;
       _use(joined);
       _phase = PairingPhase.paired;
       _log('paired with ${code.name}');
@@ -352,6 +445,7 @@ class PocketModel extends ChangeNotifier {
     _done = DoneMarks();
     _history = UpdatesHistory();
     _knownHostPlatform = null;
+    _cloudSeenAt = null;
     _phase = PairingPhase.unpaired;
     _problem = null;
     notifyListeners();
@@ -442,6 +536,7 @@ class PocketModel extends ChangeNotifier {
       shown: _shown,
       isDone: _done.isDone,
       record: (notes) async => _record(notes),
+      opened: (alert, room) async => _cardFrom(alert),
     );
     if (outcome == PushOutcome.shown || outcome == PushOutcome.fallback) _lastAlertAt = _clock();
     _log('push while open: ${outcome.name}');
@@ -491,6 +586,10 @@ class PocketModel extends ChangeNotifier {
     _claude = null;
     _sessions = null;
     _agent = null;
+    _cloud = null;
+    _cloudAskedAt = null;
+    _cloudError = null;
+    _macSilence?.cancel();
     _approval = null;
     _answered.clear();
     _exchanges.clear();
@@ -530,14 +629,32 @@ class PocketModel extends ChangeNotifier {
     }
   }
 
+  /// When Mochi Cloud's news last reached this phone in [room], if it has.
+  Future<double?> _savedCloudSeenAt(String? room) async {
+    if (room == null) return null;
+    try {
+      final json = await _hostDocument.read();
+      final seen = json?['cloudSeenAt'];
+      return json?['room'] == room && seen is num ? seen.toDouble() : null;
+    } on Object {
+      return null;
+    }
+  }
+
   void _rememberHostPlatform() {
-    final room = _credentials?.room;
     final platform = LinkPeerNames.hosts(_peers, me: _credentials?.device).map((peer) => peer.linkPlatform).nonNulls.firstOrNull;
-    if (room == null || platform == null || platform == _knownHostPlatform) return;
+    if (platform == null || platform == _knownHostPlatform) return;
     _knownHostPlatform = platform;
+    _saveHostDocument();
+  }
+
+  /// The room's computer platform and when Mochi Cloud's news last came, in `link_host.json`.
+  void _saveHostDocument() {
+    final room = _credentials?.room;
+    if (room == null) return;
     unawaited(
       _hostDocument
-          .write({'room': room, 'platform': platform.name})
+          .write({'room': room, 'platform': ?_knownHostPlatform?.name, 'cloudSeenAt': ?_cloudSeenAt})
           .catchError((Object error) => _log('the host platform was not saved (${error.runtimeType})')),
     );
   }
@@ -551,10 +668,8 @@ class PocketModel extends ChangeNotifier {
     final sessions = PhoneSessions.fromValue(link.value(LinkKey.sessions));
     if (sessions != null) _sessions = sessions;
     final agent = AgentPending.fromValue(link.value(LinkKey.agent));
-    if (agent != null) {
-      _agent = agent;
-      if (agent.enabled) _record(agent.items);
-    }
+    if (agent != null) _mergeAgent(agent);
+    _cloud = MochiCloud.usable(CloudTrigger.fromValue(link.value(LinkKey.cloud)), allowLocal: allowLocalCloud);
     final request = ApprovalRequest.fromValue(link.value(LinkKey.approval));
     if (request != null && !_answered.contains(request.id) && _now - request.at < 120) {
       _approval = request;
@@ -646,8 +761,28 @@ class PocketModel extends ChangeNotifier {
       alert,
       plan: NotificationPlan.forAlert(alert, room: _credentials?.room, isDone: _done.isDone),
     );
+    _cardFrom(alert);
+  }
+
+  /// The "Waiting for you" card an alert brings (Mochi's news, from the computer or Mochi Cloud): it can be newer than
+  /// the room's, so it's merged in, as on the iPhone.
+  void _cardFrom(LinkAlert alert) {
     final card = AgentPending.fromJson(alert.userInfo['pending']);
-    if (card != null && card.enabled) _record(card.items);
+    if (card != null && _mergeAgent(card)) notifyListeners();
+  }
+
+  /// The newest card, from the room or a notification (the iPhone's `mergeAgent`): an older one never replaces a newer
+  /// one, and an hourly Mochi Cloud card only adds what it found. True when the card changed.
+  bool _mergeAgent(AgentPending card) {
+    final current = _agent;
+    if (current != null && (card.updatedAt ?? 0) <= (current.updatedAt ?? 0)) return false;
+    _agent = current == null ? card : AgentCards.merge(current, card, now: _now);
+    if (card.enabled) _record(card.items);
+    if (AgentCards.fromCloud(card)) {
+      _cloudSeenAt = _now;
+      _saveHostDocument();
+    }
+    return true;
   }
 
   /// A Live Activity update on the socket (relay 1.4.0 hands them to Android phones as well as pushing them): the same
@@ -793,6 +928,57 @@ class PocketModel extends ChangeNotifier {
     return id;
   }
 
+  /// "Check now" (the iPhone's `checkForUpdates`): straight to Mochi Cloud when [useCloud] is on and it's set up;
+  /// otherwise "What's pending?" to the computer, and Mochi Cloud if the computer doesn't pick it up within
+  /// [macSilence] (it's off, asleep or offline).
+  Future<CheckRoute> checkNow({required bool useCloud}) async {
+    if (!paired) return CheckRoute.failed;
+    final cloud = _cloud;
+    if (useCloud && cloud != null) {
+      if (cloudChecking) return CheckRoute.busy;
+      return await _checkInCloud(cloud) == null ? CheckRoute.cloud : CheckRoute.failed;
+    }
+    final id = send(checkText);
+    if (id == null) return CheckRoute.failed;
+    _macSilence?.cancel();
+    if (cloud != null) _macSilence = Timer(macSilence, () => unawaited(_askCloudIfMacSilent(id)));
+    return CheckRoute.computer;
+  }
+
+  Future<void> _askCloudIfMacSilent(String exchangeId) async {
+    final exchange = _exchanges.where((exchange) => exchange.id == exchangeId).firstOrNull;
+    final cloud = _cloud;
+    if (exchange == null || exchange.state != ExchangeState.sending || cloud == null || cloudChecking) return;
+    if (await _checkInCloud(cloud) == null && !_cloudTookOver.isClosed) _cloudTookOver.add(null);
+  }
+
+  /// Hey Google's or a shortcut's "Check now" when only the cloud will do: Mochi Cloud looks now. Null when it's
+  /// asking; otherwise why it can't.
+  Future<String?> checkInCloudNow() async {
+    final cloud = _cloud;
+    if (cloud == null) return "Mochi Cloud isn't set up yet. Set it up on ${host.yours} (Settings › Agent).";
+    return _checkInCloud(cloud);
+  }
+
+  Future<String?> _checkInCloud(CloudTrigger cloud) async {
+    final problem = await MochiCloud.fire(cloud, post: _cloudPost, host: host, log: _log);
+    if (problem == null) _cloudAskedAt = _now;
+    _cloudError = problem;
+    notifyListeners();
+    return problem;
+  }
+
+  /// "Draft reply" (the iPhone's `draftReply`): Mochi Cloud reads [note]'s email and writes a reply into Gmail Drafts
+  /// (it never sends anything), then notifies this phone. [words] is what it should say, if you said. Null when it's
+  /// asked; otherwise why not.
+  Future<String?> draftReply(AgentNote note, String words) async {
+    final cloud = _cloud;
+    if (cloud == null) return 'Set up Mochi Cloud on ${host.yours} first (Settings › Agent › Mochi Cloud).';
+    final request = MochiCloud.draftRequest(note.threadId, words);
+    if (request == null) return "That email can't be found.";
+    return MochiCloud.fire(cloud, text: request, post: _cloudPost, host: host, log: _log);
+  }
+
   /// Answers the Mac's "Send to Claude?".
   void answer(ApprovalRequest request, {required bool allow}) {
     _answered.add(request.id);
@@ -841,8 +1027,10 @@ class PocketModel extends ChangeNotifier {
     for (final subscription in _pushSubscriptions) {
       unawaited(subscription.cancel());
     }
+    _macSilence?.cancel();
     unawaited(_disconnect());
     unawaited(_cues.close());
+    unawaited(_cloudTookOver.close());
     super.dispose();
   }
 }

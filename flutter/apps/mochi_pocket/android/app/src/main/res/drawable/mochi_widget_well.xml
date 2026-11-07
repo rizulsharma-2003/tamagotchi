@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A well inside the widget's card (the app's sunken colour), for Claude's sessions and "Waiting for you". -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/mochi_widget_sunken" />
+    <corners android:radius="14dp" />
+</shape>

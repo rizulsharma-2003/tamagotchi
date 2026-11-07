@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One thing waiting for you on the widget: what it is (mail, a meeting, a Notion task, a VIP's mail) and one line. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:importantForAccessibility="no"
+    android:orientation="horizontal"
+    android:paddingTop="3dp">
+
+    <ImageView
+        android:id="@+id/widget_item_icon"
+        android:layout_width="14dp"
+        android:layout_height="14dp"
+        android:importantForAccessibility="no" />
+
+    <TextView
+        android:id="@+id/widget_item_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/mochi_widget_ink"
+        android:textSize="13sp" />
+</LinearLayout>

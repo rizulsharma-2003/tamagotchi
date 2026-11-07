@@ -234,25 +234,40 @@ class FakeBridge implements PlatformBridge, AudioFocus {
   @override
   Stream<String> get links => controller.stream;
 
-  /// The ongoing notification's button that started the app.
-  String? initialLive;
-  final StreamController<String> liveActionController = StreamController.broadcast();
+  /// The place the app was started to (a widget tap, a notification's button).
+  String? startPlace;
+  final StreamController<String> placeController = StreamController.broadcast();
 
   @override
-  Future<String?> initialLiveAction() async {
-    final action = initialLive;
-    initialLive = null;
-    return action;
+  Future<String?> initialPlace() async {
+    final place = startPlace;
+    startPlace = null;
+    return place;
   }
 
   @override
-  Stream<String> get liveActions => liveActionController.stream;
+  Stream<String> get places => placeController.stream;
 
   @override
   Future<String> deviceName() async => 'Test Phone';
 
   @override
   Future<String?> filesDir() async => null;
+
+  /// "Talk to Mochi" in Quick Settings, and what Android answers when asked to add it.
+  TalkTileState tile = const TalkTileState();
+  String tileAnswer = 'added';
+  int tileRequests = 0;
+
+  @override
+  Future<TalkTileState> talkTile() async => tile;
+
+  @override
+  Future<String> addTalkTile() async {
+    tileRequests++;
+    if (tileAnswer == 'added' || tileAnswer == 'already') tile = TalkTileState(added: true, canAsk: tile.canAsk);
+    return tileAnswer;
+  }
 }
 
 class FakeOpener implements LinkOpener {

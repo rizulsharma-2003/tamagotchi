@@ -4,4 +4,17 @@
     <color name="ic_launcher_background">#F7D9C2</color>
     <!-- The app's backdrop (MochiPalette backgroundTop), behind the launch screen and the first frame. -->
     <color name="mochi_background">#FFF6EE</color>
+    <!-- The home-screen widget: the app's light clay palette (MochiPalette.light, lib/src/theme.dart). -->
+    <color name="mochi_widget_surface">#FFFCF8</color>
+    <color name="mochi_widget_sunken">#F6ECE3</color>
+    <color name="mochi_widget_stroke">#EFDCCB</color>
+    <color name="mochi_widget_ink">#2B2118</color>
+    <color name="mochi_widget_ink_secondary">#6E6259</color>
+    <color name="mochi_widget_tint">#B4471C</color>
+    <color name="mochi_widget_on_tint">#FFFFFF</color>
+    <color name="mochi_widget_success">#1D7346</color>
+    <color name="mochi_widget_warning">#A84D08</color>
+    <color name="mochi_widget_danger">#B42318</color>
+    <color name="mochi_widget_vip">#B7791F</color>
+    <color name="mochi_widget_indigo">#4F46E5</color>
 </resources>

@@ -51,7 +51,13 @@ void main() {
       final variant = '${dark ? 'dark' : 'light'}${scale == 1 ? '' : '-2x'}';
 
       // `host`: the computer's platform as the relay lists it (a Mac, or `windows` for a PC).
-      Future<(PocketModel, FakeRelay)> open(WidgetTester tester, {bool paired = true, double height = 800, String host = 'macOS'}) async {
+      Future<(PocketModel, FakeRelay)> open(
+        WidgetTester tester, {
+        bool paired = true,
+        double height = 800,
+        String host = 'macOS',
+        bool cloud = false,
+      }) async {
         tester.view.physicalSize = Size(1080, height * 3);
         tester.view.devicePixelRatio = 3;
         tester.view.padding = const FakeViewPadding(top: 120, bottom: 72);
@@ -70,6 +76,8 @@ void main() {
           notifier: FakeNotifier(),
           connect: relay.connect,
           deviceName: 'realme RMX3242',
+          // Never the network: Mochi Cloud takes every request.
+          cloudPost: (url, headers, body) async => 200,
         );
         await tester.pumpWidget(
           MochiApp(
@@ -93,6 +101,12 @@ void main() {
           relay.fromMac(LinkKey.claude, const ClaudeMirror(phase: 'working', category: 'edit').toValue());
           relay.fromMac(LinkKey.sessions, richSessions().toValue());
           relay.fromMac(LinkKey.agent, richAgent().toValue());
+          if (cloud) {
+            relay.fromMac(
+              LinkKey.cloud,
+              const CloudTrigger(url: 'https://api.anthropic.com/v1/claude_code/routines/trig_1/fire', token: 'test').toValue(),
+            );
+          }
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 50));
         }
@@ -205,6 +219,25 @@ void main() {
         // On the Settings page and on the home page under it.
         expect(find.textContaining('PC away since'), findsWidgets);
         await shoot(tester, 'settings-pc');
+        await finish(tester, model);
+      });
+
+      testWidgets('Mochi Cloud checking, and a draft reply ($variant)', (tester) async {
+        final (model, _) = await open(tester, height: scale == 1 ? 2350 : 4200, cloud: true);
+        await tester.tap(find.text('Check now'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.textContaining('Mochi Cloud is checking.'), findsOneWidget);
+        await shoot(tester, 'home-cloud');
+        await tester.longPress(find.text('Priya Sharma'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.tap(find.text('Draft a reply…'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.enterText(find.byType(TextField), 'Thank her, and say I will send notes by Thursday');
+        await tester.pump();
+        await shoot(tester, 'draft');
         await finish(tester, model);
       });
 

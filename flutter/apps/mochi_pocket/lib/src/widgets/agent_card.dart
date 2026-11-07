@@ -7,7 +7,9 @@ import '../theme.dart';
 import 'clay.dart';
 
 /// What's waiting for you: new mail, coming meetings and Notion tasks, as your Mac (or Mochi Cloud) last saw them
-/// (iOS/MochiPocket/AgentCard.swift). The top few show here; "See all" opens every one.
+/// (iOS/MochiPocket/AgentCard.swift). The top few show here; "See all" opens every one. Under them: who checked last,
+/// Check now, and Mochi Cloud's state (checking, what went wrong, or how to set it up so Check now works while the
+/// computer is off). A long press on an email offers "Draft a reply…" when Mochi Cloud is set up.
 class AgentCard extends StatelessWidget {
   const AgentCard({
     super.key,
@@ -22,6 +24,11 @@ class AgentCard extends StatelessWidget {
     this.checking = false,
     this.speaking = false,
     this.speak,
+    this.cloudChecking = false,
+    this.cloudAvailable = false,
+    this.cloudSeen = false,
+    this.cloudError,
+    this.draft,
   });
 
   final AgentPending pending;
@@ -43,6 +50,21 @@ class AgentCard extends StatelessWidget {
 
   /// Reads it aloud, or stops (the iPhone's speaker button).
   final VoidCallback? speak;
+
+  /// "Check now" went to Mochi Cloud and its answer hasn't come yet.
+  final bool cloudChecking;
+
+  /// Mochi Cloud is set up, so Check now works while the computer is off.
+  final bool cloudAvailable;
+
+  /// Mochi Cloud's news has reached this phone before.
+  final bool cloudSeen;
+
+  /// Why the last request to Mochi Cloud didn't go through.
+  final String? cloudError;
+
+  /// "Draft a reply…" for an email (null: Mochi Cloud isn't set up, so it can't draft).
+  final void Function(AgentNote note)? draft;
 
   static const int shown = 4;
 
@@ -122,7 +144,13 @@ class AgentCard extends StatelessWidget {
           else
             for (final (index, note) in top.indexed) ...[
               if (index > 0) const Padding(padding: EdgeInsets.only(left: 44), child: Divider()),
-              UpdateRow(key: ValueKey(note.id), note: note, opener: opener, onDone: () => markDone(note)),
+              UpdateRow(
+                key: ValueKey(note.id),
+                note: note,
+                opener: opener,
+                onDone: () => markDone(note),
+                onDraft: draft == null ? null : () => draft!(note),
+              ),
             ],
           if (waiting.length > shown) ...[
             const SizedBox(height: Space.s),
@@ -150,6 +178,35 @@ class AgentCard extends StatelessWidget {
                   ),
                 ),
               ),
+            ),
+          ],
+          if (cloudChecking) ...[
+            const SizedBox(height: Space.m),
+            Semantics(
+              liveRegion: true,
+              child: NoteLabel(
+                text: 'Mochi Cloud is checking. Results arrive as a notification in a minute or two.',
+                icon: Icons.cloud_sync_rounded,
+                tint: p.tint,
+              ),
+            ),
+          ],
+          if (cloudError != null) ...[
+            const SizedBox(height: Space.m),
+            Semantics(
+              liveRegion: true,
+              child: NoteLabel(text: cloudError!, icon: Icons.warning_rounded, tint: p.warning, textColor: p.ink),
+            ),
+          ],
+          if (!cloudAvailable) ...[
+            const SizedBox(height: Space.m),
+            NoteLabel(
+              text: cloudSeen
+                  ? 'Mochi Cloud keeps checking while ${host.yours} is off. Add its API trigger on ${host.yours} (Settings › Agent › '
+                        'Mochi Cloud) so Check now works then too.'
+                  : 'Only ${host.yours} can check right now. Set up Mochi Cloud on ${host.yours} (Settings › Agent) to check '
+                        "while it's off.",
+              icon: cloudSeen ? Icons.cloud_rounded : Icons.cloud_off_rounded,
             ),
           ],
           const SizedBox(height: Space.m),
@@ -192,6 +249,7 @@ class UpdateRow extends StatefulWidget {
     this.onNotDone,
     this.doneButton = true,
     this.caption,
+    this.onDraft,
   });
 
   final AgentNote note;
@@ -199,6 +257,9 @@ class UpdateRow extends StatefulWidget {
   final VoidCallback? onDone;
   final VoidCallback? onNotDone;
   final bool done;
+
+  /// "Draft a reply…" in the long-press menu, for an email (Mochi Cloud writes it into Gmail Drafts).
+  final VoidCallback? onDraft;
 
   /// The circle that marks it done. Off in the history, where marking is in the long-press menu (the iPhone's swipe).
   final bool doneButton;
@@ -281,6 +342,15 @@ class _UpdateRowState extends State<UpdateRow> {
                 onTap: () {
                   Navigator.pop(sheet);
                   widget.opener.openInBrowser(note);
+                },
+              ),
+            if (widget.onDraft != null && note.threadId != null)
+              ListTile(
+                leading: const Icon(Icons.reply_rounded),
+                title: const Text('Draft a reply…'),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  widget.onDraft!();
                 },
               ),
             if (widget.onDone != null && !widget.done)
