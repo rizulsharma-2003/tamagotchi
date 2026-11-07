@@ -130,13 +130,17 @@ object LiveNotification {
             builder.addAction(Notification.Action.Builder(null as Icon?, label, openIntent(context, action)).build())
         }
 
-        val liveUpdate = ongoing && Build.VERSION.SDK_INT >= 36 && manager.canPostPromotedNotifications()
-        if (liveUpdate) {
+        if (ongoing && Build.VERSION.SDK_INT >= 36 && manager.canPostPromotedNotifications()) {
             // Live Updates take the standard or big-text style (not a picture), and show the chip in the status bar.
             builder.setStyle(Notification.BigTextStyle().bigText(text))
-            if (Build.VERSION.SDK_INT >= 36 && chip != null) builder.setShortCriticalText(chip)
+            if (chip != null) builder.setShortCriticalText(chip)
             builder.addExtras(Bundle().apply { putBoolean("android.requestPromotedOngoing", true) })
-        } else if (scene != null) {
+            val live = builder.build()
+            // Android's own test. An Android 16 release that wouldn't promote it (the first one asked for other
+            // characteristics) gets the picture instead, as before Android 16.
+            if (live.hasPromotableCharacteristics() || scene == null) return live
+        }
+        if (scene != null) {
             // Expanded: the whole scene, like the iPhone's Lock Screen banner.
             builder.setStyle(
                 Notification.BigPictureStyle().bigPicture(scene).bigLargeIcon(null as Icon?).setSummaryText(text),
