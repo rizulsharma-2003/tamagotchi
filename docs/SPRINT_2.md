@@ -16,6 +16,7 @@
 | 2026-11-08 | **A1** Mochi on the Android lock screen while Claude works (relay 1.4.0 deployed; reached the Realme by FCM with the app closed) · **A3** hold to talk (Android) |
 | 2026-11-08 | **G1** Mochi's world in Dart (`mochi_world`, matching the Mac on golden fixtures from Swift) · **G2** celebrations from real Claude events (the classifier; wiring into Windows and Android still to do) |
 | 2026-11-08 | **W30** performance (pictures of poses, nothing running while the screen can't be seen) · **W7** desktop pet options · **W5** Copy Cloud Settings (built and tested; not yet checked on the Windows VM or released) |
+| 2026-11-08 | Logic in `mochi_world` for **W11** speech, **W12** growing up, **W14** games, **W15** focus, **W16** recap, **W18** room and **W20** holidays (6 more golden fixtures from Swift; UI still to do) |
 | Parked | Multi-host rooms (docs/MULTI_HOST_PLAN.md), by the user's decision; with it **W6** (a Live Activity from a PC: the iPhone isn't paired with the PC) |
 
 ## Where Sprint 1 left us
@@ -65,7 +66,7 @@ Port the Mac's pet-life engine from `Sources/TamagotchiCore` to a pure-Dart pack
     - 14,200 scheduler steps;
     - progress step by step;
     - 5 whole world timelines with 165 snapshots of state, effects and frames.
-  - **Not ported** (each its own item): the roamer and den, adventures (W19), speech lines (W11), games (W14), the focus timer (W15), the daily recap (W16), seasons and the room catalogue.
+  - **Not ported** (each its own item): the roamer and den, adventures (W19), speech lines (W11), games (W14), the focus timer (W15), the daily recap (W16), seasons and the room catalogue. The logic of W11–W20 (except W13, W17 and W19) followed later on 2026-11-08; see the rows below.
   - **How the apps drive it:** docs/MOCHI_WORLD.md.
 
 ### G2 · Celebrations from real Claude events · M
@@ -103,16 +104,16 @@ Port the event classification behind celebrations (`commandKind`: build/test det
 ### Mochi's life and fun (needs G1)
 | # | Feature (Mac reference) | Size |
 |---|---|---|
-| W11 | **Mochi talks**: speech bubbles for greetings, Claude events, petting and sleepy mumbles; chattiness quiet/normal/chatty (`Features/Speech`). Fresh lines come from Claude Haiku on Windows, not Apple Intelligence. | M |
-| W12 | **Mochi grows up**: kitten → young → grown-up art over weeks of friendship (`Features/Growth`) | S (after G1) |
+| W11 | **Mochi talks**: speech bubbles for greetings, Claude events, petting and sleepy mumbles; chattiness quiet/normal/chatty (`Features/Speech`). Fresh lines come from Claude Haiku on Windows, not Apple Intelligence. **Logic in mochi_world (2026-11-08); UI still to do:** `SpeechLines` and `SpeechPacing` match the Mac's fixture; `SpeechDirector` ports when to speak; Haiku plugs into its `FreshLineWriter` hook with the Mac's prompt. | M |
+| W12 | **Mochi grows up**: kitten → young → grown-up art over weeks of friendship (`Features/Growth`). **Logic in mochi_world (2026-11-08); UI still to do:** `LifeStage` (G1) and `Growth.check` (the once-per-stage announcements). | S (after G1) |
 | W13 | **Progress**: friendship hearts and achievements UI | S |
-| W14 | **Mini-games**: Catch the Treats (arrow keys or drag, combos, golden treats, high score) and rock-paper-scissors with Mochi and Patch (`Features/Games`) | M |
-| W15 | **Focus buddy**: Pomodoro; Mochi naps while you focus, non-urgent sounds stay quiet, wake for a stretch (`Features/Focus`) | M |
-| W16 | **Daily recap** at 18:00: sessions, turns, tool calls, test runs, errors, focus minutes and streak; save or copy as an image (`Features/Recap`) | M |
+| W14 | **Mini-games**: Catch the Treats (arrow keys or drag, combos, golden treats, high score) and rock-paper-scissors with Mochi and Patch (`Features/Games`). **Logic in mochi_world (2026-11-08); UI still to do:** `CatchGame` (whole games match the Mac's fixture step for step), `RPSMatch`, `GameRecords`, and the stage's timing and poses (`RPSStage`). | M |
+| W15 | **Focus buddy**: Pomodoro; Mochi naps while you focus, non-urgent sounds stay quiet, wake for a stretch (`Features/Focus`). **Logic in mochi_world (2026-11-08); UI still to do:** `FocusTimer` and `FocusLog` match the Mac's fixture; `FocusBuddy` naps Mochi, logs blocks and shows each transition. | M |
+| W16 | **Daily recap** at 18:00: sessions, turns, tool calls, test runs, errors, focus minutes and streak; save or copy as an image (`Features/Recap`). **Logic in mochi_world (2026-11-08); UI still to do:** `DailyRecap` matches the Mac's fixture; `EventJournal` keeps the week from `onRecord`; `RecapSchedule` announces at 18:00. The card and its image are still to draw. | M |
 | W17 | **Share a clip**: a 5-second looping GIF drawn by the app, never a screen capture, saved to Downloads (`Features/Share`) | M |
-| W18 | **Room makeover**: twelve furniture pieces unlocked by friendship and achievements; Decorate and drag (`Features/Room`) | M |
+| W18 | **Room makeover**: twelve furniture pieces unlocked by friendship and achievements; Decorate and drag (`Features/Room`). **Logic in mochi_world (2026-11-08); UI still to do:** `FurnitureCatalog` (with the unlocks) and `RoomLayout` (placement, the Mac's `room` JSON) match the Mac's fixture. | M |
 | W19 | **Explore the desktop**: drag Mochi off the taskbar and it walks along window tops, sits on the taskbar, climbs a screen edge and hops home; occasional spontaneous adventures (`Features/Adventure`). Uses `EnumWindows` rectangles only. | L |
-| W20 | **Holidays, the rest**: seasonal treats, decorations on the taskbar strip, costumes on both characters (the art exists; the treats don't yet) | S |
+| W20 | **Holidays, the rest**: seasonal treats, decorations on the taskbar strip, costumes on both characters (the art exists; the treats don't yet). **Logic in mochi_world (2026-11-08); UI still to do:** `SeasonCalendar` matches the Mac's fixture for every day of 2025–2030; `SeasonDecor`, `TreatStyle` and `SeasonTracker` give the costume, the treat and the once-per-occasion greeting. | S |
 | W21 | **Feel the purr**: press and hold Mochi to keep it purring. No Force Touch on PCs, so use a purr sound with a gentle visual. | S |
 | W22 | **The notch is Mochi's den** has no notch on Windows. Equivalent: a den by the tray or clock area where Mochi naps, peeks out when Claude needs you and bursts out to celebrate. | M |
 

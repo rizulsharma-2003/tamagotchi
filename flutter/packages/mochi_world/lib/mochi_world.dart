@@ -8,6 +8,12 @@
 /// (`InteractionScheduler`), the animation state machine (`CharacterAnimator`), friendship and achievements
 /// (`AchievementEngine`, `LifeStage`) and the celebration rules for real Claude events (`Celebrations`).
 ///
+/// The Sprint 2 features are here as logic too, for the apps to draw: what Mochi says (`SpeechLines`,
+/// `SpeechDirector`), the mini-games (`CatchGame`, `RPSMatch`, `GameRecords`), the focus buddy (`FocusTimer`,
+/// `FocusBuddy`), the daily recap (`DailyRecap`, `EventJournal`, `RecapSchedule`), the room makeover
+/// (`FurnitureCatalog`, `RoomLayout`), holidays (`SeasonCalendar`, `SeasonTracker`) and growing up (`Growth`). Each
+/// returns a `FeatureMoment` (a toast, a line, animations, a sound) where the Mac's controller would act.
+///
 /// Everything is deterministic for a seed and the injected clock, and checked against the Swift engine with the golden
 /// fixtures in link-spec/world (see docs/MOCHI_WORLD.md).
 library;
@@ -17,6 +23,14 @@ export 'src/animation/choreography.dart' show Curve, Track;
 export 'src/animation/companion_pose_evaluator.dart' show CompanionDetail, CompanionPoseEvaluator;
 export 'src/animation/pet_pose_evaluator.dart';
 export 'src/events/events.dart';
+export 'src/features/focus.dart';
+export 'src/features/games.dart';
+export 'src/features/growth.dart';
+export 'src/features/moment.dart';
+export 'src/features/recap.dart';
+export 'src/features/room.dart';
+export 'src/features/seasons.dart';
+export 'src/features/speech.dart';
 export 'src/interactions/interaction_library.dart';
 export 'src/model/animations.dart';
 export 'src/model/ease.dart' show Ease, Keys, ieeeRemainder;

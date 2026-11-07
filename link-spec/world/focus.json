@@ -1,0 +1,80 @@
+{"about":"W15, TamagotchiCore's FocusTimer, its Durations and FocusLog (mochi_world's must match). settings: [work, break, long, cycles minutes] → Durations(settings) [focus, shortBreak, longBreak seconds, cycles]; raw: Durations(focus: 0, shortBreak: -5, longBreak: 0.5, cycles: 0). clocks: [seconds, FocusStatus.clock]. timers: ops at start + at seconds (start = 1800000000), with the transitions, then running [phase, startedAt − start, duration, cycle] and, while running, status(naps: true)'s petNaps, remaining and progress at that moment. log: FocusLog(retention 7 days) appends [endedAt, minutes, now] (seconds from start), each followed by the blocks kept; within: blocks(in: start + 5 days … start + 12 days); memory: a log with retention 0 after two appends.","settings":[
+[25,5,15,4,1500,300,900,4],
+[0,0,0,0,60,60,60,1],
+[500,100,200,40,10800,3600,5400,12],
+[-3,61,91,13,60,3600,5400,12],
+[1,1,1,1,60,60,60,1],
+[50,10,30,2,3000,600,1800,2],
+[180,60,90,12,10800,3600,5400,12]
+],"raw":[1,1,1,1],"clocks":[[0.0,"0:00"],[0.2,"0:01"],[1.0,"0:01"],[59.01,"1:00"],[59.99,"1:00"],[60.0,"1:00"],[61.0,"1:01"],[599.5,"10:00"],[1500.0,"25:00"],[3599.5,"1:00:00"],[3600.0,"1:00:00"],[3725.0,"1:02:05"],[36000.0,"10:00:00"],[-5.0,"0:00"]],"timers":[
+{"note":"a whole set noticed on time (and half a second late, which still chains exactly)","durations":[1500,300,900,2],"steps":[
+{"op":"advance","at":0.0,"transitions":[],"running":null,"completedBlocks":0},
+{"op":"start","at":0.0,"transitions":[["started","focus",1]],"running":["focus",0,1500,1],"petNaps":true,"remaining":1500,"progress":0,"completedBlocks":0},
+{"op":"advance","at":1.0,"transitions":[],"running":["focus",0,1500,1],"petNaps":true,"remaining":1499,"progress":0.000666666666667,"completedBlocks":0},
+{"op":"advance","at":1499.0,"transitions":[],"running":["focus",0,1500,1],"petNaps":true,"remaining":1,"progress":0.999333333333,"completedBlocks":0},
+{"op":"advance","at":1500.0,"transitions":[["completed",1800001500,25],["started","shortBreak",1]],"running":["shortBreak",1500,300,1],"petNaps":false,"remaining":300,"progress":0,"completedBlocks":1},
+{"op":"advance","at":1700.0,"transitions":[],"running":["shortBreak",1500,300,1],"petNaps":false,"remaining":100,"progress":0.666666666667,"completedBlocks":1},
+{"op":"advance","at":1800.0,"transitions":[["started","focus",2]],"running":["focus",1800,1500,2],"petNaps":true,"remaining":1500,"progress":0,"completedBlocks":1},
+{"op":"advance","at":3300.5,"transitions":[["completed",1800003300,25],["started","longBreak",2]],"running":["longBreak",3300,900,2],"petNaps":false,"remaining":899.5,"progress":0.000555555555556,"completedBlocks":2},
+{"op":"advance","at":3301.0,"transitions":[],"running":["longBreak",3300,900,2],"petNaps":false,"remaining":899,"progress":0.00111111111111,"completedBlocks":2},
+{"op":"advance","at":4200.0,"transitions":[["finished",2]],"running":null,"completedBlocks":2},
+{"op":"advance","at":4201.0,"transitions":[],"running":null,"completedBlocks":2},
+{"op":"stop","at":4300.0,"transitions":[],"running":null,"completedBlocks":2}
+]},
+{"note":"noticed late: under 2 s chains, later starts from now; exactly 10 minutes late still counts","durations":[60,30,45,3],"steps":[
+{"op":"start","at":0.0,"transitions":[["started","focus",1]],"running":["focus",0,60,1],"petNaps":true,"remaining":60,"progress":0,"completedBlocks":0},
+{"op":"advance","at":61.5,"transitions":[["completed",1800000060,1],["started","shortBreak",1]],"running":["shortBreak",60,30,1],"petNaps":false,"remaining":28.5,"progress":0.05,"completedBlocks":1},
+{"op":"advance","at":95.0,"transitions":[["started","focus",2]],"running":["focus",95,60,2],"petNaps":true,"remaining":60,"progress":0,"completedBlocks":1},
+{"op":"advance","at":125.0,"transitions":[],"running":["focus",95,60,2],"petNaps":true,"remaining":30,"progress":0.5,"completedBlocks":1},
+{"op":"advance","at":160.0,"transitions":[["completed",1800000155,1],["started","shortBreak",2]],"running":["shortBreak",160,30,2],"petNaps":false,"remaining":30,"progress":0,"completedBlocks":2},
+{"op":"advance","at":190.5,"transitions":[["started","focus",3]],"running":["focus",190,60,3],"petNaps":true,"remaining":59.5,"progress":0.00833333333333,"completedBlocks":2},
+{"op":"advance","at":260.0,"transitions":[["completed",1800000250,1],["started","longBreak",3]],"running":["longBreak",260,45,3],"petNaps":false,"remaining":45,"progress":0,"completedBlocks":3},
+{"op":"advance","at":905.0,"transitions":[["finished",3]],"running":null,"completedBlocks":3},
+{"op":"advance","at":2000.0,"transitions":[],"running":null,"completedBlocks":3}
+]},
+{"note":"slept through: more than 10 minutes late expires without counting","durations":[60,30,45,3],"steps":[
+{"op":"start","at":0.0,"transitions":[["started","focus",1]],"running":["focus",0,60,1],"petNaps":true,"remaining":60,"progress":0,"completedBlocks":0},
+{"op":"advance","at":660.0,"transitions":[["completed",1800000060,1],["started","shortBreak",1]],"running":["shortBreak",660,30,1],"petNaps":false,"remaining":30,"progress":0,"completedBlocks":1},
+{"op":"advance","at":1290.5,"transitions":[["expired"]],"running":null,"completedBlocks":1},
+{"op":"advance","at":1291.0,"transitions":[],"running":null,"completedBlocks":1},
+{"op":"advance","at":1292.0,"transitions":[],"running":null,"completedBlocks":1}
+]},
+{"note":"skipping: a skipped block doesn't count","durations":[1500,300,900,2],"steps":[
+{"op":"start","at":10.0,"transitions":[["started","focus",1]],"running":["focus",10,1500,1],"petNaps":true,"remaining":1500,"progress":0,"completedBlocks":0},
+{"op":"skip","at":20.0,"transitions":[["started","shortBreak",1]],"running":["shortBreak",20,300,1],"petNaps":false,"remaining":300,"progress":0,"completedBlocks":0},
+{"op":"skip","at":30.0,"transitions":[["started","focus",2]],"running":["focus",30,1500,2],"petNaps":true,"remaining":1500,"progress":0,"completedBlocks":0},
+{"op":"advance","at":1530.0,"transitions":[["completed",1800001530,25],["started","longBreak",2]],"running":["longBreak",1530,900,2],"petNaps":false,"remaining":900,"progress":0,"completedBlocks":1},
+{"op":"skip","at":1600.0,"transitions":[["finished",1]],"running":null,"completedBlocks":1},
+{"op":"skip","at":1700.0,"transitions":[],"running":null,"completedBlocks":1},
+{"op":"advance","at":3200.0,"transitions":[],"running":null,"completedBlocks":1},
+{"op":"skip","at":3300.0,"transitions":[],"running":null,"completedBlocks":1},
+{"op":"skip","at":3400.0,"transitions":[],"running":null,"completedBlocks":1}
+]},
+{"note":"restarting and stopping","durations":[60,30,45,3],"steps":[
+{"op":"start","at":0.0,"transitions":[["started","focus",1]],"running":["focus",0,60,1],"petNaps":true,"remaining":60,"progress":0,"completedBlocks":0},
+{"op":"advance","at":60.0,"transitions":[["completed",1800000060,1],["started","shortBreak",1]],"running":["shortBreak",60,30,1],"petNaps":false,"remaining":30,"progress":0,"completedBlocks":1},
+{"op":"start","at":100.0,"transitions":[["started","focus",1]],"running":["focus",100,60,1],"petNaps":true,"remaining":60,"progress":0,"completedBlocks":0},
+{"op":"advance","at":159.0,"transitions":[],"running":["focus",100,60,1],"petNaps":true,"remaining":1,"progress":0.983333333333,"completedBlocks":0},
+{"op":"advance","at":160.0,"transitions":[["completed",1800000160,1],["started","shortBreak",1]],"running":["shortBreak",160,30,1],"petNaps":false,"remaining":30,"progress":0,"completedBlocks":1},
+{"op":"stop","at":170.0,"transitions":[["stopped"]],"running":null,"completedBlocks":1},
+{"op":"stop","at":171.0,"transitions":[],"running":null,"completedBlocks":1},
+{"op":"skip","at":172.0,"transitions":[],"running":null,"completedBlocks":1},
+{"op":"advance","at":1000.0,"transitions":[],"running":null,"completedBlocks":1}
+]},
+{"note":"one cycle per set: every block is followed by the long break","durations":[10,5,7,1],"steps":[
+{"op":"start","at":0.0,"transitions":[["started","focus",1]],"running":["focus",0,10,1],"petNaps":true,"remaining":10,"progress":0,"completedBlocks":0},
+{"op":"advance","at":10.0,"transitions":[["completed",1800000010,0.166666666667],["started","longBreak",1]],"running":["longBreak",10,7,1],"petNaps":false,"remaining":7,"progress":0,"completedBlocks":1},
+{"op":"advance","at":17.0,"transitions":[["finished",1]],"running":null,"completedBlocks":1},
+{"op":"advance","at":18.0,"transitions":[],"running":null,"completedBlocks":1}
+]}
+],"log":[
+[0,25,0,[[0,25]]],
+[-259200,25,0,[[-259200,25],[0,25]]],
+[-691200,25,0,[[-259200,25],[0,25]]],
+[100,0,100,[[-259200,25],[0,25]]],
+[200,-5,200,[[-259200,25],[0,25]]],
+[-86400,50,300,[[-259200,25],[-86400,50],[0,25]]],
+[172800,25,172800,[[-259200,25],[-86400,50],[0,25],[172800,25]]],
+[432000,12.5,432000,[[-86400,50],[0,25],[172800,25],[432000,12.5]]],
+[1036800,25,1036800,[[432000,12.5],[1036800,25]]]
+],"within":[432000,1036800],"memory":[-2592000,0]}
