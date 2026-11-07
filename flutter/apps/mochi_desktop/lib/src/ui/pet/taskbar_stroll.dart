@@ -39,6 +39,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../core/desktop_settings.dart';
@@ -116,7 +117,9 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     this.taskbarChecks = 5,
     this.measureChecks = 3,
     this.log,
-  }) : _idle = idle ?? (() => Duration.zero),
+    Future<void> Function()? drawn,
+  }) : _drawn = drawn ?? _nextFrame,
+       _idle = idle ?? (() => Duration.zero),
        _clock = clock ?? _monotonic(),
        stroller = Stroller(random: random, tuning: tuning),
        _roaming = settings.roamTaskbar {
@@ -292,7 +295,13 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
       _popoverTimer?.cancel();
       _popoverTimer = null;
       _start();
-      return _enqueue(_place);
+      return _enqueue(() async {
+        try {
+          await _place();
+        } finally {
+          await _uncover();
+        }
+      });
     }
     if (surface == Surface.popover) {
       final geometry = popover ??= popoverGeometry(SurfaceSizes.popover);
@@ -300,6 +309,8 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
       _resumeX = onTaskbar && stroller.isPlaced ? stroller.sample(_clock()).x : null;
       final scale = _stage?.scale ?? 1;
       _stop();
+      // Nothing else runs while the genie plays (the walk, the pointer, UI Automation, the raise), and frames come on time.
+      shell.petWindow?.preciseTimers(true);
       return _enqueue(() async {
         // Off the taskbar; the window lets every click through until the popover is all the way out.
         _halt();
@@ -308,28 +319,63 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
         _home = null;
         _placement = PetPlacement.away;
         final window = shell.petWindow;
-        if (window != null) {
-          _clickThrough = true;
-          window.setClickThrough(true);
-          // Once, straight to its final rect: everything in it is drawn where it was on screen.
-          await window.setFrame(_physical(geometry.window, scale));
+        final watch = Stopwatch()..start();
+        final steps = <String>[];
+        void step(String name) => steps.add('$name ${watch.elapsedMilliseconds}');
+        try {
+          if (window != null) {
+            _clickThrough = true;
+            window.setClickThrough(true);
+            // Once, straight to its final rect, out of sight behind a still picture of Mochi: everything in it is
+            // drawn where it was on screen.
+            _covered = window.cover();
+            step('covered');
+            await window.setFrame(_physical(geometry.window, scale));
+            step('resized');
+          }
+          await shell.show(Surface.popover, petPosition: geometry.window.topLeft, petSize: geometry.window.size);
+          step('shown');
+          if (_surface != Surface.popover || _disposed) return;
+          _popoverOpen = false;
+          _popoverScale = scale;
+        } finally {
+          await _uncover();
+          step('uncovered');
+          log?.call('popover window (ms): ${steps.join(', ')}');
         }
-        await shell.show(Surface.popover, petPosition: geometry.window.topLeft, petSize: geometry.window.size);
-        if (_surface != Surface.popover || _disposed) return;
-        _popoverOpen = false;
-        _popoverScale = scale;
-        _popoverTimer?.cancel();
-        _popoverTimer = Timer.periodic(nearPointerInterval, (_) => _popoverPointer());
       });
     }
     _resumeX = null;
     popover = null;
     _stop();
+    shell.petWindow?.preciseTimers(false);
     return _enqueue(() async {
       _leaveTaskbar();
       _placement = PetPlacement.away;
-      await shell.show(surface, petPosition: settings.petPosition);
+      try {
+        await shell.show(surface, petPosition: settings.petPosition);
+      } finally {
+        await _uncover();
+      }
     });
+  }
+
+  /// Whether the window is out of sight behind a picture of itself while it changes size ([PetWindow.cover]).
+  bool _covered = false;
+
+  /// Waits until Flutter has drawn the window at its new size, and as it should look there: a resize completes once a
+  /// frame at the new size is on its way to the screen (Flutter's Windows embedder waits for it), so one more frame
+  /// (after the surface changed, say) is enough.
+  final Future<void> Function() _drawn;
+
+  static Future<void> _nextFrame() => SchedulerBinding.instance.endOfFrame;
+
+  /// The window back on screen once it's drawn at its new size.
+  Future<void> _uncover() async {
+    if (!_covered) return;
+    _covered = false;
+    await _drawn();
+    shell.petWindow?.uncover();
   }
 
   /// Mochi's mood (from the pet's view): what it does on the taskbar.
@@ -387,12 +433,21 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// The popover is all the way out: clicks reach it, and pass through the rest of the window to the taskbar.
-  void popoverOpened() => _popoverOpen = true;
+  void popoverOpened() {
+    _popoverOpen = true;
+    shell.petWindow?.preciseTimers(false);
+    _popoverTimer?.cancel();
+    _popoverTimer = Timer.periodic(nearPointerInterval, (_) => _popoverPointer());
+    _popoverPointer();
+  }
 
-  /// The popover is going: every click passes through until Mochi is back.
+  /// The popover is going: every click passes through until Mochi is back, and nothing else runs meanwhile.
   void popoverClosing() {
     _popoverOpen = false;
+    _popoverTimer?.cancel();
+    _popoverTimer = null;
     _setClickThrough(true);
+    shell.petWindow?.preciseTimers(true);
   }
 
   /// Mochi has landed: the window goes back to the pet's own rect (where the pet draws Mochi just as it was drawn).
@@ -401,7 +456,10 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     final window = shell.petWindow;
     _popoverTimer?.cancel();
     _popoverTimer = null;
+    window?.preciseTimers(false);
     if (geometry == null || window == null || geometry.mochi == null) return;
+    // Out of sight behind a still picture of Mochi on its spot until the pet has drawn it there ([show]).
+    _covered = window.cover();
     await window.setFrame(_physical(geometry.petWindow, _popoverScale));
   }
 
@@ -932,6 +990,8 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   void dispose() {
     _disposed = true;
     _stop();
+    shell.petWindow?.preciseTimers(false);
+    if (_covered) shell.petWindow?.uncover();
     unawaited(_cues.cancel());
     settings.removeListener(_settingsChanged);
     motion.removeListener(_motionChanged);

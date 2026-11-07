@@ -224,8 +224,12 @@ class FakePetWindow implements PetWindow {
     moves.add(current!);
   }
 
+  /// For each [frames] entry, whether the window was covered when it was set.
+  final List<bool> framedCovered = [];
+
   @override
   Future<void> setFrame(PixelRect frame) async {
+    framedCovered.add(covered);
     final least = minimum;
     current = least == null
         ? frame
@@ -256,6 +260,39 @@ class FakePetWindow implements PetWindow {
 
   @override
   void giveFocus(int window) => focusGiven.add(window);
+
+  /// The window's covers ([cover], [uncover]) in order: true for each cover, false for each uncover.
+  final List<bool> covers = [];
+
+  /// Whether [cover] puts a picture up (a real window's does).
+  bool coverable = true;
+  bool covered = false;
+
+  @override
+  bool cover() {
+    if (!coverable) return false;
+    covered = true;
+    covers.add(true);
+    return true;
+  }
+
+  @override
+  void uncover() {
+    if (!covered) return;
+    covered = false;
+    covers.add(false);
+  }
+
+  /// Whether the timers are precise now (an animation runs), and every change.
+  bool precise = false;
+  final List<bool> preciseChanges = [];
+
+  @override
+  void preciseTimers(bool on) {
+    if (on == precise) return;
+    precise = on;
+    preciseChanges.add(on);
+  }
 }
 
 /// A taskbar the test sets up: at the bottom of a 1920×1080 screen at 100% by default, with the tray at the right,

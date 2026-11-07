@@ -4,19 +4,24 @@
 // leaps from and to) while everything in it is still where it was on screen, and the transitions run inside it,
 // driven by the display's vsync:
 //
-// - Opening (380 ms): the panel genies out of Mochi's spot (genie.dart: a mesh warp of one picture of the panel), and
-//   Mochi hops up from the taskbar into its place in the room; Patch's desk on the taskbar fades.
+// - Opening (450 ms genie, Mochi landing in the room at 500 ms): the panel genies out of Mochi's spot (genie.dart: a
+//   mesh warp of one picture of the panel, taken before anything moves), and Mochi leaps up from the taskbar into its
+//   place in the room; Patch's desk on the taskbar fades.
 // - Open: the live popover.
-// - Closing (320 ms genie, Mochi landing at ~0.5 s): the panel funnels back into Mochi's spot while Mochi leaps out of
+// - Closing (380 ms genie, Mochi landing at ~0.6 s): the panel funnels back into Mochi's spot while Mochi leaps out of
 //   the room in an arc, squashes on landing with a puff of dust, exactly on its spot at taskbar size; Patch's desk
 //   fades back in. Only then does the window go back to the taskbar's size (by then the drawing is already where the
 //   taskbar pet draws it, so nothing moves).
 // - Animation effects off: a quick fade in and out (120 ms), no genie and no leap.
 //
+// While a transition runs nothing is rebuilt or laid out: each frame only repaints the transition's painter, which
+// reads the ticker's time itself; the live panel stays painted out of sight with its own animations paused.
+//
 // Everything here is drawn in screen coordinates made local to the window, and the window's origin is told from its
 // size (the popover's rect, or still the pet's before the move lands), so no frame ever puts anything in the wrong place.
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -29,6 +34,7 @@ import 'package:mochi_ui/mochi_ui.dart';
 import '../../desktop.dart';
 import '../../platform/taskbar.dart' show HomeStage;
 import '../pet/companion_director.dart';
+import 'frame_meter.dart';
 import 'genie.dart';
 import 'popover_view.dart';
 
@@ -87,7 +93,15 @@ class PopoverStage extends StatefulWidget {
     required this.panel,
     required this.onOpened,
     required this.onClosed,
+    this.ready,
+    this.meter,
   });
+
+  /// Completes once the window is in place for the popover (null: it already is). The genie starts after that.
+  final Future<void>? ready;
+
+  /// Development: times the transitions' frames (with the stroll's debug log on).
+  final FrameMeter? meter;
 
   final PopoverGeometry geometry;
 
@@ -115,6 +129,10 @@ class PopoverStage extends StatefulWidget {
   static const Duration genieOut = Duration(milliseconds: 380);
   static const Duration fade = Duration(milliseconds: 120);
 
+  /// How long the panel's picture may take (the first time, the panel is drawn for the first time too) before the genie
+  /// warps its plain shape instead.
+  static const Duration pictureWait = Duration(milliseconds: 400);
+
   @override
   State<PopoverStage> createState() => PopoverStageState();
 }
@@ -128,15 +146,43 @@ class PopoverStageState extends State<PopoverStage> with SingleTickerProviderSta
   bool _started = false;
   final Stopwatch _clock = Stopwatch()..start();
 
+  /// The live panel, built once for each [PopoverStage.panel] and hidePet (nothing in it is rebuilt while Mochi leaps).
+  Widget? _live;
+  Widget Function(bool hidePet)? _liveFrom;
+  bool? _liveHidesPet;
+
   PopoverPhase get phase => _phase;
 
-  /// Milliseconds into the running transition.
-  double get _elapsed => _motion.value * (_motion.duration?.inMicroseconds ?? 0) / 1000;
+  /// Windows wakes Flutter for a frame with a timer that never fires sooner than 10 ms (USER_TIMER_MINIMUM), so a frame
+  /// due sooner starts late and often misses its vsync. While a transition runs, a 1 ms timer keeps Flutter's task
+  /// runner awake (each Dart timer posts it a message) and each frame starts on time; the stroll makes Windows' timers
+  /// precise meanwhile.
+  Timer? _pump;
+
+  void _pumping(bool on) {
+    _pump?.cancel();
+    _pump = on && Platform.isWindows ? Timer.periodic(const Duration(milliseconds: 1), (_) {}) : null;
+  }
+
+  Future<void> _run() async {
+    _pumping(true);
+    try {
+      await _motion.forward(from: 0).orCancel;
+    } on TickerCanceled {
+      // Gone (disposed).
+    } finally {
+      _pumping(false);
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _motion.addListener(() => setState(() {}));
+    // Each frame of a transition only repaints the stage's painter (it listens to the ticker itself): no rebuild, no
+    // layout, nothing else repainted.
+    final meter = widget.meter;
+    if (meter != null) _motion.addListener(meter.tick);
+    meter?.mark('stage');
     WidgetsBinding.instance.addPostFrameCallback((_) => _open());
   }
 
@@ -148,18 +194,32 @@ class PopoverStageState extends State<PopoverStage> with SingleTickerProviderSta
 
   bool get _still => MediaQuery.disableAnimationsOf(context);
 
+  Future<void> _ready() => (widget.ready ?? Future<void>.value()).catchError((Object _) {});
+
   Future<void> _open() async {
     if (!mounted || _started) return;
     _started = true;
     _calm = _still;
+    final meter = widget.meter;
     if (_calm) {
-      _motion.duration = PopoverStage.fade;
-      await _motion.forward(from: 0).orCancel.catchError((_) {});
-    } else {
-      _picture = await _capture();
+      await _ready();
       if (!mounted) return;
+      _motion.duration = PopoverStage.fade;
+      setState(() {});
+      await _run();
+    } else {
+      // One picture of the panel (taken while the window is still being put in place), then the genie warps only that.
+      meter?.mark('capture');
+      final (picture, _) = await (_capture(), _ready()).wait;
+      _picture = picture;
+      if (!mounted) return;
+      final captured =
+          'picture ${picture == null ? 'none' : '${picture.width}x${picture.height}'}, ready ${meter?.since('capture').round()} ms after the stage';
       _motion.duration = PopoverStage.opening;
-      await _motion.forward(from: 0).orCancel.catchError((_) {});
+      setState(() {});
+      meter?.start('open');
+      await _run();
+      meter?.stop(captured);
     }
     if (!mounted) return;
     setState(() => _phase = PopoverPhase.open);
@@ -173,27 +233,33 @@ class PopoverStageState extends State<PopoverStage> with SingleTickerProviderSta
     _picture?.dispose();
     _picture = null;
     _motion.value = 0;
+    final meter = widget.meter;
     if (!_calm) {
       // Mochi steps out of the room for its leap (drawn in its very place), then the panel's picture is taken.
       setState(() => _phase = PopoverPhase.leaving);
+      meter?.mark('capture');
       _picture = await _capture();
       if (!mounted) return;
     }
-    setState(() => _phase = PopoverPhase.closing);
+    final captured =
+        'picture ${_picture == null ? 'none' : '${_picture!.width}x${_picture!.height}'} in ${meter?.since('capture').round()} ms';
     _motion.duration = _calm ? PopoverStage.fade : PopoverStage.closingLength;
-    await _motion.forward(from: 0).orCancel.catchError((_) {});
+    setState(() => _phase = PopoverPhase.closing);
+    meter?.start('close');
+    await _run();
+    meter?.stop(captured);
     if (mounted) widget.onClosed();
   }
 
-  /// A picture of the panel as it is now (drawn, though not shown, during the transitions). Null if it can't be had
-  /// quickly: the genie then warps the panel's plain shape.
+  /// A picture of the panel as it is now (laid out and painted, though not shown, during the transitions). Null if it
+  /// can't be had (the genie then warps the panel's plain shape).
   Future<ui.Image?> _capture() async {
     await WidgetsBinding.instance.endOfFrame;
     final boundary = _panelKey.currentContext?.findRenderObject();
     if (boundary is! RenderRepaintBoundary || !mounted) return null;
     final ratio = MediaQuery.devicePixelRatioOf(context);
     final done = Completer<ui.Image?>();
-    final timeout = Timer(const Duration(milliseconds: 120), () {
+    final timeout = Timer(PopoverStage.pictureWait, () {
       if (!done.isCompleted) done.complete(null);
     });
     unawaited(
@@ -211,10 +277,27 @@ class PopoverStageState extends State<PopoverStage> with SingleTickerProviderSta
 
   @override
   void dispose() {
+    _pumping(false);
     _motion.dispose();
     _picture?.dispose();
     super.dispose();
   }
+
+  Widget _livePanel(bool hidePet) {
+    if (_live == null || !identical(_liveFrom, widget.panel) || _liveHidesPet != hidePet) {
+      _live = widget.panel(hidePet);
+      _liveFrom = widget.panel;
+      _liveHidesPet = hidePet;
+    }
+    return _live!;
+  }
+
+  /// The live panel's opacity: a fade with animation effects off, otherwise all or (out of sight) nothing.
+  Animation<double> get _fade => switch (_phase) {
+    PopoverPhase.opening when _calm => _motion,
+    PopoverPhase.closing when _calm => ReverseAnimation(_motion),
+    _ => kAlwaysCompleteAnimation,
+  };
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -226,54 +309,53 @@ class PopoverStageState extends State<PopoverStage> with SingleTickerProviderSta
       final origin = settled ? g.window.topLeft : g.petWindow.topLeft;
       final panel = g.local(g.panel, origin);
       final open = _phase == PopoverPhase.open;
-      final ms = _elapsed;
       final calm = _calm;
-      // The live panel: shown when open (and in a fade); drawn but out of sight otherwise, for its picture.
-      final double liveOpacity = switch (_phase) {
-        PopoverPhase.open || PopoverPhase.leaving => 1,
-        PopoverPhase.opening when calm => _motion.value,
-        PopoverPhase.closing when calm => 1 - _motion.value,
-        _ => 0,
-      };
+      // The live panel: shown when open (and in a fade); laid out and painted but out of sight otherwise, for its
+      // picture, with its own animations (the room) paused.
+      final shown = open || _phase == PopoverPhase.leaving || (calm && _started);
       final hidePet =
           !calm && widget.leapBack && (_phase == PopoverPhase.opening || _phase == PopoverPhase.leaving || _phase == PopoverPhase.closing);
-      final live = RepaintBoundary(key: _panelKey, child: widget.panel(hidePet));
       return Stack(
         children: [
-          if (settled)
-            Positioned.fromRect(
-              rect: panel,
-              child: liveOpacity >= 1
-                  ? live
-                  : liveOpacity > 0
-                  ? Opacity(
-                      opacity: liveOpacity,
-                      child: IgnorePointer(child: live),
-                    )
-                  : IgnorePointer(
-                      child: ClipRect(clipper: const _Nothing(), child: live),
-                    ),
+          Positioned.fromRect(
+            rect: panel,
+            child: IgnorePointer(
+              ignoring: !open,
+              // (A clipper also limits where clicks land, so the shown panel has none.)
+              child: ClipRect(
+                clipper: shown ? null : const _Nothing(),
+                clipBehavior: shown ? Clip.none : Clip.hardEdge,
+                child: FadeTransition(
+                  opacity: _fade,
+                  child: RepaintBoundary(
+                    key: _panelKey,
+                    child: TickerMode(enabled: open, child: _livePanel(hidePet)),
+                  ),
+                ),
+              ),
             ),
+          ),
           if (!open)
             Positioned.fill(
               child: IgnorePointer(
-                child: CustomPaint(
-                  painter: _TransitionPainter(
-                    geometry: g,
-                    origin: origin,
-                    phase: _phase,
-                    elapsed: ms,
-                    calm: calm,
-                    picture: _picture,
-                    pictureSize: panel.size * MediaQuery.devicePixelRatioOf(context),
-                    leapBack: widget.leapBack,
-                    showPanel: settled,
-                    library: widget.library,
-                    companion: widget.companion,
-                    desktop: widget.desktop,
-                    dark: Theme.of(context).brightness == Brightness.dark,
-                    surface: context.palette.surface,
-                    time: _clock.elapsedMicroseconds / 1e6,
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _TransitionPainter(
+                      motion: _motion,
+                      geometry: g,
+                      origin: origin,
+                      phase: _phase,
+                      calm: calm,
+                      picture: _picture,
+                      leapBack: widget.leapBack,
+                      showPanel: settled,
+                      library: widget.library,
+                      companion: widget.companion,
+                      desktop: widget.desktop,
+                      dark: Theme.of(context).brightness == Brightness.dark,
+                      surface: context.palette.surface,
+                      clock: _clock,
+                    ),
                   ),
                 ),
               ),
@@ -295,16 +377,16 @@ class _Nothing extends CustomClipper<Rect> {
   bool shouldReclip(_Nothing old) => false;
 }
 
-/// One frame of a transition: the panel's genie, Mochi's leap, Patch's desk fading.
+/// One frame of a transition: the panel's genie, Mochi's leap, Patch's desk fading. It repaints with the ticker
+/// ([motion]) and reads the time itself, so a frame that comes late still shows where things are at that moment.
 class _TransitionPainter extends CustomPainter {
   _TransitionPainter({
+    required this.motion,
     required this.geometry,
     required this.origin,
     required this.phase,
-    required this.elapsed,
     required this.calm,
     required this.picture,
-    required this.pictureSize,
     required this.leapBack,
     required this.showPanel,
     required this.library,
@@ -312,16 +394,15 @@ class _TransitionPainter extends CustomPainter {
     required this.desktop,
     required this.dark,
     required this.surface,
-    required this.time,
-  });
+    required this.clock,
+  }) : super(repaint: motion);
 
+  final AnimationController motion;
   final PopoverGeometry geometry;
   final Offset origin;
   final PopoverPhase phase;
-  final double elapsed;
   final bool calm;
   final ui.Image? picture;
-  final Size pictureSize;
   final bool leapBack;
   final bool showPanel;
   final PoseLibrary? library;
@@ -329,13 +410,19 @@ class _TransitionPainter extends CustomPainter {
   final MochiDesktop desktop;
   final bool dark;
   final Color surface;
-  final double time;
+  final Stopwatch clock;
 
   static double _clamp(double x) => x.clamp(0.0, 1.0).toDouble();
+
+  /// Milliseconds into the running transition.
+  double get _elapsed => motion.value * (motion.duration?.inMicroseconds ?? 0) / 1000;
+
+  double get _time => clock.elapsedMicroseconds / 1e6;
 
   @override
   void paint(Canvas canvas, Size size) {
     final g = geometry;
+    final elapsed = _elapsed;
     final opening = phase == PopoverPhase.opening;
     final panel = g.local(g.panel, origin);
     final mochi = g.mochi?.translate(-origin.dx, -origin.dy);
@@ -355,7 +442,7 @@ class _TransitionPainter extends CustomPainter {
       }
       return;
     }
-    // The genie.
+    // The genie: out with an ease-out (quick, then settling), back in with an ease-in (gathering speed into Mochi).
     if (showPanel) {
       final t = opening
           ? _clamp(elapsed / PopoverStage.genieIn.inMilliseconds)
@@ -384,17 +471,19 @@ class _TransitionPainter extends CustomPainter {
   void _genie(Canvas canvas, Genie genie, double t) {
     final alpha = Genie.opacity(t);
     final image = picture;
-    final paint = Paint()..filterQuality = FilterQuality.medium;
+    // Bilinear, no mipmaps: plenty while it moves, and cheap for a PC drawing without a graphics card. The fade-in is
+    // the paint's own alpha (no offscreen layer).
+    final paint = Paint()
+      ..filterQuality = FilterQuality.low
+      ..color = Color.fromRGBO(0, 0, 0, alpha);
     if (image != null) {
       final ratio = image.width / math.max(1, genie.panel.width);
-      paint.shader = ImageShader(image, TileMode.clamp, TileMode.clamp, Matrix4.identity().storage);
+      paint.shader = ImageShader(image, TileMode.clamp, TileMode.clamp, Matrix4.identity().storage, filterQuality: FilterQuality.low);
       final vertices = genie.vertices(t, Size(genie.panel.width * ratio, genie.panel.height * ratio));
-      if (alpha < 1) canvas.saveLayer(genie.bounds(t).inflate(2), Paint()..color = Color.fromRGBO(0, 0, 0, alpha));
       canvas.drawVertices(vertices, BlendMode.srcOver, paint);
-      if (alpha < 1) canvas.restore();
       vertices.dispose();
     } else {
-      // No picture (yet): the panel's plain shape.
+      // No picture: the panel's plain shape.
       paint.color = surface.withValues(alpha: alpha);
       final vertices = genie.vertices(t, genie.panel.size);
       canvas.drawVertices(vertices, BlendMode.srcOver, paint);
@@ -405,7 +494,7 @@ class _TransitionPainter extends CustomPainter {
   /// Mochi at [p] through [leap].
   void _mochi(Canvas canvas, Leap leap, double p, {required double facing, double? landingFacing}) {
     final settings = desktop.settings;
-    var pose = library?.petTrack(PetAnimation.idle)?.at(time) ?? PetPose();
+    var pose = library?.petTrack(PetAnimation.idle)?.at(_time) ?? PetPose();
     final (sx, sy) = leap.squash(p);
     pose
       ..scaleX *= sx
@@ -444,7 +533,7 @@ class _TransitionPainter extends CustomPainter {
     if (opacity <= 0) return;
     final settings = desktop.settings;
     final g = GContext(canvas)..opacity = opacity;
-    final pose = library?.petTrack(PetAnimation.idle)?.at(time) ?? PetPose();
+    final pose = library?.petTrack(PetAnimation.idle)?.at(_time) ?? PetPose();
     PetRenderer.draw(
       geometry.facing < 0 ? pose.mirrored() : pose,
       g,
@@ -474,7 +563,7 @@ class _TransitionPainter extends CustomPainter {
       home.unit,
       accessory: settings.wornByCompanion(now),
       dark: dark,
-      time: 100 + time,
+      time: 100 + _time,
       deskFront: (front) => ThemeRenderer.deskFront(settings.officeTheme, front, dark: dark, accessory: settings.deskAccessory),
     );
   }

@@ -1,7 +1,8 @@
-// The popover's motion (ui/popover/genie.dart, popover_stage.dart): the genie's mesh maths, Mochi's leap, and the
-// sequence with a fake window: the window is set once to its final rect before anything moves, never resized while
-// the genie and the leap run, and goes back to the pet's rect only after Mochi has landed on its exact spot. With
-// animation effects off, a quick fade and no genie or leap.
+// The popover's motion (ui/popover/genie.dart, popover_stage.dart): the genie's mesh maths, Mochi's leap (a true
+// parabola), and the sequence with a fake window: the window is set once to its final rect before anything moves,
+// out of sight behind a picture of Mochi, never resized while the genie and the leap run, and goes back to the pet's
+// rect (covered the same way) only after Mochi has landed on its exact spot; Windows' timers are precise only while
+// something moves. With animation effects off, a quick fade and no genie or leap.
 
 import 'dart:io';
 import 'dart:math';
@@ -179,13 +180,17 @@ void main() {
       final rect = window.current!;
       expect((rect.width, rect.height), (geometry.window.width.round(), geometry.window.height.round()), reason: 'its final rect at once');
       expect(window.clickThrough.last, isTrue, reason: 'clicks pass through while it comes out');
+      expect(window.framedCovered.last, isTrue, reason: 'resized out of sight, behind a picture of Mochi');
+      expect(window.precise, isTrue, reason: 'precise timers while it moves');
       follow(tester);
       await frames(tester, 200);
+      expect(window.covers, [true, false], reason: 'on screen again once drawn at its new size');
       expect(phase(tester), PopoverPhase.opening);
       await frames(tester, 500);
       expect(phase(tester), PopoverPhase.open);
       expect(window.frames.length, framesAtOpen, reason: 'no resize while it opened');
       expect(window.moves, isEmpty);
+      expect(window.preciseChanges, [true, false], reason: 'ordinary timers once it is open');
       await tester.pumpWidget(const SizedBox());
     });
 
@@ -209,11 +214,15 @@ void main() {
       expect([PopoverPhase.leaving, PopoverPhase.closing], contains(phase(tester)));
       expect(window.frames.length, open, reason: 'still the popover’s rect mid-leap');
       expect(state.surface, Surface.popover);
+      expect(window.precise, isTrue, reason: 'precise timers while it moves');
       await frames(tester, 700);
       expect(state.surface, Surface.pet, reason: 'landed');
       expect(window.frames[open], pet, reason: 'then, and only then, back to the pet’s rect: the very spot');
+      expect(window.framedCovered[open], isTrue, reason: 'resized out of sight, behind a picture of Mochi');
       follow(tester);
       await frames(tester, 100);
+      expect(window.covers, [true, false, true, false], reason: 'on screen again once the pet has drawn Mochi there');
+      expect(window.preciseChanges, [true, false, true, false]);
       expect(state.stroll.sample()!.x, spot, reason: 'Mochi carries on from where it landed');
       await tester.pumpWidget(const SizedBox());
     });

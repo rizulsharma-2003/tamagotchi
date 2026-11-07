@@ -156,6 +156,19 @@ abstract interface class PetWindow {
 
   /// Gives the focus back to [window] (from [focusOwner]), if this window still has it.
   void giveFocus(int window);
+
+  /// Puts a still picture of what's on screen where the window is now in front of it, in a window of its own, and hides
+  /// the window itself, so it can change its size ([setFrame]) and be drawn at the new size out of sight: otherwise
+  /// Windows shows the old drawing at the new place for a moment. [uncover] shows it again and takes the picture
+  /// down. False if the picture couldn't go up (then nothing was hidden).
+  bool cover();
+
+  /// The window back on screen, the picture in front of it gone (see [cover]).
+  void uncover();
+
+  /// Windows' timers to the millisecond while an animation runs, or back to their default 15.6 ms. Flutter starts each
+  /// frame from one of them on Windows, and at the default about one frame in three comes a vsync late.
+  void preciseTimers(bool on);
 }
 
 /// No taskbar (the macOS development build): the pet stays still where it was left.
