@@ -4,4 +4,5 @@
 library;
 
 export 'src/clay.dart';
+export 'src/licenses.dart';
 export 'src/theme.dart';

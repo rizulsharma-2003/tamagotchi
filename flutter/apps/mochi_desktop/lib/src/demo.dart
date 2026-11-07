@@ -1,5 +1,6 @@
 // Development only (`MOCHI_DESKTOP_DEMO=1`): Mochi Link without the network, for screenshots and trying the screens.
-// The room, the pairing code and its key are made up and never reach a relay; two phones appear in the room.
+// The room, the pairing code and its key are made up and never reach a relay; two phones and Mochi Cloud appear in
+// the room.
 
 import 'dart:async';
 import 'dart:convert';
@@ -77,6 +78,7 @@ class DemoSocket implements LinkSocket {
               'online': false,
               'lastSeen': now - 1500,
             },
+            {'id': 'dev_cloud', 'role': 'cloud', 'platform': 'cloud', 'name': 'Mochi Cloud', 'online': false, 'lastSeen': now - 1900},
           ],
         }),
       );

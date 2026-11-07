@@ -20,6 +20,9 @@ dev_dependencies:
     sdk: flutter
 
 flutter:
+  # Nunito's licence, for the apps' licence pages (registerMochiFontLicense).
+  assets:
+    - fonts/OFL.txt
   # Nunito (SIL OFL 1.1, fonts/OFL.txt; no Reserved Font Name): the same static instances as mochi_pocket's fonts/
   # (made from google/fonts ofl/nunito/Nunito[wght].ttf v3.602, commit 8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5, with
   # fontTools 4.60.1, because Flutter 3.35 doesn't map FontWeight onto a variable font's wght axis). Apps name the

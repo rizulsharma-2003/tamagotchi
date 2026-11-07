@@ -89,9 +89,12 @@ void main() {
         await show(tester, surface: Surface.main, page: MainPage.pairing, textScale: scale);
         expect(tester.takeException(), isNull);
         expect(find.bySemanticsLabel('Pairing QR code'), findsOneWidget);
-        expect(find.text('Copy link'), findsOneWidget);
-        await tester.scrollUntilVisible(find.text('Unpair all devices…'), 200, scrollable: find.byType(Scrollable).first);
-        expect(find.text("Rizul's iPhone"), findsOneWidget);
+        expect(find.text('Copy Link'), findsOneWidget);
+        expect(find.textContaining('tap Scan the Code'), findsOneWidget);
+        await tester.scrollUntilVisible(find.text('Unpair This PC…'), 200, scrollable: find.byType(Scrollable).first);
+        expect(find.text("Rizul's iPhone · iOS"), findsOneWidget);
+        expect(find.text('Pixel 8 · Android'), findsOneWidget);
+        expect(find.text('Send a Test to All Phones'), findsOneWidget);
         expect(find.text('Online'), findsOneWidget);
         expect(tester.takeException(), isNull);
       });

@@ -9,8 +9,9 @@ import 'package:mochi_ui/mochi_ui.dart';
 import '../../link/link_host.dart';
 import '../widgets/qr_code.dart';
 
-/// Pair a phone (Settings › Devices on the Mac): this PC's room on Mochi Link, a QR code and a copyable link for the
-/// phone, the devices in the room with who's online, and Unpair (deletes the room).
+/// Pair a Phone (Settings › Phones › Pair a Phone…, as on the Mac): this PC's room on Mochi Link, a QR code and a
+/// copyable link for the phone, the devices in the room by name with who's online, and Unpair (deletes the room). The
+/// words match what the phones say ("On your Mac or PC: open Mochi's Settings › Phones › Pair a Phone").
 class PairingScreen extends StatefulWidget {
   const PairingScreen({super.key, required this.link, this.onTestNotification, this.clock});
 
@@ -62,10 +63,11 @@ class _PairingScreenState extends State<PairingScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: const Text('Unpair every device?'),
-        content: const Text(
-          "This deletes this PC's Mochi Link room. Every phone paired with it stops getting news from this PC "
-          'and has to scan a new code to pair again.',
+        title: const Text('Unpair this PC from Mochi Link?'),
+        content: Text(
+          'This deletes the link on your relay: ${LinkPeerNames.phoneNames(link.peers, me: link.credentials?.device)} '
+          'stop getting news from this PC, and their old keys stop working. Nothing reaches your phones until you pair '
+          'again with a new code.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Cancel')),
@@ -101,7 +103,8 @@ class _PairingScreenState extends State<PairingScreen> {
                     code == null
                         ? 'Mochi on your iPhone or Android phone joins this PC through Mochi Link. It is end-to-end encrypted: '
                               'the relay only passes sealed messages along, and only your devices can open them.'
-                        : 'In Mochi on your phone: Pair with your computer, then scan. Or copy the link to another computer.',
+                        : 'On your iPhone or Android phone, open Mochi, tap Scan the Code and point it at this code. Or copy '
+                              'the link and tap Paste Link on the phone.',
                     style: context.type.subheadline,
                   ),
                   const SizedBox(height: Space.l),
@@ -137,13 +140,13 @@ class _PairingScreenState extends State<PairingScreen> {
                     OutlinedButton.icon(
                       onPressed: widget.onTestNotification,
                       icon: const Icon(Icons.notifications_active_outlined, size: 18),
-                      label: const Text('Send a test notification'),
+                      label: const Text('Send a Test to All Phones'),
                     ),
                   OutlinedButton.icon(
                     onPressed: _unpair,
                     style: OutlinedButton.styleFrom(foregroundColor: p.danger),
                     icon: const Icon(Icons.link_off_rounded, size: 18),
-                    label: const Text('Unpair all devices…'),
+                    label: const Text('Unpair This PC…'),
                   ),
                 ],
               ),
@@ -171,7 +174,7 @@ class _PairingScreenState extends State<PairingScreen> {
       icon: link.working
           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, semanticsLabel: 'Making a code'))
           : const Icon(Icons.qr_code_2_rounded, size: 18),
-      label: Text(link.paired ? 'Pair another phone' : 'Show a pairing code'),
+      label: const Text('Pair a Phone…'),
     ),
   );
 
@@ -202,7 +205,7 @@ class _PairingScreenState extends State<PairingScreen> {
             TextButton.icon(
               onPressed: () => _copy(code),
               icon: Icon(_copied ? Icons.check_rounded : Icons.copy_rounded, size: 18),
-              label: Text(_copied ? 'Copied' : 'Copy link'),
+              label: Text(_copied ? 'Copied' : 'Copy Link'),
             ),
           ],
         ),
@@ -218,7 +221,7 @@ class _PairingScreenState extends State<PairingScreen> {
               style: context.type.footnote,
             ),
           TextButton(onPressed: link.working ? null : link.showCode, child: const Text('Make a new code')),
-          TextButton(onPressed: link.hideCode, child: const Text('Hide')),
+          TextButton(onPressed: link.hideCode, child: const Text('Done')),
         ],
       ),
     ];
@@ -234,20 +237,23 @@ class _DeviceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final icon = switch ((peer.role, peer.platform?.toLowerCase())) {
-      ('cloud', _) => Icons.cloud_outlined,
-      ('host', _) => Icons.computer_rounded,
-      (_, 'android') => Icons.phone_android_rounded,
-      _ => Icons.phone_iphone_rounded,
-    };
-    final kind = switch (peer.role) {
-      'cloud' => 'Mochi Cloud',
-      'host' => 'Computer',
-      _ => 'Phone',
+    final platform = peer.linkPlatform;
+    final cloud = peer.role == 'cloud' || platform == LinkPlatform.cloud;
+    final icon = switch (platform) {
+      LinkPlatform.iOS => Icons.phone_iphone_rounded,
+      LinkPlatform.android => Icons.phone_android_rounded,
+      LinkPlatform.macOS || LinkPlatform.windows => Icons.computer_rounded,
+      LinkPlatform.cloud => Icons.cloud_outlined,
+      null => cloud ? Icons.cloud_outlined : (peer.role == 'host' ? Icons.computer_rounded : Icons.smartphone_rounded),
     };
     final seen = peer.lastSeen;
-    final presence = peer.online ? 'Online' : (seen == null ? 'Away' : 'Away · ${relativeTime(seen, now: now)}');
-    final name = peer.name ?? kind;
+    // Mochi Cloud never stays connected: it posts when a check runs.
+    final presence = cloud
+        ? (seen == null ? 'Hasn’t checked in yet' : 'Last check ${relativeTime(seen, now: now)}')
+        : peer.online
+        ? 'Online'
+        : (seen == null ? 'Away' : 'Away · ${relativeTime(seen, now: now)}');
+    final good = cloud ? seen != null : peer.online;
     return MergeSemantics(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: Space.s),
@@ -264,15 +270,11 @@ class _DeviceRow extends StatelessWidget {
                     runSpacing: Space.xs,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text(name, style: context.type.body.copyWith(fontWeight: FontWeight.w600)),
-                      Tag(
-                        text: presence,
-                        icon: peer.online ? Icons.circle : Icons.circle_outlined,
-                        tint: peer.online ? p.success : p.inkSecondary,
-                      ),
+                      Text(LinkPeerNames.row(peer), style: context.type.body.copyWith(fontWeight: FontWeight.w600)),
+                      Tag(text: presence, icon: good ? Icons.circle : Icons.circle_outlined, tint: good ? p.success : p.inkSecondary),
                     ],
                   ),
-                  Text([kind, if (peer.app != null) 'Mochi ${peer.app}'].join(' · '), style: context.type.caption),
+                  Text([LinkPeerNames.label(peer), if (peer.app != null) 'Mochi ${peer.app}'].join(' · '), style: context.type.caption),
                 ],
               ),
             ),

@@ -33,6 +33,7 @@ class DesktopApp extends StatefulWidget {
     this.library,
     this.initialSurface = Surface.pet,
     this.initialPage = MainPage.home,
+    this.initialPane,
     this.taskbar,
     this.strollClock,
     this.strollRandom,
@@ -52,6 +53,9 @@ class DesktopApp extends StatefulWidget {
   final Future<PoseLibrary?>? library;
   final Surface initialSurface;
   final MainPage initialPage;
+
+  /// The Settings pane to open at (General otherwise).
+  final SettingsTab? initialPane;
 
   static const String poseAsset = 'assets/pose_tracks.json.deflate';
 
@@ -108,6 +112,7 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.sessions.addListener(_sessionsChanged);
     desktop.settings.addListener(_settingsChanged);
     unawaited(widget.shell.setRoaming(_trayRoaming));
+    if (_page == MainPage.settings) widget.shell.mainSize = settingsSize();
     unawaited(_stroll.show(_surface));
   }
 
@@ -165,7 +170,7 @@ class DesktopAppState extends State<DesktopApp> {
   }
 
   /// Which Settings pane is open (kept while Settings is closed, so it opens where you left it).
-  final SettingsNavigation settingsNavigation = SettingsNavigation();
+  late final SettingsNavigation settingsNavigation = SettingsNavigation(widget.initialPane ?? SettingsTab.general);
 
   /// Settings was opened from Mochi's window (Escape goes back to it), not from the tray or the pet.
   bool _settingsFromWindow = false;

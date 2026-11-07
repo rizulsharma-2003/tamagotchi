@@ -12,7 +12,9 @@
 //
 // Development switches (environment): MOCHI_DESKTOP_HOME (the app's folder), CLAUDE_CONFIG_DIR (where Claude Code's
 // settings.json is), MOCHI_DESKTOP_VAULT=memory (keep no credentials), MOCHI_DESKTOP_DEMO=1 (Mochi Link without the
-// network, lib/src/demo.dart), MOCHI_DESKTOP_OPEN=main|pairing|settings|tray (what shows at launch). A file named
+// network, lib/src/demo.dart), MOCHI_DESKTOP_OPEN=main|pairing|settings|tray (what shows at launch),
+// MOCHI_DESKTOP_PANE=general|characters|…|about (the Settings pane it opens at; in the demo, Settings opens paired
+// unless MOCHI_DESKTOP_DEMO_PAIR=0). A file named
 // `stroll-debug` in Mochi's folder makes the taskbar stroll write what it sees (the taskbar, its free stretches, UI
 // Automation's timings, click-through) to `stroll.log` there.
 
@@ -32,14 +34,20 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Mochi's in-scene lettering (the sleepy z, ? and !) in the app's rounded face.
   MochiArtText.family = mochiFontFamily;
+  registerMochiFontLicense();
   final shell = NativeShell();
   await shell.init();
   final desktop = MochiDesktop.system();
   final open = Platform.environment['MOCHI_DESKTOP_OPEN'];
+  final pane = SettingsTab.values.where((tab) => tab.name == Platform.environment['MOCHI_DESKTOP_PANE']).firstOrNull;
   unawaited(
-    desktop.start().then((_) {
-      // The demo's pairing screen shows a (made-up) code straight away.
+    desktop.start().then((_) async {
+      // The demo's pairing screen shows a (made-up) code straight away; its Settings opens paired.
       if (demoMode && open == 'pairing') unawaited(desktop.link.showCode());
+      if (demoMode && open == 'settings' && Platform.environment['MOCHI_DESKTOP_DEMO_PAIR'] != '0') {
+        await desktop.link.showCode();
+        desktop.link.hideCode();
+      }
     }),
   );
   final page = switch (open) {
@@ -48,6 +56,6 @@ Future<void> main() async {
     _ => MainPage.home,
   };
   final surface = page != MainPage.home || open == 'main' ? Surface.main : Surface.pet;
-  runApp(DesktopApp(desktop: desktop, shell: shell, initialSurface: surface, initialPage: page));
+  runApp(DesktopApp(desktop: desktop, shell: shell, initialSurface: surface, initialPage: page, initialPane: pane));
   if (open == 'tray') unawaited(Future<void>.delayed(const Duration(seconds: 2), shell.popUpMenu));
 }
