@@ -27,4 +27,22 @@ struct WorldFixtureTests {
 
     @Test("link-spec/world/world.json: whole CompanionWorld timelines")
     func worldTimelines() throws { try WorldFixtures.check("world.json", WorldTimelineFixtures.world()) }
+
+    @Test("link-spec/world/speech.json: lines, picks, pacing and clean-up (W11)")
+    func speech() throws { try WorldFixtures.check("speech.json", FeatureFixtures.speech()) }
+
+    @Test("link-spec/world/games.json: Catch the Treats and rock-paper-scissors (W14)")
+    func games() throws { try WorldFixtures.check("games.json", FeatureFixtures.games()) }
+
+    @Test("link-spec/world/focus.json: the focus timer and log (W15)")
+    func focus() throws { try WorldFixtures.check("focus.json", FeatureFixtures.focus()) }
+
+    @Test("link-spec/world/recap.json: the daily recap (W16)")
+    func recap() throws { try WorldFixtures.check("recap.json", FeatureFixtures.recap()) }
+
+    @Test("link-spec/world/room.json: furniture, unlocks and placement (W18)")
+    func room() throws { try WorldFixtures.check("room.json", FeatureFixtures.room()) }
+
+    @Test("link-spec/world/seasons.json: holidays by date (W20)")
+    func seasons() throws { try WorldFixtures.check("seasons.json", FeatureFixtures.seasons()) }
 }
