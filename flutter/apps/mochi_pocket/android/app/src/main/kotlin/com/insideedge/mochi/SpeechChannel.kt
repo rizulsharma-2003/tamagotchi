@@ -85,24 +85,29 @@ class SpeechChannel(private val activity: Activity, messenger: BinaryMessenger) 
 
     private fun granted() = activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
+    /**
+     * Blocked only once Android has said no without being able to ask again (it answered at once, or "don't ask
+     * again"); a permission revoked later in Android's settings can be asked for again.
+     */
     private fun access(): String = when {
         granted() -> "granted"
-        !prefs.getBoolean(ASKED, false) -> "ask"
-        activity.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> "ask"
-        else -> "blocked"
+        prefs.getBoolean(REFUSED_FOR_GOOD, false) && !rationale() -> "blocked"
+        else -> "ask"
     }
+
+    private fun rationale() = activity.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)
 
     private fun requestAccess(result: MethodChannel.Result) {
         if (granted()) return result.success("granted")
         pendingAccess?.success(access())
         pendingAccess = result
-        prefs.edit().putBoolean(ASKED, true).apply()
         activity.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_MICROPHONE)
     }
 
     /** MainActivity hands over the answer to [requestAccess]. */
     fun onPermissionResult(requestCode: Int): Boolean {
         if (requestCode != REQUEST_MICROPHONE) return false
+        prefs.edit().putBoolean(REFUSED_FOR_GOOD, !granted() && !rationale()).apply()
         pendingAccess?.success(access())
         pendingAccess = null
         return true
@@ -231,7 +236,7 @@ class SpeechChannel(private val activity: Activity, messenger: BinaryMessenger) 
 
     private companion object {
         const val CHANNEL = "com.insideedge.mochi/speech"
-        const val ASKED = "askedMicrophone"
+        const val REFUSED_FOR_GOOD = "microphoneRefusedForGood"
         const val REQUEST_MICROPHONE = 0x4D49
         const val MAX_RESTARTS = 30
     }
