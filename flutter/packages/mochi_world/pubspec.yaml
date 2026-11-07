@@ -1,0 +1,17 @@
+name: mochi_world
+description: >-
+  Mochi's world in Dart: a port of the Mac's pet-life engine in Sources/TamagotchiCore (CompanionWorld, the pet and
+  companion animation state machines and pose evaluators with follow-through, the interaction scripts and their seeded
+  scheduler, play/treat/petting, friendship, achievements and growing up, and the celebration rules for real Claude
+  events). Pure Dart with no dependencies, deterministic for a seed and an injected clock, and golden-tested against the
+  Swift engine with the shared fixtures in link-spec/world. Runs on the Dart VM (64-bit integers), so on Windows and
+  Android, not on the web.
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.9.0
+
+dev_dependencies:
+  test: ^1.26.2
