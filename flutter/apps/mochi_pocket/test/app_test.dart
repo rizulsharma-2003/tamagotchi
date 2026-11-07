@@ -4,6 +4,7 @@ import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_pocket/src/app.dart';
 import 'package:mochi_pocket/src/model/app_settings.dart';
 import 'package:mochi_pocket/src/model/pocket_model.dart';
+import 'package:mochi_pocket/src/model/updates_history.dart';
 import 'package:mochi_pocket/src/services/credential_store.dart';
 import 'package:mochi_pocket/src/services/local_file.dart';
 import 'package:mochi_pocket/src/voice/updates_reader.dart';
@@ -335,6 +336,55 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(reader.speaking, isFalse);
     expect(speech.stops, 1);
+    await finish(tester);
+  });
+
+  testWidgets("Updates with a week of history: earlier days show below, and Read aloud reads only what's waiting", (tester) async {
+    final yesterday = DateTime.now().subtract(const Duration(days: 1)).millisecondsSinceEpoch / 1000;
+    model = PocketModel(
+      credentialStore: store..saved = phoneCredentials,
+      doneDocument: MemoryDocument(),
+      historyDocument: MemoryDocument(
+        (UpdatesHistory()..record([
+              AgentNote(
+                id: 'mail:bank',
+                source: AgentSource.gmail,
+                title: 'HDFC Bank',
+                detail: 'Statement',
+                important: false,
+                at: yesterday,
+              ),
+            ], now: yesterday))
+            .toJson(),
+      ),
+      notifier: notifier,
+      connect: relay.connect,
+      deviceName: 'Test Phone',
+    );
+    speech.hold = true;
+    await launch(tester);
+    await macShares(tester);
+    await tester.tap(find.text('Waiting for you'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('Yesterday'), findsOneWidget);
+    expect(find.text('HDFC Bank'), findsOneWidget);
+    await tester.tap(find.text('Read aloud'));
+    await tester.pump();
+    expect(speech.spoken.first.text, '2 things are waiting for you.');
+    // Holding an earlier update marks it done from the menu; the history says where.
+    await tester.longPress(find.text('HDFC Bank'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Mark as done'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(model.isDone('mail:bank'), isTrue);
+    expect(find.textContaining('Done here ·'), findsOneWidget);
+    expect(AgentDoneList.fromValue(relay.sentValues(LinkKey.phoneDone).last)?.ids.keys, ['mail:bank']);
+    await tester.pageBack();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
     await finish(tester);
   });
 

@@ -5,11 +5,22 @@
 //
 //   cd flutter/apps/mochi_pocket
 //   dart run tool/fake_mac.dart --relay mochi-link.spike01.workers.dev [--control <file>] [--link-file <file>]
-//       [--credentials <file>] [--minutes 45] [--alert-on-join]
+//       [--credentials <file>] [--pocket-credentials <file>] [--minutes 45] [--alert-on-join]
 //   adb shell am start -a android.intent.action.VIEW -d '<the printed link>'
+//
+// --pocket-credentials makes a `pocket` device in the room as well and keeps its credentials in that file, for a debug
+// build's DebugActionRoom (notification buttons tried end to end without pairing the phone away from its real room):
+//   adb push <file> /data/local/tmp/mochi-room.json
+//   adb shell run-as com.insideedge.mochi cp /data/local/tmp/mochi-room.json files/debug_action_room.json
+//   adb shell rm /data/local/tmp/mochi-room.json
+// then start the app once, so it registers for pushes in this room too.
 //
 // While it runs, append commands to the --control file (one per line):
 //   alert [text]                a sealed alert to the phones
+//   turn [text]                 "Claude finished" as the Mac sends it (Reply in the notification)
+//   news                        Mochi's news about two new emails, with the card (Mark both done)
+//   meeting                     a meeting heads-up with a video link, as Mochi Cloud sends it (Join, Mark done)
+//   draft                       "Reply drafted", as Mochi Cloud sends it (Open in Gmail)
 //   approval                    "Send to Claude?" for session-1
 //   claude <phase> [category]   working · waiting · done · error · idle (category: think, edit, read, shell, …)
 //   rest | wake                 the Mac rests (Mochi sleeps) or is in use again
@@ -50,6 +61,7 @@ Future<void> main(List<String> arguments) async {
     control: options['control'],
     linkFile: options['link-file'],
     credentialsFile: options['credentials'],
+    pocketFile: options['pocket-credentials'],
     alertOnJoin: options.containsKey('alert-on-join'),
   );
   await fake.start();
@@ -74,13 +86,22 @@ Map<String, String> _options(List<String> arguments) {
 double _now() => DateTime.now().millisecondsSinceEpoch / 1000;
 
 class FakeMac {
-  FakeMac({required this.relay, required this.name, this.control, this.linkFile, this.credentialsFile, this.alertOnJoin = false});
+  FakeMac({
+    required this.relay,
+    required this.name,
+    this.control,
+    this.linkFile,
+    this.credentialsFile,
+    this.pocketFile,
+    this.alertOnJoin = false,
+  });
 
   final String relay;
   final String name;
   final String? control;
   final String? linkFile;
   final String? credentialsFile;
+  final String? pocketFile;
   final bool alertOnJoin;
 
   late LinkCredentials _host;
@@ -96,6 +117,13 @@ class FakeMac {
     final saveTo = credentialsFile;
     if (saveTo != null) await File(saveTo).writeAsString(_host.encode());
     print('Made a throwaway room on $relay.');
+    final pocketPath = pocketFile;
+    if (pocketPath != null) {
+      final code = await LinkPairing.invite(_host, hostName: name, role: 'pocket');
+      final pocket = await LinkPairing.join(code, role: 'pocket', platform: 'android', name: 'Mochi action test');
+      await File(pocketPath).writeAsString(pocket.encode());
+      print('Made a test pocket in the room; its credentials are in $pocketPath.');
+    }
     await invite();
     _connect();
     _share();
@@ -281,6 +309,117 @@ class FakeMac {
     print('sent a sealed alert: $text');
   }
 
+  /// "Claude finished" exactly as the Mac's `PhoneAlertPayload.turnFinished` sends it through `LinkPush.alert`.
+  void turn(String text) {
+    final now = _now();
+    final card = PhoneSessionCard(
+      id: 'session-1',
+      project: 'mac-Tamagotchi',
+      phase: 'done',
+      summary: TurnSummary(done: text, next: const ['Run the tests']),
+      files: const ['UpdatesView.swift'],
+      finishedAt: now.roundToDouble(),
+    );
+    _link?.sendAlert(
+      {
+        'title': card.project,
+        'subtitle': 'Claude finished',
+        'body': text,
+        'userInfo': {'session': card.id, 'project': card.project, 'card': card.toJson()},
+      },
+      category: 'claude-turn',
+      threadId: card.id,
+    );
+    print('sent "Claude finished" in ${card.project}: $text');
+  }
+
+  /// Mochi's news (`PhoneAlertPayload.agentNews`): two new emails, noted together, on top of an older one.
+  void news() {
+    final now = _now().roundToDouble();
+    final card = AgentPending(
+      enabled: true,
+      lookedAt: now - 20,
+      updatedAt: now + 1,
+      items: [
+        AgentNote(
+          id: 'mail:test-priya-$now',
+          source: AgentSource.gmail,
+          title: 'Priya Sharma',
+          detail: 'Can you send the November invoice?',
+          important: true,
+          at: now,
+        ),
+        AgentNote(
+          id: 'mail:test-aditi-$now',
+          source: AgentSource.gmail,
+          title: 'Aditi Rao',
+          detail: 'Notes on the onboarding flow?',
+          important: true,
+          at: now,
+        ),
+        AgentNote(
+          id: 'mail:github',
+          source: AgentSource.gmail,
+          title: 'GitHub',
+          detail: '1 new commit pushed to main.',
+          important: false,
+          at: now - 9000,
+        ),
+      ],
+    );
+    _link?.set(card.toValue(), LinkKey.agent);
+    _link?.sendAlert(
+      {
+        'title': '2 new emails',
+        'body': 'Priya Sharma needs you: the November invoice\nAditi Rao: notes on the onboarding flow?',
+        'userInfo': {'kind': 'agent', 'quietIfKnown': true, 'pending': card.toJson()},
+      },
+      category: 'mochi-agent',
+      threadId: 'mochi-agent',
+    );
+    print('sent news: two new emails');
+  }
+
+  /// Mochi Cloud's meeting heads-up (`heads_up` in mochi_cloud.py), with a harmless https page as the "video link".
+  void meeting() {
+    final now = _now().roundToDouble();
+    final event = AgentNote(
+      id: 'event:test-standup-$now',
+      source: AgentSource.calendar,
+      title: 'Stand-up',
+      detail: 'In 5 min',
+      important: true,
+      at: now,
+      due: now + 300,
+      link: 'https://example.com/mochi-join-test',
+    );
+    final card = AgentPending(enabled: true, items: [event], lookedAt: now, updatedAt: now + 1, origin: 'cloud');
+    _link?.sendAlert(
+      {
+        'title': 'Starting soon',
+        'body': 'Stand-up (in 5 min)',
+        'userInfo': {'kind': 'agent', 'origin': 'cloud', 'quietIfKnown': false, 'pending': card.toJson(), 'join': event.link},
+      },
+      category: 'mochi-meeting',
+      threadId: 'mochi-agent',
+    );
+    print('sent a meeting heads-up');
+  }
+
+  /// Mochi Cloud's "Reply drafted" (`drafted` in mochi_cloud.py).
+  void draft() {
+    _link?.sendAlert(
+      {
+        'title': 'Reply drafted',
+        'body': "To Priya Sharma: Invoice for November\nIt's in Gmail Drafts. Check it and send it when you're happy.",
+        'userInfo': {'kind': 'draft', 'origin': 'cloud', 'link': 'https://example.com/mochi-draft-test'},
+      },
+      category: 'mochi-draft',
+      threadId: 'mochi-agent',
+    );
+    print('sent "Reply drafted"');
+  }
+
   Future<void> _readControl(File file) async {
     final length = file.lengthSync();
     if (length < _controlRead) _controlRead = 0;
@@ -302,6 +441,14 @@ class FakeMac {
     switch (parts.first) {
       case 'alert':
         alert(rest.isEmpty ? 'Tests pass. Mochi for Android talks to the Mac through Mochi Link.' : rest);
+      case 'turn':
+        turn(rest.isEmpty ? 'Added the week of updates to Mochi for Android.' : rest);
+      case 'news':
+        news();
+      case 'meeting':
+        meeting();
+      case 'draft':
+        draft();
       case 'approval':
         link?.set(
           ApprovalRequest(

@@ -13,7 +13,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_pocket/src/app.dart';
 import 'package:mochi_pocket/src/model/app_settings.dart';
+import 'package:mochi_pocket/src/model/done_marks.dart';
 import 'package:mochi_pocket/src/model/pocket_model.dart';
+import 'package:mochi_pocket/src/model/updates_history.dart';
 import 'package:mochi_pocket/src/scene/pose_library.dart';
 import 'package:mochi_pocket/src/services/credential_store.dart';
 import 'package:mochi_pocket/src/services/local_file.dart';
@@ -62,7 +64,8 @@ void main() {
         final settings = AppSettings(MemoryDocument());
         final model = PocketModel(
           credentialStore: MemoryCredentialStore(paired ? phoneCredentials : null),
-          doneDocument: MemoryDocument(),
+          doneDocument: MemoryDocument(sampleDone().toJson()),
+          historyDocument: MemoryDocument(sampleHistory().toJson()),
           notifier: FakeNotifier(),
           connect: relay.connect,
           deviceName: 'realme RMX3242',
@@ -159,6 +162,24 @@ void main() {
         await finish(tester, model);
       });
 
+      testWidgets('updates, the whole week ($variant)', (tester) async {
+        final (model, _) = await open(tester, height: scale == 1 ? 2700 : 5600);
+        model.markDone(['mail:github']);
+        await tester.pump();
+        await tester.scrollUntilVisible(find.text('Waiting for you'), 300);
+        await tester.tap(find.text('Waiting for you'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(find.text('Earlier today'), findsOneWidget);
+        expect(find.text('Yesterday'), findsOneWidget);
+        expect(find.textContaining('Done on your Mac ·'), findsOneWidget);
+        expect(find.textContaining('Done on iPhone ·'), findsOneWidget);
+        expect(find.textContaining('Done here ·'), findsNWidgets(2));
+        expect(find.textContaining('Came in at'), findsOneWidget);
+        await shoot(tester, 'updates-week');
+        await finish(tester, model);
+      });
+
       testWidgets('settings ($variant)', (tester) async {
         final (model, _) = await open(tester, height: scale == 1 ? 1700 : 3600);
         await tester.tap(find.byTooltip('Settings'));
@@ -201,6 +222,68 @@ void main() {
     }
   }
 }
+
+/// The day [days] ago at [hour]:[minute], local time, in Unix seconds.
+double daysAgo(int days, int hour, int minute) {
+  final today = DateTime.now();
+  return DateTime(today.year, today.month, today.day - days, hour, minute).millisecondsSinceEpoch / 1000;
+}
+
+/// Earlier in the week: some done on the Mac, here or on the iPhone, some that just came and went.
+UpdatesHistory sampleHistory() => UpdatesHistory([
+  HistoryEntry(
+    note: AgentNote(
+      id: 'mail:dentist',
+      source: AgentSource.gmail,
+      title: 'Dr. Rao’s clinic',
+      detail: 'Your appointment is confirmed for Monday at 11.',
+      important: true,
+      at: daysAgo(1, 10, 5),
+      subject: 'Appointment confirmed',
+    ),
+    firstSeen: daysAgo(1, 10, 5),
+  ),
+  HistoryEntry(
+    note: AgentNote(
+      id: 'notion:notes',
+      source: AgentSource.notion,
+      title: 'Write the release notes',
+      detail: 'Due yesterday · Product',
+      important: false,
+      at: daysAgo(1, 9, 30),
+    ),
+    firstSeen: daysAgo(1, 9, 30),
+  ),
+  HistoryEntry(
+    note: AgentNote(
+      id: 'mail:bank',
+      source: AgentSource.gmail,
+      title: 'HDFC Bank',
+      detail: 'Your October statement is ready.',
+      important: false,
+      at: daysAgo(3, 16, 40),
+      subject: 'Statement for October',
+    ),
+    firstSeen: daysAgo(3, 16, 40),
+  ),
+  HistoryEntry(
+    note: AgentNote(
+      id: 'mail:sam',
+      source: AgentSource.gmail,
+      title: 'Sam Patel',
+      detail: 'Can we move our 1:1 to Thursday?',
+      important: true,
+      at: daysAgo(3, 11, 15),
+    ),
+    firstSeen: daysAgo(3, 11, 15),
+  ),
+]);
+
+/// Where those were marked done: the Mac, this phone, and the iPhone in the room.
+DoneMarks sampleDone() => DoneMarks(
+  done: {'mail:dentist': daysAgo(1, 15, 12), 'notion:notes': daysAgo(0, 8, 45), 'mail:sam': daysAgo(3, 12, 2)},
+  by: {'mail:dentist': DoneMarks.computer, 'notion:notes': DoneMarks.here, 'mail:sam': 'dev_iphone'},
+);
 
 /// Fuller sample data than the unit tests need: every kind of row the screens draw.
 AgentPending richAgent() => AgentPending(

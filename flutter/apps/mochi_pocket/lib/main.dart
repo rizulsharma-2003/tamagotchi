@@ -7,7 +7,7 @@
 //   GRADLE_OPTS="-Dorg.gradle.java.home=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home" \
 //     flutter run            # or: flutter build apk --debug && adb install -r build/app/outputs/flutter-apk/app-debug.apk
 
-import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -22,7 +22,10 @@ import 'src/model/pocket_model.dart';
 import 'src/screens/settings_screen.dart' show appVersion;
 import 'src/services/alert_notifier.dart';
 import 'src/services/credential_store.dart';
+import 'src/services/link_opener.dart';
 import 'src/services/local_file.dart';
+import 'src/services/notify/app_actions.dart';
+import 'src/services/notify/debug_room.dart';
 import 'src/services/platform_bridge.dart';
 import 'src/services/push/push_service.dart';
 import 'src/voice/speech_engine.dart';
@@ -33,12 +36,18 @@ Future<void> main() async {
   // Draw under the status and navigation bars; every screen keeps its content inside the safe areas.
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   final bridge = MethodChannelBridge();
-  final notifier = LocalAlertNotifier();
+  // Taps and the buttons that open the app (Join, Open in Gmail) come here; Reply and Mark done start in a
+  // background isolate and are handed to [actions] while the app runs.
+  late final AppNotificationActions actions;
+  final notifier = LocalAlertNotifier(onResponse: (response) => unawaited(actions.respond(response)));
   final files = await bridge.filesDir();
+  final push = FirebasePushService();
   final model = PocketModel(
     credentialStore: SecureCredentialStore(),
-    doneDocument: files == null ? MemoryDocument() : FileDocument(File('$files/done.json')),
-    hostDocument: files == null ? MemoryDocument() : FileDocument(File('$files/link_host.json')),
+    doneDocument: AppFiles.document(files, AppFiles.done),
+    hostDocument: AppFiles.document(files, AppFiles.host),
+    historyDocument: AppFiles.document(files, AppFiles.history),
+    outboxDocument: AppFiles.document(files, AppFiles.outbox),
     notifier: notifier,
     connect: (credentials) => RelayLink(
       credentials,
@@ -48,13 +57,16 @@ Future<void> main() async {
       onLog: kDebugMode ? (message) => debugPrint('Mochi Link: $message') : null,
     ),
     // FCM: alerts reach the phone while the app is closed (google-services.json at build time; see the Gradle file).
-    push: FirebasePushService(),
+    push: push,
     shown: await openShownAlerts(),
     deviceName: await bridge.deviceName(),
   );
+  actions = AppNotificationActions(model: model, opener: const UrlLinkOpener(), notifier: notifier)..start();
+  // Development builds with a throwaway test room (DebugActionRoom): its pushes reach this phone too.
+  if (kDebugMode) unawaited(DebugActionRoom.registerPush(files, push));
   await notifier.start();
   // Appearance and voice, loaded before the first frame so the chosen theme shows straight away.
-  final settings = AppSettings(files == null ? MemoryDocument() : FileDocument(File('$files/settings.json')));
+  final settings = AppSettings(AppFiles.document(files, AppFiles.settings));
   await settings.load();
   final reader = UpdatesReader(
     engine: FlutterTtsEngine(),
@@ -66,4 +78,7 @@ Future<void> main() async {
   // Mochi's in-scene lettering (the sleepy z, ? and !) in the app's rounded face, as the Mac draws it in SF Rounded.
   MochiArtText.family = 'Nunito';
   runApp(MochiApp(model: model, bridge: bridge, notifier: notifier, settings: settings, reader: reader));
+  // A tap on a meeting heads-up (or its Join) that started the app opens the meeting, as on the iPhone.
+  final launched = await notifier.launchResponse();
+  if (launched != null) await actions.respond(launched);
 }

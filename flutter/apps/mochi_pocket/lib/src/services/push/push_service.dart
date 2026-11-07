@@ -7,8 +7,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../model/done_marks.dart';
+import '../../model/updates_history.dart';
 import '../alert_notifier.dart';
 import '../credential_store.dart';
+import '../local_file.dart';
+import '../notify/debug_room.dart';
 import 'push_messages.dart';
 import 'shown_alerts.dart';
 
@@ -109,15 +113,29 @@ Future<ShownAlerts> openShownAlerts() async {
 }
 
 /// FCM pushes while Mochi is in the background or closed, in their own isolate: open the sealed alert with the room
-/// key from secure storage and show it as a notification (or "Mochi has news"). No network, no relay.
+/// key from secure storage and show it as a notification (or "Mochi has news"), with its buttons. A news card that
+/// rides along joins the Updates history in the app's files. No network, no relay.
 @pragma('vm:entry-point')
 Future<void> mochiBackgroundMessage(RemoteMessage message) async {
   WidgetsFlutterBinding.ensureInitialized();
+  final data = Map<String, Object?>.from(message.data);
+  final folder = await AppFiles.folder();
+  // Development builds: a push from the throwaway test room opens with that room's key and keeps to its own files.
+  final debugRoom = await DebugActionRoom.load(folder);
+  final testing = debugRoom != null && PushMessages.sealedAlert(data)?['room'] == debugRoom.room;
+  DoneMarks done;
+  try {
+    done = DoneMarks.fromJson(await AppFiles.document(folder, testing ? DebugActionRoom.doneFile : AppFiles.done).read());
+  } on Object {
+    done = DoneMarks();
+  }
   final outcome = await PushMessages.handle(
-    Map<String, Object?>.from(message.data),
-    credentials: SecureCredentialStore().load,
+    data,
+    credentials: testing ? () async => debugRoom : SecureCredentialStore().load,
     notifier: LocalAlertNotifier(),
     shown: await openShownAlerts(),
+    isDone: done.isDone,
+    record: testing ? null : (notes) => recordHistory(AppFiles.document(folder, AppFiles.history), notes),
   );
   _log('push in the background: ${outcome.name}');
 }

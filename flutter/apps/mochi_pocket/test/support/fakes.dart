@@ -7,6 +7,8 @@ import 'dart:convert';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_pocket/src/services/alert_notifier.dart';
 import 'package:mochi_pocket/src/services/link_opener.dart';
+import 'package:mochi_pocket/src/services/notify/action_dispatcher.dart';
+import 'package:mochi_pocket/src/services/notify/notification_plan.dart';
 import 'package:mochi_pocket/src/services/platform_bridge.dart';
 import 'package:mochi_pocket/src/services/push/push_service.dart';
 import 'package:mochi_pocket/src/voice/mochi_voice.dart';
@@ -160,6 +162,12 @@ class FakeRelay {
 
 class FakeNotifier implements AlertNotifier {
   final List<LinkAlert> shown = [];
+
+  /// The plan each shown alert had (its buttons and payload), in the same order as [shown].
+  final List<NotificationPlan?> plans = [];
+
+  /// Confirmations shown after a button.
+  final List<ActionReceipt> receipts = [];
   bool allowed = true;
   int permissionRequests = 0;
 
@@ -176,7 +184,13 @@ class FakeNotifier implements AlertNotifier {
   }
 
   @override
-  Future<void> show(LinkAlert alert) async => shown.add(alert);
+  Future<void> show(LinkAlert alert, {NotificationPlan? plan}) async {
+    shown.add(alert);
+    plans.add(plan);
+  }
+
+  @override
+  Future<void> receipt(ActionReceipt receipt) async => receipts.add(receipt);
 }
 
 class FakeBridge implements PlatformBridge, AudioFocus {
@@ -232,6 +246,12 @@ class FakeOpener implements LinkOpener {
   @override
   Future<bool> openInBrowser(AgentNote note) async {
     opened.add('browser:${note.link}');
+    return true;
+  }
+
+  @override
+  Future<bool> openLink(String link) async {
+    opened.add(link);
     return true;
   }
 }

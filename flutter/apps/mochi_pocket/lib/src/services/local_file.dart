@@ -1,6 +1,39 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path_provider/path_provider.dart';
+
+/// The app's own small files, in its private files folder (backed up nowhere; see the manifest).
+abstract final class AppFiles {
+  /// What you marked done ([DoneMarks]).
+  static const String done = 'done.json';
+
+  /// The week of "Waiting for you" ([UpdatesHistory]).
+  static const String history = 'updates.json';
+
+  /// The platform of the computer last seen in the room.
+  static const String host = 'link_host.json';
+
+  /// Appearance and voice.
+  static const String settings = 'settings.json';
+
+  /// What notification buttons pressed while the app was closed left for it ([NotificationOutbox]).
+  static const String outbox = 'notification_actions.json';
+
+  /// The folder, from any isolate: path_provider's support folder is Android's `Context.getFilesDir()`, the same
+  /// folder MainActivity reports, so the app and its background handlers share these files.
+  static Future<String?> folder() async {
+    try {
+      return (await getApplicationSupportDirectory()).path;
+    } on Object {
+      return null;
+    }
+  }
+
+  /// [name] in [folder]; in memory when the folder isn't known.
+  static LocalDocument document(String? folder, String name) => folder == null ? MemoryDocument() : FileDocument(File('$folder/$name'));
+}
+
 /// A small JSON document the app keeps for itself (what you marked done). Not secret: the room key and credential
 /// live in [CredentialStore].
 abstract interface class LocalDocument {
@@ -29,7 +62,8 @@ class FileDocument implements LocalDocument {
 
   @override
   Future<void> write(Map<String, Object?> json) async {
-    final temporary = File('${file.path}.tmp');
+    // Its own temporary name: the app and a background handler may write at the same moment.
+    final temporary = File('${file.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
     await temporary.writeAsString(jsonEncode(json), flush: true);
     await temporary.rename(file.path);
   }
