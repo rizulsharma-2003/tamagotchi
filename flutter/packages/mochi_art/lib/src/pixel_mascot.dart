@@ -211,10 +211,17 @@ abstract final class PixelMascot {
     return (left: left.$1, right: right.$1, leftHand: left.$2, rightHand: right.$2);
   }
 
-  /// Four legs; while moving, diagonal pairs take turns lifting.
-  static List<Rect> _legRects(_Frame frame, double speed, double time, bool reduced) {
-    final height = legRows + frame.rise;
-    if (height <= 0.4) return const [];
+  /// What of [time] shows in [draw] (a stepping pair of legs, a foot tapping, the spinner's frame): two times with the
+  /// same key draw the same picture of the same pose, so a picture can be reused (Mochi for Windows' taskbar pet).
+  static String timeKey(CompanionPose pose, double time, [MascotOptions? options]) {
+    final o = options ?? MascotOptions();
+    final legs = _legPhase(o.speed, time, o.reduced);
+    final spark = o.showsSpark ? sparkFrame(pose, time, o.reduced) : null;
+    return '${legs.lifted},${legs.tapping},${spark ?? '-'}';
+  }
+
+  /// Which pair of legs is lifted while moving, and which foot taps while idle (-1: none).
+  static ({int lifted, int tapping}) _legPhase(double speed, double time, bool reduced) {
     var lifted = -1;
     var tapping = -1;
     if (!reduced && speed.abs() > 2) {
@@ -224,6 +231,14 @@ abstract final class PixelMascot {
       final cycle = Ease.fract(time / 6.7) * 6.7;
       if (cycle < 0.5 && (cycle / 0.125).floor() % 2 == 0) tapping = 3;
     }
+    return (lifted: lifted, tapping: tapping);
+  }
+
+  /// Four legs; while moving, diagonal pairs take turns lifting.
+  static List<Rect> _legRects(_Frame frame, double speed, double time, bool reduced) {
+    final height = legRows + frame.rise;
+    if (height <= 0.4) return const [];
+    final (:lifted, :tapping) = _legPhase(speed, time, reduced);
     const xs = [-8.0, -5.0, 3.0, 6.0];
     return [
       for (var index = 0; index < xs.length; index++)

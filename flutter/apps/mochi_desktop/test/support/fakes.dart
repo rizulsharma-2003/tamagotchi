@@ -391,6 +391,12 @@ class FakeTaskbar implements TaskbarInfo {
     return measured;
   }
 
+  /// What [fingerprint] says (null: can't tell, so the stroll measures each time it checks).
+  Object? print;
+
+  @override
+  Object? fingerprint() => print;
+
   @override
   bool fullscreenBusy() => busy;
 

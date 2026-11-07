@@ -24,7 +24,11 @@
 //   Mac's menu bar. The window then covers both (Mochi stays near him, as on the Mac), it doesn't move while Mochi
 //   potters about inside it, and clicks reach both of them (only their bodies). With no stretch roomy enough for both,
 //   Patch stays off the taskbar and Mochi has it to itself. For a moment together, Mochi trots over first.
-// - The taskbar is looked at again every 10 seconds and after display or DPI changes.
+// - The taskbar is looked at again every 10 seconds and after display or DPI changes. Its buttons are measured with UI
+//   Automation only when something on it may have moved (TaskbarInfo.fingerprint: the app windows that have buttons,
+//   the tray's width), or once a minute, and not while Mochi naps.
+// - While nobody can see the screen (the display is off, the PC is locked or asleep: PcRhythm.unseen) nothing runs at
+//   all: no frames, no pointer checks, no taskbar checks. Mochi carries on from where it was when the screen is back.
 //
 // - Clicking Mochi (or Patch) opens the popover (the Mac's menu-bar popover) above the taskbar where Mochi is, inside
 //   the work area: Mochi's taskbar presence pauses while it's open (the popover shows it in the room), and when it
@@ -43,6 +47,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../core/desktop_settings.dart';
+import '../../core/pc_rhythm.dart';
 import '../../core/pet_cues.dart';
 import '../../platform/system.dart';
 import '../../platform/taskbar.dart';
@@ -107,6 +112,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     required this.motion,
     required Stream<PetCue> cues,
     this.companion,
+    this.rhythm,
     Duration Function()? idle,
     double Function()? clock,
     math.Random? random,
@@ -127,6 +133,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     settings.addListener(_settingsChanged);
     motion.addListener(_motionChanged);
     companion?.addListener(_companionChanged);
+    rhythm?.addListener(_rhythmChanged);
     _companionOnTaskbar = settings.companionOnTaskbar;
   }
 
@@ -138,6 +145,12 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Patch (null: Mochi on its own, as in tests of the stroll alone).
   final CompanionDirector? companion;
+
+  /// The PC's rhythm: while nobody can see the screen, nothing runs (null: always seen).
+  final PcRhythm? rhythm;
+
+  /// The buttons are measured again at least this often, even when nothing seems to have changed.
+  static const Duration measureAtLeast = Duration(minutes: 1);
 
   /// How often the window moves while Mochi walks.
   final Duration frameInterval;
@@ -276,10 +289,22 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   /// Clicks go through the window right now (null before Mochi was first on the taskbar).
   bool? get clickThrough => _clickThrough;
 
-  /// The timers that are running, for tests: moving Mochi, waiting for its next move, watching the pointer.
+  /// The timers that are running, for tests: moving Mochi, waiting for its next move, watching the pointer, checking
+  /// the taskbar.
   bool get moving => _frameTimer != null;
   bool get waiting => _wakeTimer != null;
   bool get watchingPointer => _pointerTimer != null;
+  bool get checking => _checkTimer != null;
+
+  /// Any of the stroll's timers.
+  bool get anyTimer => moving || waiting || watchingPointer || checking || _summonTimer != null || _popoverTimer != null;
+
+  /// Nobody can see the screen: everything waits.
+  bool get _unseen => rhythm?.unseen ?? false;
+  bool _paused = false;
+
+  /// Paused while nobody can see the screen.
+  bool get paused => _paused;
 
   double now() => _clock();
 
@@ -294,6 +319,8 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     if (surface == Surface.pet) {
       _popoverTimer?.cancel();
       _popoverTimer = null;
+      // Back from the popover however it closed (to the taskbar or to the desktop): Windows' timers back to normal.
+      _precise(false);
       _start();
       return _enqueue(() async {
         try {
@@ -392,7 +419,9 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   PetMood get mood => _mood;
   set mood(PetMood mood) {
     if (mood == _mood) return;
+    final woke = _mood == PetMood.napping;
     _mood = mood;
+    if (woke && _canRoam && !_paused) unawaited(_measure());
     if (onTaskbar) _tick();
   }
 
@@ -682,7 +711,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed || _surface != Surface.pet || _fullscreen) return;
     if (arriving) {
       _placement = PetPlacement.taskbar;
-      _pointerTimer ??= Timer.periodic(pointerInterval, (_) => _pointer());
+      if (!_paused) _pointerTimer ??= Timer.periodic(pointerInterval, (_) => _pointer());
       shell.petWindow?.raise();
       _pointer();
     }
@@ -743,9 +772,11 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     _measuring = true;
     try {
       final started = _clock();
+      _fingerprint = taskbar.fingerprint();
       final buttons = await taskbar.buttons();
       log?.call('measure: ${buttons?.length} elements in ${((_clock() - started) * 1000).round()} ms');
       _measured = true;
+      _measuredAt = _clock();
       if (!_sameRects(buttons, _buttons)) {
         _buttons = buttons;
         if (_surface == Surface.pet) unawaited(_enqueue(_place));
@@ -770,7 +801,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   double get _idleSeconds => _idle().inMilliseconds / 1000;
 
   void _tick() {
-    if (_disposed || _surface != Surface.pet || _placement != PetPlacement.taskbar || _dragging) {
+    if (_disposed || _surface != Surface.pet || _placement != PetPlacement.taskbar || _dragging || _paused) {
       _halt();
       return;
     }
@@ -955,7 +986,48 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     _observing = true;
     WidgetsBinding.instance.addObserver(this);
     _fullscreen = _fullscreenBusy();
-    _checkTimer = Timer.periodic(checkInterval, (_) => _check());
+    _paused = _unseen;
+    if (!_paused) _checkTimer = Timer.periodic(checkInterval, (_) => _check());
+  }
+
+  /// The screen went out of sight (the display off, the PC locked or asleep) or came back.
+  void _rhythmChanged() {
+    final unseen = _unseen;
+    if (unseen == _paused || !_observing || _disposed) return;
+    _paused = unseen;
+    log?.call(unseen ? 'paused: nobody can see the screen' : 'resumed: the screen is back');
+    if (unseen) {
+      _halt();
+      _pointerTimer?.cancel();
+      _pointerTimer = null;
+      _checkTimer?.cancel();
+      _checkTimer = null;
+      return;
+    }
+    _checkTimer ??= Timer.periodic(checkInterval, (_) => _check());
+    if (onTaskbar) {
+      _pointerTimer ??= Timer.periodic(pointerInterval, (_) => _pointer());
+      _nearPointer = false;
+      // From where Mochi is now (its plan ran on while nobody saw it).
+      stroller.resume(_clock());
+      _pointer();
+      _tick();
+    }
+    // The taskbar may have changed meanwhile.
+    _fingerprint = null;
+    _check();
+  }
+
+  /// When the buttons were last measured (the stroll's clock), and what the taskbar looked like then.
+  double _measuredAt = double.negativeInfinity;
+  Object? _fingerprint;
+
+  /// Whether to measure the buttons now: something on the taskbar may have moved (its fingerprint changed), or it's
+  /// been a while. Never while Mochi naps (nothing changes for it then); it measures when it wakes.
+  bool _shouldMeasure() {
+    if (!_canRoam || _fullscreen || _mood == PetMood.napping) return false;
+    final fingerprint = taskbar.fingerprint();
+    return fingerprint == null || fingerprint != _fingerprint || _clock() - _measuredAt >= measureAtLeast.inMicroseconds / 1e6;
   }
 
   void _stop() {
@@ -980,7 +1052,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   /// Every couple of seconds: a full-screen app; every [taskbarChecks]: the taskbar (it may have moved); every
   /// [measureChecks]: its buttons (an app opened or closed).
   void _check() {
-    if (_dragging) return;
+    if (_dragging || _paused) return;
     _checks++;
     final busy = _fullscreenBusy();
     if (busy != _fullscreen) {
@@ -988,7 +1060,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
       unawaited(_enqueue(_place));
       return;
     }
-    if (_checks % measureChecks == 0 && _canRoam && !_fullscreen) unawaited(_measure());
+    if (_checks % measureChecks == 0 && _shouldMeasure()) unawaited(_measure());
     if (_checks % taskbarChecks == 0) unawaited(_enqueue(_place));
   }
 
@@ -1013,6 +1085,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     settings.removeListener(_settingsChanged);
     motion.removeListener(_motionChanged);
     companion?.removeListener(_companionChanged);
+    rhythm?.removeListener(_rhythmChanged);
     super.dispose();
   }
 }

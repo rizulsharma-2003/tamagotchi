@@ -108,6 +108,7 @@ class DesktopAppState extends State<DesktopApp> {
     motion: desktop.motion,
     cues: desktop.cues,
     companion: _companion,
+    rhythm: desktop.rhythm,
     idle: () => desktop.sessions.now.difference(_lastActivity),
     clock: _clock,
     random: widget.strollRandom,
@@ -474,6 +475,7 @@ class DesktopAppState extends State<DesktopApp> {
       _focusSession = null;
     }
     setState(() => _surface = surface);
+    if (surface == Surface.pet && !_warm && Platform.isWindows) _warmUpTimer ??= Timer.periodic(const Duration(seconds: 5), (_) => _warmUp());
     final shown = _stroll.show(surface);
     if (surface == Surface.popover) _popoverReady = shown;
     unawaited(shown);
@@ -501,8 +503,10 @@ class DesktopAppState extends State<DesktopApp> {
   bool _warm = false;
 
   void _warmUp() {
-    if (_warm) {
+    // Done, or there's no pet to warm up for (it starts again when the pet shows).
+    if (_warm || _surface == Surface.hidden) {
       _warmUpTimer?.cancel();
+      _warmUpTimer = null;
       return;
     }
     // While Mochi stands on the taskbar (its walk would stutter once).

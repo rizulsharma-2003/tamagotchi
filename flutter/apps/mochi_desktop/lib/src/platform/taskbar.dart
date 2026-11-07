@@ -118,6 +118,10 @@ abstract interface class TaskbarInfo {
   /// Where the taskbar's buttons are (UI Automation, off the UI thread), or null if they can't be found.
   Future<List<PixelRect>?> buttons();
 
+  /// A cheap summary of what decides where the buttons are (the app windows that have one, the tray's size): while
+  /// it's the same, measuring them again would find the same. Null: can't tell (measure).
+  Object? fingerprint();
+
   /// A full-screen app (a game, a video) or a presentation has the screen: the pet keeps out of the way.
   bool fullscreenBusy();
 
@@ -183,6 +187,9 @@ class NoTaskbar implements TaskbarInfo {
 
   @override
   Future<List<PixelRect>?> buttons() async => null;
+
+  @override
+  Object? fingerprint() => null;
 
   @override
   bool fullscreenBusy() => false;
