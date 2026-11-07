@@ -2,6 +2,10 @@
 // holiday calendar, "Start Mochi with Windows" against an in-memory registry, Mochi's reactions as Settings allows,
 // the look the phones get, and the pet's name kept safe for claude's command line.
 
+import 'dart:ffi';
+import 'dart:io';
+
+import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_art/mochi_art.dart';
@@ -12,7 +16,31 @@ import 'package:mochi_desktop/src/core/seasons.dart';
 import 'package:mochi_desktop/src/link/phone_sync.dart';
 import 'package:mochi_desktop/src/platform/startup.dart';
 
+import 'package:win32/win32.dart' hide Size, Point, Rect;
+
 import 'support/fakes.dart';
+
+/// Points both of the startup item's keys at one scratch key, so the Run key is never touched.
+class _Scratch implements StartupRegistry {
+  _Scratch(this.inner, this.key);
+
+  final StartupRegistry inner;
+  final String key;
+
+  String _name(String key, String name) => key == RunKeyStartup.approvedKey ? 'Approved' : name;
+
+  @override
+  String? readString(String key, String name) => inner.readString(this.key, _name(key, name));
+
+  @override
+  List<int>? readBinary(String key, String name) => inner.readBinary(this.key, _name(key, name));
+
+  @override
+  void writeString(String key, String name, String value) => inner.writeString(this.key, _name(key, name), value);
+
+  @override
+  void delete(String key, String name) => inner.delete(this.key, _name(key, name));
+}
 
 void main() {
   final launch = DateTime(2026, 11, 5, 9);
@@ -213,6 +241,29 @@ void main() {
       expect(startup.setEnabled(true), 'Access is denied.');
       expect(registry.keys, isEmpty);
     });
+
+    test('the real registry (Windows only): a scratch key, never the Run key', () {
+      const key = r'Software\Mochi Desktop Tests\Startup';
+      final win32 = Win32StartupRegistry();
+      expect(win32.readString(key, 'Mochi'), isNull);
+      expect(win32.readBinary(key, 'Mochi'), isNull);
+      win32.writeString(key, 'Mochi', '"C:\\Program Files\\Mochi\\mochi_desktop.exe"');
+      expect(win32.readString(key, 'Mochi'), '"C:\\Program Files\\Mochi\\mochi_desktop.exe"');
+      using((arena) {
+        final bytes = arena<Uint8>(12)..asTypedList(12).setAll(0, [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        RegSetKeyValue(HKEY_CURRENT_USER, key.toNativeUtf16(allocator: arena), 'Approved'.toNativeUtf16(allocator: arena), REG_BINARY, bytes, 12);
+      });
+      expect(win32.readBinary(key, 'Approved'), [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      final item = RunKeyStartup(registry: _Scratch(win32, key), executable: r'C:\Program Files\Mochi\mochi_desktop.exe');
+      expect(item.status().enabled, isFalse, reason: 'the scratch "Task Manager" mark is odd');
+      win32
+        ..delete(key, 'Mochi')
+        ..delete(key, 'Approved')
+        ..delete(key, 'Mochi');
+      expect(win32.readString(key, 'Mochi'), isNull);
+      using((arena) => RegDeleteKey(HKEY_CURRENT_USER, r'Software\Mochi Desktop Tests\Startup'.toNativeUtf16(allocator: arena)));
+      using((arena) => RegDeleteKey(HKEY_CURRENT_USER, r'Software\Mochi Desktop Tests'.toNativeUtf16(allocator: arena)));
+    }, skip: Platform.isWindows ? false : 'the registry is on Windows only');
 
     test('elsewhere there is no startup item', () {
       const none = UnsupportedStartup();
