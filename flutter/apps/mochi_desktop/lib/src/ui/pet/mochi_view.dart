@@ -119,13 +119,21 @@ class MochiView extends StatefulWidget {
   State<MochiView> createState() => MochiViewState();
 
   /// Frames a second for Mochi doing this: 25 while it walks (the window moves as often), 24 for a moment (a pet, a
-  /// finished turn, a stretch), 12 for a calm loop (a blink still shows), 6 asleep; at most 10 with animations off.
-  static double frameRate({required PetMood mood, StrollSample? roam, bool oneShot = false, bool calm = false, double companion = 0}) {
-    final rate = math.max(_petRate(mood: mood, roam: roam, oneShot: oneShot), companion);
+  /// finished turn, a stretch), 12 for a calm loop (8 at the taskbar's size, [small]: its breathing moves less than a
+  /// pixel there, and no blink is ever skipped), 6 asleep; at most 10 with animations off.
+  static double frameRate({
+    required PetMood mood,
+    StrollSample? roam,
+    bool oneShot = false,
+    bool calm = false,
+    double companion = 0,
+    bool small = false,
+  }) {
+    final rate = math.max(_petRate(mood: mood, roam: roam, oneShot: oneShot, small: small), companion);
     return calm ? math.min(rate, 10) : rate;
   }
 
-  static double _petRate({required PetMood mood, StrollSample? roam, bool oneShot = false}) {
+  static double _petRate({required PetMood mood, StrollSample? roam, bool oneShot = false, bool small = false}) {
     final double rate;
     if (roam?.travelling ?? false) {
       rate = 25;
@@ -133,7 +141,7 @@ class MochiView extends StatefulWidget {
       rate = 24;
     } else {
       final loop = roam?.animation ?? mood.loop;
-      rate = loop == PetAnimation.sleep || loop == PetAnimation.curl ? 6 : 12;
+      rate = loop == PetAnimation.sleep || loop == PetAnimation.curl ? 6 : (small ? 8 : 12);
     }
     return rate;
   }
@@ -236,6 +244,7 @@ class MochiViewState extends State<MochiView> {
       oneShot: _director.playing(widget.library, time),
       calm: _calm,
       companion: _companionRate(),
+      small: widget.detail == RenderDetail.tiny,
     );
     if (fps == _fps) return;
     _fps = fps;

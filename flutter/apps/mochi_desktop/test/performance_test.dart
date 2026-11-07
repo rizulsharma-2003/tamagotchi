@@ -569,12 +569,35 @@ void main() {
   });
 
   group('Frame rates', () {
+    test('a calm loop drawn 8 times a second never skips a blink (on the taskbar, or on its own)', () {
+      bool shut(PetPose pose) => pose.eyes != PetEyes.open || pose.eyeOpenness < 0.5;
+      final idle = library.petTrack(PetAnimation.idle)!;
+      final blinks = [for (var i = 0; i < idle.frames.length; i++) if (shut(idle.frames[i])) i];
+      expect(blinks, isNotEmpty, reason: 'the idle loop blinks');
+      for (final onTaskbar in [false, true]) {
+        final director = PetDirector();
+        var seen = 0;
+        // 20 loops of 4 s, drawn every 1/8 s from an odd start.
+        for (var t = 0.037; t < 80; t += 1 / 8) {
+          final roam = onTaskbar
+              ? StrollSample(x: 0, facing: 1, animation: PetAnimation.idle, animationTime: t, activity: StrollActivity.rest)
+              : null;
+          if (shut(director.pose(library, t, roam: roam, quantum: MochiView.quantum(8)))) seen++;
+        }
+        expect(seen, greaterThanOrEqualTo(20 * blinks.length), reason: 'every blink of every loop (taskbar: $onTaskbar)');
+      }
+    });
+
     test('calm, roaming, napping: the Mac\'s rates, and the grid the animations are played on', () {
       const walking = StrollSample(x: 0, facing: 1, animation: PetAnimation.walk, animationTime: 0, activity: StrollActivity.wander, travelling: true);
       expect(MochiView.frameRate(mood: PetMood.relaxed, roam: walking), 25);
       expect(MochiView.frameRate(mood: PetMood.relaxed), 12);
       expect(MochiView.frameRate(mood: PetMood.napping), 6);
       expect(MochiView.frameRate(mood: PetMood.relaxed, oneShot: true), 24);
+      // At the taskbar's size a calm loop is drawn 8 times a second (its breathing moves less than a pixel there).
+      expect(MochiView.frameRate(mood: PetMood.relaxed, small: true), 8);
+      expect(MochiView.frameRate(mood: PetMood.napping, small: true), 6);
+      expect(MochiView.frameRate(mood: PetMood.relaxed, roam: walking, small: true), 25);
       expect(MochiView.quantum(25), 1 / 30);
       expect(MochiView.quantum(12), 1 / 15);
       expect(PetDirector.quantize(0.52, 1 / 15), closeTo(8 / 15, 1e-9));
