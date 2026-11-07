@@ -1,0 +1,22 @@
+name: mochi_live_update
+description: >-
+  Mochi for Android's ongoing notification while Claude works, the Android twin of the iPhone's Live Activity. A plugin
+  of its own (not MainActivity's channel) so the FCM push handler's background engine can post it too: only pubspec
+  plugins are registered there.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.insideedge.mochi.liveupdate
+        pluginClass: MochiLiveUpdatePlugin

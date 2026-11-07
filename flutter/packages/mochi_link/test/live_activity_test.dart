@@ -168,15 +168,10 @@ void main() {
       final data = <String, Object?>{'kind': 'liveActivity', 'room': 'room_1', 'id': 'la-9', 'from': 'dev_mac', 'apns': jsonEncode(apns)};
       expect(LinkLiveActivity.pushRoom(data), 'room_1');
       final read = LinkLiveActivity.fromPushData(data, liveActivityKey: laKey)!;
-      expect([read.id, read.room, read.from, read.event, read.title, read.detail, read.frame], [
-        'la-9',
-        'room_1',
-        'dev_mac',
-        'update',
-        'Claude is working',
-        '2 tools',
-        7,
-      ]);
+      expect(
+        [read.id, read.room, read.from, read.event, read.title, read.detail, read.frame],
+        ['la-9', 'room_1', 'dev_mac', 'update', 'Claude is working', '2 tools', 7],
+      );
       expect(LinkLiveActivity.fromPushData({...data, 'kind': 'alert'}, liveActivityKey: laKey), isNull);
       expect(LinkLiveActivity.pushRoom({...data, 'kind': 'alert'}), isNull);
       expect(LinkLiveActivity.fromPushData({...data, 'apns': '{not json'}, liveActivityKey: laKey), isNull);

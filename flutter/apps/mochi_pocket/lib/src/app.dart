@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mochi_link/mochi_link.dart';
 
+import 'live/live_updates.dart';
 import 'model/app_settings.dart';
 import 'model/pocket_model.dart';
 import 'scene/pose_library.dart';
@@ -29,6 +30,7 @@ class MochiApp extends StatefulWidget {
     this.opener = const UrlLinkOpener(),
     this.library,
     this.scan,
+    this.live,
   });
 
   final PocketModel model;
@@ -48,6 +50,9 @@ class MochiApp extends StatefulWidget {
   /// Replaces the camera scanner (tests).
   final Future<String?> Function(BuildContext context)? scan;
 
+  /// Mochi on the lock screen while Claude works (Settings' sample and switch).
+  final LiveUpdates? live;
+
   @override
   State<MochiApp> createState() => _MochiAppState();
 }
@@ -56,6 +61,10 @@ class _MochiAppState extends State<MochiApp> {
   final GlobalKey<NavigatorState> _navigator = GlobalKey();
   late final AppLifecycleListener _lifecycle = AppLifecycleListener(onResume: widget.model.resume);
   StreamSubscription<String>? _links;
+  StreamSubscription<String>? _liveActionSubscription;
+
+  /// The ongoing notification's buttons (Open the Session scrolls to Claude's sessions).
+  final StreamController<String> _liveActions = StreamController.broadcast();
   PoseLibrary? _library;
   bool _askedForNotifications = false;
 
@@ -87,8 +96,12 @@ class _MochiAppState extends State<MochiApp> {
   Future<void> _start() async {
     await model.load();
     _links = widget.bridge.links.listen(_opened);
+    _liveActionSubscription = widget.bridge.liveActions.listen(_liveActions.add);
     final initial = await widget.bridge.initialLink();
     if (initial != null) await _opened(initial);
+    final action = await widget.bridge.initialLiveAction();
+    // Once the home screen is there to scroll.
+    if (action != null) WidgetsBinding.instance.addPostFrameCallback((_) => _liveActions.add(action));
   }
 
   /// A `mochi://pair` link opened from outside the app.
@@ -128,6 +141,8 @@ class _MochiAppState extends State<MochiApp> {
     model.removeListener(_modelChanged);
     _lifecycle.dispose();
     unawaited(_links?.cancel());
+    unawaited(_liveActionSubscription?.cancel());
+    unawaited(_liveActions.close());
     super.dispose();
   }
 
@@ -166,6 +181,8 @@ class _MochiAppState extends State<MochiApp> {
             notifier: widget.notifier,
             settings: widget.settings,
             reader: widget.reader,
+            live: widget.live,
+            liveActions: _liveActions.stream,
           ),
         },
       ),

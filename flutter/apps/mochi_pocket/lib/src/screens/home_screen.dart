@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
+import '../live/live_updates.dart';
 import '../model/app_settings.dart';
 import '../model/pocket_model.dart';
 import '../scene/pose_library.dart';
@@ -30,6 +31,8 @@ class HomeScreen extends StatefulWidget {
     required this.notifier,
     required this.settings,
     required this.reader,
+    this.live,
+    this.liveActions,
   });
 
   final PocketModel model;
@@ -40,6 +43,12 @@ class HomeScreen extends StatefulWidget {
   final AlertNotifier notifier;
   final AppSettings settings;
   final UpdatesReader reader;
+
+  /// Mochi on the lock screen while Claude works (for Settings).
+  final LiveUpdates? live;
+
+  /// The ongoing notification's buttons: Open the Session scrolls to Claude's sessions.
+  final Stream<String>? liveActions;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -55,6 +64,10 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _bubbleFor;
   Timer? _bubbleTimer;
   MacConnection? _announced;
+  StreamSubscription<String>? _liveActions;
+
+  /// Claude's sessions on the computer, where Open the Session brings you.
+  final GlobalKey _sessions = GlobalKey();
 
   PocketModel get model => widget.model;
 
@@ -65,11 +78,40 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _announced = model.connection;
     model.addListener(_modelChanged);
+    _liveActions = widget.liveActions?.listen(_liveAction);
+  }
+
+  /// Open the Session in Mochi's ongoing notification (Claude needs you): to Claude's sessions on the computer, where
+  /// you can answer the session.
+  void _liveAction(String action) {
+    if (action != 'session') return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSessions());
+  }
+
+  /// The list builds what's on screen only: until the section is built, jump towards the end, then bring it in.
+  void _scrollToSessions([int attempt = 0]) {
+    if (!mounted) return;
+    final target = _sessions.currentContext;
+    if (target != null) {
+      unawaited(
+        Scrollable.ensureVisible(
+          target,
+          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 350),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+      return;
+    }
+    if (!_scroll.hasClients || attempt >= 6) return;
+    _scroll.jumpTo(_scroll.position.maxScrollExtent);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSessions(attempt + 1));
   }
 
   @override
   void dispose() {
     model.removeListener(_modelChanged);
+    unawaited(_liveActions?.cancel());
     _bubbleTimer?.cancel();
     _typed.dispose();
     _field.dispose();
@@ -146,7 +188,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openSettings() => Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) => SettingsScreen(model: model, notifier: widget.notifier, settings: widget.settings, reader: widget.reader),
+      builder: (_) =>
+          SettingsScreen(model: model, notifier: widget.notifier, settings: widget.settings, reader: widget.reader, live: widget.live),
     ),
   );
 
@@ -420,6 +463,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     return [
       SectionTitle(
+        key: _sessions,
         title: 'Claude on ${model.host.yours}',
         note: sessions.isEmpty ? null : '${sessions.length} session${sessions.length == 1 ? '' : 's'}',
       ),

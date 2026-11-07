@@ -557,14 +557,29 @@ void main() {
 
     /// A Live Activity frame as relay 1.4.0 hands it to an Android phone's socket: no box, the apns object, `from`.
     Map<String, Object?> fromMac(String id, String phase, {int timestamp = 100, String title = 'Claude is working'}) {
-      final frame = (jsonDecode(
-        LinkLiveActivity.hostFrame(
-          LinkLiveActivity.apns(event: 'update', timestamp: timestamp, phase: phase, title: title, since: 90, liveActivityKey: laKey),
-          id: id,
-          priority: 5,
-        ),
-      ) as Map).cast<String, Object?>();
-      return {...frame..remove('push')..remove('to'), 'from': 'dev_mac'};
+      final frame =
+          (jsonDecode(
+                    LinkLiveActivity.hostFrame(
+                      LinkLiveActivity.apns(
+                        event: 'update',
+                        timestamp: timestamp,
+                        phase: phase,
+                        title: title,
+                        since: 90,
+                        liveActivityKey: laKey,
+                      ),
+                      id: id,
+                      priority: 5,
+                    ),
+                  )
+                  as Map)
+              .cast<String, Object?>();
+      return {
+        ...frame
+          ..remove('push')
+          ..remove('to'),
+        'from': 'dev_mac',
+      };
     }
 
     test('one on the socket is opened with K_la and announced once, not acked, and not state or a message', () async {

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:mochi_link/mochi_link.dart';
 
+import '../../live/live_updates.dart';
 import '../local_file.dart';
 import '../push/push_service.dart';
 
@@ -12,7 +13,9 @@ import '../push/push_service.dart';
 ///
 /// - register this phone's FCM address in that room too (straight to the relay; the address is never shown), so the
 ///   fake Mac's alerts arrive as real pushes, with the app closed;
-/// - open those pushes with that room's key, and send their buttons' actions to that room.
+/// - open those pushes with that room's key, and send their buttons' actions to that room;
+/// - while the app is open, take that room's Live Activities on a socket of its own ([listenLive]), the way the
+///   real room's arrive on the app's own socket.
 ///
 /// Its done marks and outbox are files of their own, and its cards stay out of the Updates history. Release builds
 /// never read the file.
@@ -30,6 +33,25 @@ abstract final class DebugActionRoom {
     } on Object {
       return null;
     }
+  }
+
+  /// The test room's Live Activities and `activityEnded`, on a socket to that room, shown with [live] (its own record
+  /// file, [LiveUpdates.debugFile]). Null without a test room.
+  static Future<RelayLink?> listenLive(String? folder, LiveUpdates live) async {
+    final room = await load(folder);
+    if (room == null) return null;
+    final link = RelayLink(room, platform: 'android', app: 'debug');
+    LinkHostName host() => LinkPeerNames.host(link.peers, me: room.device, pairedName: room.peerName);
+    link.liveActivities.listen((activity) async {
+      final outcome = await live.handle(activity, host: host());
+      debugPrint('Mochi: debug room live activity: ${outcome.name}');
+    });
+    link.incoming.where((message) => message.key == LinkKey.activityEnded).listen((message) async {
+      final ended = ActivityEnded.fromValue(message.value);
+      if (ended != null) debugPrint('Mochi: debug room ended: ${(await live.macEnded(ended))?.name}');
+    });
+    link.start();
+    return link;
   }
 
   /// Tells the test room's relay where to push this phone (over HTTPS, as the room's pocket device).

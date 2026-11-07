@@ -14,7 +14,9 @@ import io.flutter.plugin.common.MethodChannel
  * Mochi's one Android activity. Besides hosting Flutter, it answers a small channel (`com.insideedge.mochi/platform`):
  * the pairing link the app was opened with (`mochi://pair?…`, from a QR code app, a browser or `adb`), links that
  * arrive while it runs (`link`, sent to Dart), this phone's model for the Mac's device list, the app's files folder,
- * and audio focus while Mochi reads aloud (`audioFocusLost` tells Dart when a call or another app takes the audio).
+ * audio focus while Mochi reads aloud (`audioFocusLost` tells Dart when a call or another app takes the audio), and
+ * the button of Mochi's ongoing notification that opened the app (`liveAction`: `open`, or `session` for Open the
+ * Session).
  */
 class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
@@ -22,17 +24,25 @@ class MainActivity : FlutterActivity() {
     /** A pairing link not yet handed to Dart: the launch intent's, until Dart asks for it once. */
     private var pendingLink: String? = null
 
+    /** The ongoing notification's button that opened the app, until Dart asks for it once. */
+    private var pendingLiveAction: String? = null
+
     private var focusRequest: AudioFocusRequest? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         pendingLink = pairingLink(intent)
+        pendingLiveAction = liveAction(intent)
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).also {
             it.setMethodCallHandler { call, result ->
                 when (call.method) {
                     "initialLink" -> {
                         result.success(pendingLink)
                         pendingLink = null
+                    }
+                    "initialLiveAction" -> {
+                        result.success(pendingLiveAction)
+                        pendingLiveAction = null
                     }
                     "deviceName" -> result.success(deviceName())
                     "filesDir" -> result.success(filesDir.absolutePath)
@@ -50,6 +60,10 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        liveAction(intent)?.let { action ->
+            val channel = channel
+            if (channel == null) pendingLiveAction = action else channel.invokeMethod("liveAction", action)
+        }
         val link = pairingLink(intent) ?: return
         val channel = channel
         if (channel == null) {
@@ -95,6 +109,9 @@ class MainActivity : FlutterActivity() {
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
+    /** `open` or `session`, when Mochi's ongoing notification (plugins/mochi_live_update) opened the app. */
+    private fun liveAction(intent: Intent?): String? = intent?.getStringExtra(LIVE_ACTION)
+
     private fun pairingLink(intent: Intent?): String? {
         val data = intent?.data ?: return null
         if (intent.action != Intent.ACTION_VIEW || data.scheme != "mochi" || data.host != "pair") return null
@@ -114,5 +131,8 @@ class MainActivity : FlutterActivity() {
 
     private companion object {
         const val CHANNEL = "com.insideedge.mochi/platform"
+
+        /** `LiveNotification.EXTRA_ACTION` in plugins/mochi_live_update. */
+        const val LIVE_ACTION = "com.insideedge.mochi.LIVE_ACTION"
     }
 }

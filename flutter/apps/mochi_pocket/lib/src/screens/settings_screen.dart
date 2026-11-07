@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mochi_link/mochi_link.dart';
 
+import '../live/live_notifier.dart';
+import '../live/live_updates.dart';
 import '../model/app_settings.dart';
 import '../model/pocket_model.dart';
 import '../services/alert_notifier.dart';
@@ -13,15 +17,18 @@ import 'home_screen.dart' show connectionPill;
 /// The app's version, sent in the relay `hello` and shown here.
 const String appVersion = '0.1.0';
 
-/// Settings: Mochi Link (who this phone is paired with, the relay and the Mac's presence, Unpair), notifications,
-/// appearance, and Mochi's voice (iOS/MochiPocket/PocketLink.swift `LinkCard`, PocketSettingsView).
+/// Settings: Mochi Link (who this phone is paired with, the relay and the Mac's presence, Unpair), notifications, Mochi
+/// on the lock screen, appearance, and Mochi's voice (iOS/MochiPocket/PocketLink.swift `LinkCard`, PocketSettingsView).
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.model, required this.notifier, required this.settings, required this.reader});
+  const SettingsScreen({super.key, required this.model, required this.notifier, required this.settings, required this.reader, this.live});
 
   final PocketModel model;
   final AlertNotifier notifier;
   final AppSettings settings;
   final UpdatesReader reader;
+
+  /// Mochi on the lock screen while Claude works: the sample, and taking it away when the switch goes off.
+  final LiveUpdates? live;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -30,6 +37,9 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObserver {
   bool? _notificationsOn;
   late Future<List<VoiceInfo>> _voices = widget.reader.voices();
+  LiveUpdateStatus? _liveStatus;
+  String _samplePhase = 'working';
+  bool _sampleShown = false;
 
   PocketModel get model => widget.model;
   AppSettings get settings => widget.settings;
@@ -60,7 +70,13 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
 
   Future<void> _checkNotifications() async {
     final on = await widget.notifier.enabled();
-    if (mounted) setState(() => _notificationsOn = on);
+    final live = await widget.live?.notifier.status();
+    if (mounted) {
+      setState(() {
+        _notificationsOn = on;
+        _liveStatus = live;
+      });
+    }
   }
 
   Future<void> _allowNotifications() async {
@@ -112,6 +128,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
             _link(),
             const SizedBox(height: Space.l),
             _notifications(),
+            if (widget.live != null) ...[const SizedBox(height: Space.l), _lockScreen()],
             const SizedBox(height: Space.l),
             _appearance(),
             const SizedBox(height: Space.l),
@@ -282,6 +299,135 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
       ],
     ),
   );
+
+  // MARK: Lock screen
+
+  static const List<(String, String)> _phases = [
+    ('working', 'Working'),
+    ('waiting', 'Needs you'),
+    ('done', 'Done'),
+    ('error', 'Snag'),
+    ('idle', 'Idle'),
+    ('asleep', 'Napping'),
+  ];
+
+  /// Mochi on the lock screen while Claude works: the iPhone's Live Activity card ("Lock Screen & Dynamic Island"),
+  /// with the switch and a sample.
+  Widget _lockScreen() {
+    final p = context.palette;
+    final live = widget.live!;
+    final on = settings.showOnLockScreen;
+    final status = _liveStatus;
+    return ClayCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          OverflowBar(
+            alignment: MainAxisAlignment.spaceBetween,
+            overflowAlignment: OverflowBarAlignment.start,
+            spacing: Space.s,
+            overflowSpacing: Space.s,
+            children: [
+              Semantics(header: true, child: Text('Lock screen', style: context.type.headline)),
+              Tag(text: on ? 'On' : 'Off', icon: on ? Icons.check_rounded : Icons.close_rounded, tint: on ? p.success : p.inkSecondary),
+            ],
+          ),
+          const SizedBox(height: Space.s),
+          MergeSemantics(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Show ${model.petName} on my lock screen while Claude works',
+                    style: context.type.subheadline.copyWith(fontWeight: FontWeight.w600, color: p.ink),
+                  ),
+                ),
+                const SizedBox(width: Space.s),
+                Switch(
+                  value: on,
+                  onChanged: (value) {
+                    settings.showOnLockScreen = value;
+                    if (!value) {
+                      setState(() => _sampleShown = false);
+                      unawaited(live.turnedOff());
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Space.xs),
+          Text(
+            'An ongoing notification on your lock screen and in the status bar while Claude works on ${model.host.yours}: '
+            '${model.petName}, what Claude is doing and for how long. It lights up when Claude needs you and celebrates when '
+            "Claude is done. ${model.host.yoursCapitalized} sends it; it's end-to-end encrypted like everything else.",
+            style: context.type.footnote,
+          ),
+          if (on && status != null && !status.enabled) ...[
+            const SizedBox(height: Space.m),
+            NoteLabel(
+              text: "Notifications are turned off for Mochi, so it can't show.",
+              icon: Icons.notifications_off_rounded,
+              tint: p.warning,
+            ),
+          ] else if (on && status?.promotable == false) ...[
+            const SizedBox(height: Space.m),
+            NoteLabel(
+              text:
+                  "Live updates are off for Mochi in Android's notification settings, so it's an ordinary notification, not a "
+                  'chip in the status bar.',
+              icon: Icons.info_outline_rounded,
+              tint: p.inkSecondary,
+            ),
+          ],
+          if (on) ...[
+            const SizedBox(height: Space.m),
+            Wrap(
+              spacing: Space.s,
+              runSpacing: Space.xs,
+              children: [
+                for (final (phase, title) in _phases)
+                  _chip(title, selected: _samplePhase == phase, onSelected: () => setState(() => _samplePhase = phase)),
+              ],
+            ),
+            const SizedBox(height: Space.s),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      final posted = await live.sample(_samplePhase, host: model.host);
+                      if (mounted) setState(() => _sampleShown = posted == LiveUpdatePosted.shown);
+                      if (posted == LiveUpdatePosted.blocked) await _allowNotifications();
+                    },
+                    icon: const Icon(Icons.lock_rounded, size: 18),
+                    label: const Text('Show on Lock Screen'),
+                  ),
+                ),
+                if (_sampleShown) ...[
+                  const SizedBox(width: Space.s),
+                  IconButton.outlined(
+                    onPressed: () async {
+                      await live.removeSample();
+                      if (mounted) setState(() => _sampleShown = false);
+                    },
+                    tooltip: 'Remove the sample',
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: Space.s),
+            Text(
+              'The sample stays for two minutes. ${model.host.yoursCapitalized} shows ${model.petName} here automatically while '
+              'Claude works.',
+              style: context.type.footnote,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   // MARK: Appearance
 

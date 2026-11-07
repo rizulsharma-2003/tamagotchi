@@ -379,14 +379,7 @@ class RelayLink {
   /// Stops and closes the streams.
   Future<void> dispose() async {
     await stop();
-    await Future.wait([
-      _changes.close(),
-      _presence.close(),
-      _incoming.close(),
-      _errors.close(),
-      _alerts.close(),
-      _liveActivities.close(),
-    ]);
+    await Future.wait([_changes.close(), _presence.close(), _incoming.close(), _errors.close(), _alerts.close(), _liveActivities.close()]);
   }
 
   void _open() {

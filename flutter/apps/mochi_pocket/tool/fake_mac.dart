@@ -25,6 +25,14 @@
 //   claude <phase> [category]   working · waiting · done · error · idle (category: think, edit, read, shell, …)
 //   rest | wake                 the Mac rests (Mochi sleeps) or is in use again
 //   pet | play | treat          a pet, play or treat from the Mac
+//   liveActivity <what>         Mochi on the lock screen, as the Mac's PhoneController sends it (LiveActivityPayload
+//                               sealed by LinkPush with K_la; relay 1.4.0 pushes it to Android and hands it to the
+//                               app's socket). <what> is one of (`la` for short):
+//     start [phase]               a new turn (working, or waiting)
+//     <phase> [title…]            working · waiting · done · error · idle; waiting, done and error light the phone up
+//     move                        the same state, Mochi's next pose (the Mac does this every 6 s while Claude works)
+//     end [now]                   Claude's turn is over: it stays three minutes; `now` is End It (gone at once)
+//     ended                       `activityEnded`, as End It also writes it, for when the end push doesn't arrive
 //   away | back                 the Mac disconnects (the phone shows "Mac away") or comes back
 //   invite                      a fresh pairing link
 //   quit                        delete the room and exit
@@ -110,6 +118,13 @@ class FakeMac {
   int _controlRead = 0;
   bool _quitting = false;
   Map<String, Object?> _fixtures = {};
+
+  /// The Live Activity's last timestamp (each one newer, as the Mac's `nextTimestamp`), pose, and when the turn or
+  /// wait it shows began.
+  int _liveTimestamp = 0;
+  int _liveFrame = 0;
+  double _liveSince = 0;
+  String _livePhase = 'working';
 
   Future<void> start() async {
     _fixtures = await _loadFixtures();
@@ -420,6 +435,71 @@ class FakeMac {
     print('sent "Reply drafted"');
   }
 
+  /// A Live Activity update, sealed as the Mac seals it (`LinkPush.liveActivity`), through the relay.
+  void liveActivity(String event, String phase, {String? title, bool alert = false, double? dismissAfter}) {
+    final link = _link;
+    final key = _host.roomKey;
+    if (link == null || key == null) return;
+    final now = _now();
+    _liveTimestamp = _liveTimestamp + 1 > now.round() ? _liveTimestamp + 1 : now.round();
+    final words =
+        title ??
+        switch (phase) {
+          'working' => 'Claude is working',
+          'waiting' => 'Claude needs you',
+          'done' => 'Claude finished!',
+          'error' => 'Claude hit a snag',
+          _ => 'Claude is idle',
+        };
+    final detail = switch (phase) {
+      'working' => 'mochi-link · ${3 + _liveFrame} tools',
+      'waiting' => 'mochi-link · wants your OK',
+      _ => 'mochi-link',
+    };
+    final apns = LinkLiveActivity.apns(
+      event: event,
+      timestamp: _liveTimestamp,
+      phase: phase,
+      title: words,
+      detail: detail,
+      since: _liveSince,
+      frame: _liveFrame++ % 10,
+      liveActivityKey: LinkCrypto.liveActivityKey(key),
+      petName: 'Mochi',
+      companionName: 'Patch',
+      alert: alert,
+      dismissalDate: dismissAfter == null ? null : (_liveTimestamp + dismissAfter).roundToDouble(),
+    );
+    link.sendLiveActivity(apns, priority: event != 'update' || alert || phase != 'working' ? 10 : 5);
+    _livePhase = phase;
+    print('live activity: $event $phase${alert ? ' (lights up)' : ''}');
+  }
+
+  void _liveCommand(List<String> parts) {
+    final what = parts.length > 1 ? parts[1] : 'start';
+    final now = _now().roundToDouble();
+    switch (what) {
+      case 'start':
+        _liveSince = now;
+        liveActivity('start', parts.length > 2 ? parts[2] : 'working');
+      case 'move':
+        liveActivity('update', _livePhase);
+      case 'end':
+        final atOnce = parts.length > 2 && parts[2] == 'now';
+        liveActivity('end', _livePhase, dismissAfter: atOnce ? -60 : 180);
+      case 'ended':
+        _link?.set({'at': now, 'since': _liveSince, 'dismissAt': now}, LinkKey.activityEnded);
+        print('activityEnded: the Mac ended it');
+      case 'working' || 'waiting' || 'done' || 'error' || 'idle':
+        // A new phase starts a new wait or finish (the Mac's LiveActivityPlanner); working keeps the turn's start.
+        if (what != 'working' || _livePhase != 'working') _liveSince = now;
+        final title = parts.length > 2 ? parts.sublist(2).join(' ') : null;
+        liveActivity('update', what, title: title, alert: what == 'waiting' || what == 'done' || what == 'error');
+      default:
+        print('unknown live activity command: ${parts.join(' ')}');
+    }
+  }
+
   Future<void> _readControl(File file) async {
     final length = file.lengthSync();
     if (length < _controlRead) _controlRead = 0;
@@ -477,6 +557,8 @@ class FakeMac {
       case 'back':
         link?.start();
         print('the Mac is back');
+      case 'liveActivity' || 'la':
+        _liveCommand(parts);
       case 'invite':
         await invite();
       case 'quit':

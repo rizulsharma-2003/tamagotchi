@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:mochi_link/mochi_link.dart';
 
+import '../live/live_push.dart';
+import '../live/live_updates.dart';
 import '../services/alert_notifier.dart';
 import '../services/credential_store.dart';
 import '../services/local_file.dart';
@@ -70,12 +72,14 @@ class PocketModel extends ChangeNotifier {
     LinkLeaver? leave,
     PushService? push,
     ShownAlerts? shown,
+    LiveUpdates? live,
     LocalDocument? hostDocument,
     LocalDocument? historyDocument,
     LocalDocument? outboxDocument,
     this.deviceName = 'Android phone',
     DateTime Function()? clock,
   }) : _push = push,
+       _live = live,
        _shown = shown ?? MemoryShownAlerts(),
        _store = credentialStore,
        _doneDocument = doneDocument,
@@ -89,6 +93,9 @@ class PocketModel extends ChangeNotifier {
        _clock = clock ?? DateTime.now;
 
   final PushService? _push;
+
+  /// Mochi on the lock screen while Claude works: the computer's Live Activity updates, by push and on the socket.
+  final LiveUpdates? _live;
 
   /// Alerts already shown, shared with the push handler: each alert shows once, however it arrives.
   final ShownAlerts _shown;
@@ -360,6 +367,8 @@ class PocketModel extends ChangeNotifier {
     if (credentials != null && stillInRoom) {
       unawaited(_leave(credentials).catchError((Object error) => _log('the relay was not told (${error.runtimeType})')));
     }
+    // Nothing from that room stays on the lock screen.
+    unawaited(_live?.forget().catchError((Object error) => _log('the live update was not cleared (${error.runtimeType})')));
     // A stale push address must not receive pushes for a room this phone left: Firebase forgets it.
     _pushStatus = PushStatus.off;
     _pushProblem = null;
@@ -419,6 +428,13 @@ class PocketModel extends ChangeNotifier {
 
   /// A push that arrived while the app is open (the background isolate handles the rest).
   Future<void> _pushed(Map<String, Object?> data) async {
+    if (LivePush.isLiveActivity(data)) {
+      final live = _live;
+      if (live == null) return;
+      final outcome = await LivePush.handle(data, credentials: () async => _credentials, live: live, host: (_) => host);
+      _log('live activity push while open: ${outcome?.name ?? 'ignored'}');
+      return;
+    }
     final outcome = await PushMessages.handle(
       data,
       credentials: () async => _credentials,
@@ -450,6 +466,7 @@ class PocketModel extends ChangeNotifier {
       link.incoming.listen(_received),
       link.presence.listen(_presenceChanged),
       link.alerts.listen(_alerted),
+      link.liveActivities.listen(_liveActivity),
       link.errors.listen(_refused),
     ]);
     link.start();
@@ -579,6 +596,13 @@ class PocketModel extends ChangeNotifier {
         final text = reply.text;
         if (text != null && text.isNotEmpty) exchange.reply = text;
         notifyListeners();
+      case LinkKey.activityEnded:
+        final ended = ActivityEnded.fromValue(message.value);
+        final live = _live;
+        if (ended == null || live == null) return;
+        unawaited(
+          live.macEnded(ended).then((outcome) => _log('the computer ended its live activity: ${outcome?.name ?? 'nothing showing'}')),
+        );
       case LinkKey.macInteraction:
         final interaction = LinkInteraction.fromValue(message.value);
         if (interaction == null || !_seenInteractions.add(interaction.id) || _now - interaction.at >= 90) return;
@@ -624,6 +648,13 @@ class PocketModel extends ChangeNotifier {
     );
     final card = AgentPending.fromJson(alert.userInfo['pending']);
     if (card != null && card.enabled) _record(card.items);
+  }
+
+  /// A Live Activity update on the socket (relay 1.4.0 hands them to Android phones as well as pushing them): the same
+  /// update by push is dropped as a repeat.
+  Future<void> _liveActivity(LinkLiveActivity activity) async {
+    final outcome = await _live?.handle(activity, host: host);
+    _log('live activity on the socket: ${outcome?.name ?? 'no live updates here'}');
   }
 
   // MARK: The week of updates
