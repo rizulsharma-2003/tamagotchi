@@ -125,7 +125,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     math.Random? random,
     StrollTuning tuning = const StrollTuning(),
     this.frameInterval = const Duration(milliseconds: 40),
-    this.pointerInterval = const Duration(milliseconds: 100),
+    this.pointerInterval = pointerIntervalDefault,
     this.checkInterval = const Duration(seconds: 2),
     this.taskbarChecks = 5,
     this.measureChecks = 3,
@@ -863,7 +863,10 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed || _surface != Surface.pet || _fullscreen) return;
     if (arriving) {
       _placement = PetPlacement.taskbar;
-      if (!_paused) _pointerTimer ??= Timer.periodic(pointerInterval, (_) => _pointer());
+      if (!_paused && _pointerTimer == null) {
+        _pointerTimer = Timer.periodic(pointerInterval, (_) => _pointer());
+        _pointerEvery = pointerInterval;
+      }
       shell.petWindow?.raise();
       _pointer();
     }
@@ -1029,12 +1032,33 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
           (body) =>
               PixelRect(body.left - margin, body.top - margin, body.right + margin, body.bottom + margin).contains(cursor.$1, cursor.$2),
         );
-    if (near != _nearPointer && _pointerTimer != null) {
+    // While Mochi naps and the pointer hasn't moved (you're away), twice a second is enough; it moves, and the usual
+    // pace is back at once.
+    final still = cursor != null && cursor == _lastCursor;
+    _lastCursor = cursor;
+    final interval = near
+        ? nearPointerInterval
+        : (_mood == PetMood.napping && still ? napPointerInterval : pointerInterval);
+    if (near != _nearPointer || interval != _pointerEvery) {
       _nearPointer = near;
-      _pointerTimer?.cancel();
-      _pointerTimer = Timer.periodic(near ? nearPointerInterval : pointerInterval, (_) => _pointer());
+      if (_pointerTimer != null) {
+        _pointerTimer?.cancel();
+        _pointerTimer = Timer.periodic(interval, (_) => _pointer());
+      }
+      _pointerEvery = interval;
     }
   }
+
+  /// The pointer's usual pace (tests).
+  static const Duration pointerIntervalDefault = Duration(milliseconds: 100);
+
+  /// How often the pointer is checked while Mochi naps and it doesn't move.
+  static const Duration napPointerInterval = Duration(milliseconds: 500);
+  (int, int)? _lastCursor;
+  Duration? _pointerEvery;
+
+  /// How often the pointer is checked now.
+  Duration? get pointerEvery => _pointerTimer == null ? null : _pointerEvery ?? pointerInterval;
 
   bool _nearPointer = false;
   double _lastRaise = double.negativeInfinity;
@@ -1224,7 +1248,10 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     }
     _checkTimer ??= Timer.periodic(checkInterval, (_) => _check());
     if (onTaskbar) {
-      _pointerTimer ??= Timer.periodic(pointerInterval, (_) => _pointer());
+      if (_pointerTimer == null) {
+        _pointerTimer = Timer.periodic(pointerInterval, (_) => _pointer());
+        _pointerEvery = pointerInterval;
+      }
       _nearPointer = false;
       // From where Mochi is now (its plan ran on while nobody saw it).
       stroller.resume(_clock());

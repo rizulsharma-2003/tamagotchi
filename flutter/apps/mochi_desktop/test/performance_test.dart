@@ -499,6 +499,27 @@ void main() {
       expect(window.raises, greaterThan(raises), reason: 'over the taskbar again');
     });
 
+    strollTest('napping with the pointer still: the pointer is checked twice a second; it moves, and it\'s ten again', (tester) async {
+      final stroll = await start(tester);
+      taskbar.pointer = (50, 50);
+      await elapse(tester, 1);
+      expect(stroll.pointerEvery, TaskbarStroll.pointerIntervalDefault);
+      stroll.mood = PetMood.napping;
+      await elapse(tester, 1);
+      expect(stroll.pointerEvery, TaskbarStroll.napPointerInterval);
+      final raises = window.raises;
+      await elapse(tester, 10);
+      expect(window.raises - raises, lessThanOrEqualTo(21), reason: 'twice a second, not ten times');
+      // You're back: the pointer moves, and it's watched at the usual pace while it does.
+      // Moving the pointer a little every tenth of a second: within the next nap check it's back to the usual pace,
+      // and stays there while it moves.
+      for (var i = 0; i < 20; i++) {
+        taskbar.pointer = (60 + i * 7, 50);
+        await tester.pump(const Duration(milliseconds: 100));
+        if (i >= 6) expect(stroll.pointerEvery, TaskbarStroll.pointerIntervalDefault, reason: 'moving ($i)');
+      }
+    });
+
     strollTest('the pet hidden: no timer at all', (tester) async {
       final stroll = await start(tester);
       expect(stroll.anyTimer, isTrue);
