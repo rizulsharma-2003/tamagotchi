@@ -68,6 +68,25 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,
                                                       lparam);
+    // Mochi: the desktop pet's window in the taskbar is Mochi's box (64 x 40
+    // at 100%), smaller than Windows' minimum for a window with a title bar
+    // (SM_CXMINTRACK: 136 at 100%). Left at that minimum, the window is wider
+    // than the pet asked for and Mochi is drawn off the spot its clicks are
+    // checked at. Unless something set a minimum of its own (window_manager,
+    // for the main window), any size goes.
+    if (message == WM_GETMINMAXINFO) {
+      auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
+      const UINT dpi = ::GetDpiForWindow(hwnd);
+      if (info->ptMinTrackSize.x ==
+          ::GetSystemMetricsForDpi(SM_CXMINTRACK, dpi)) {
+        info->ptMinTrackSize.x = 1;
+      }
+      if (info->ptMinTrackSize.y ==
+          ::GetSystemMetricsForDpi(SM_CYMINTRACK, dpi)) {
+        info->ptMinTrackSize.y = 1;
+      }
+      return 0;
+    }
     if (result) {
       return *result;
     }
