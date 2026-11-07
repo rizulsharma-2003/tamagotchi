@@ -55,6 +55,13 @@ class SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _search.text = navigation.query;
     navigation.addListener(_navigated);
+    // The open pane's row takes the keyboard focus, so Up, Down and Ctrl+F work straight away (the ring shows only
+    // once you use the keyboard).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && FocusManager.instance.primaryFocus?.context?.findAncestorStateOfType<SettingsScreenState>() == null) {
+        _rows[navigation.tab]!.requestFocus();
+      }
+    });
   }
 
   late SettingsTab _shown = navigation.tab;

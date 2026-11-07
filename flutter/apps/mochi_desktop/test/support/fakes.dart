@@ -14,6 +14,7 @@ import 'package:mochi_desktop/src/core/session_store.dart';
 import 'package:mochi_desktop/src/desktop.dart';
 import 'package:mochi_desktop/src/link/link_host.dart';
 import 'package:mochi_desktop/src/platform/credential_vault.dart';
+import 'package:mochi_desktop/src/platform/startup.dart';
 import 'package:mochi_desktop/src/platform/system.dart';
 import 'package:mochi_desktop/src/platform/taskbar.dart';
 import 'package:mochi_desktop/src/ui/shell.dart';
@@ -321,9 +322,57 @@ class FakeTaskbar implements TaskbarInfo {
   (int, int)? cursor() => pointer;
 }
 
+/// "Start Mochi with Windows", without the registry: on or off, or refusing with [problem].
+class FakeStartup implements StartupItem {
+  FakeStartup({this.enabled = false, this.supported = true, this.problem, this.note});
+
+  bool enabled;
+  String? problem;
+  String? note;
+  final List<bool> changes = [];
+
+  @override
+  bool supported;
+
+  @override
+  StartupStatus status() => StartupStatus(enabled: enabled, note: note);
+
+  @override
+  String? setEnabled(bool on) {
+    changes.add(on);
+    if (problem != null) return problem;
+    enabled = on;
+    return null;
+  }
+}
+
+/// HKEY_CURRENT_USER in memory: key → value name → string or bytes.
+class MemoryStartupRegistry implements StartupRegistry {
+  final Map<String, Map<String, Object>> keys = {};
+  bool refuse = false;
+
+  @override
+  String? readString(String key, String name) => keys[key]?[name] as String?;
+
+  @override
+  List<int>? readBinary(String key, String name) => keys[key]?[name] as List<int>?;
+
+  @override
+  void writeString(String key, String name, String value) {
+    if (refuse) throw const StartupException('Access is denied.');
+    (keys[key] ??= {})[name] = value;
+  }
+
+  @override
+  void delete(String key, String name) {
+    if (refuse) throw const StartupException('Access is denied.');
+    keys[key]?.remove(name);
+  }
+}
+
 /// A desktop wired from fakes in a temporary folder.
 class TestDesktop {
-  TestDesktop._(this.temp, this.desktop, this.sockets, this.api, this.claude, this.vault);
+  TestDesktop._(this.temp, this.desktop, this.sockets, this.api, this.claude, this.vault, this.document, this.startup);
 
   final Directory temp;
   final MochiDesktop desktop;
@@ -331,6 +380,10 @@ class TestDesktop {
   final FakeLinkApi api;
   final FakeClaude claude;
   final MemoryVault vault;
+
+  /// Where the settings are saved.
+  final MemorySettingsDocument document;
+  final FakeStartup startup;
 
   FakeSocket get socket => sockets.last;
 
@@ -341,6 +394,8 @@ class TestDesktop {
     Map<String, Object?>? settings,
     String? bundledHelper,
     String? home,
+    FakeStartup? startup,
+    String? claudePath = '/usr/local/bin/claude',
   }) {
     final temp = Directory.systemTemp.createTempSync('mochi_desktop_test');
     final paths = BridgePaths(home ?? '${temp.path}/mochi', windows: false);
@@ -348,9 +403,11 @@ class TestDesktop {
     final api = FakeLinkApi();
     final claude = FakeClaude(output: FakeClaude.result('Hi!'));
     final vault = MemoryVault(saved);
+    final document = MemorySettingsDocument(settings);
+    final start = startup ?? FakeStartup();
     final desktop = MochiDesktop(
       paths: paths,
-      settings: DesktopSettings(MemorySettingsDocument(settings)),
+      settings: DesktopSettings(document, clock: clock),
       sessions: SessionStore(clock: clock),
       hooks: HookSetup(
         paths: paths,
@@ -377,9 +434,11 @@ class TestDesktop {
       ),
       motion: SystemMotion(read: () => false),
       claude: () => claudeInstalled ? claude : null,
+      startup: start,
+      locateClaude: () => claudeInstalled ? claudePath : null,
       clock: clock,
     );
-    return TestDesktop._(temp, desktop, sockets, api, claude, vault);
+    return TestDesktop._(temp, desktop, sockets, api, claude, vault, document, start);
   }
 
   Future<void> dispose() async {
