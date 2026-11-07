@@ -25,9 +25,12 @@ Map<String, Object?> obj(Object? value) => value is Map ? value.cast<String, Obj
 
 List<Map<String, Object?>> objs(Object? value) => value is List ? value.map(obj).toList() : const [];
 
-T byName<T extends Enum>(List<T> values, Object? name) => values.firstWhere((v) => v.name == name, orElse: () {
-  throw StateError('unknown ${T.toString()} "$name"');
-});
+T byName<T extends Enum>(List<T> values, Object? name) => values.firstWhere(
+  (v) => v.name == name,
+  orElse: () {
+    throw StateError('unknown ${T.toString()} "$name"');
+  },
+);
 
 /// The fixture's PoseContext.
 PoseContext contextFromJson(Map<String, Object?> j, {double? time}) => PoseContext(

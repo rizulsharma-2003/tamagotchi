@@ -116,7 +116,9 @@ class SessionSnapshot {
       case SessionPhase.waitingForUser:
         return switch (waitingFor) {
           AttentionKind.permission =>
-            waitingTool == null ? 'Waiting for your permission' : 'Waiting for your permission (${EventNormalizer.friendlyToolName(waitingTool!)})',
+            waitingTool == null
+                ? 'Waiting for your permission'
+                : 'Waiting for your permission (${EventNormalizer.friendlyToolName(waitingTool!)})',
           AttentionKind.input => 'Waiting for your input',
           AttentionKind.mcpDialog => 'An MCP server is waiting for input',
           AttentionKind.backgroundAgent => 'A background agent needs input',
@@ -197,8 +199,15 @@ class SessionRegistry {
       return null;
     }
     final isNew = sessions[id] == null;
-    final session = sessions[id] ??
-        SessionSnapshot(id: id, project: event.project, firstSeen: event.timestamp, lastEventAt: event.timestamp, isSimulated: event.isSimulated);
+    final session =
+        sessions[id] ??
+        SessionSnapshot(
+          id: id,
+          project: event.project,
+          firstSeen: event.timestamp,
+          lastEventAt: event.timestamp,
+          isSimulated: event.isSimulated,
+        );
     final previous = isNew ? null : session.phase;
     session.project ??= event.project;
     if (event.project?.path != null && session.project?.key == event.project?.key) session.project = event.project;
@@ -244,7 +253,11 @@ class SessionRegistry {
           session.turnFailureReason = null;
 
         case EventKind.toolStarting:
-          final tool = RunningTool(name: event.toolName ?? 'tool', category: event.toolCategory ?? ToolCategory.other, startedAt: event.timestamp);
+          final tool = RunningTool(
+            name: event.toolName ?? 'tool',
+            category: event.toolCategory ?? ToolCategory.other,
+            startedAt: event.timestamp,
+          );
           session.runningTools[event.toolUseID ?? 'tool-${event.id}'] = tool;
           session.currentTool = tool;
           session.toolCallsThisTurn += 1;
@@ -287,7 +300,9 @@ class SessionRegistry {
         case EventKind.toolBatchFinished:
           session.runningTools = {};
           session.currentTool = null;
-          if (session.phase == SessionPhase.runningTool || session.phase == SessionPhase.waitingForUser) session.phase = SessionPhase.thinking;
+          if (session.phase == SessionPhase.runningTool || session.phase == SessionPhase.waitingForUser) {
+            session.phase = SessionPhase.thinking;
+          }
           session.waitingFor = null;
 
         case EventKind.permissionRequested || EventKind.attentionNeeded:

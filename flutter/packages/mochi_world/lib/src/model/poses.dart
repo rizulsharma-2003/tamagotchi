@@ -193,8 +193,7 @@ class PoseContext {
   /// The loop the character returns to when a one-shot ends.
   PetAnimation returnLoop;
 
-  PoseContext copy() =>
-      PoseContext(time: time, reducedMotion: reducedMotion, intensity: intensity, seed: seed, returnLoop: returnLoop);
+  PoseContext copy() => PoseContext(time: time, reducedMotion: reducedMotion, intensity: intensity, seed: seed, returnLoop: returnLoop);
 
   /// Scale applied to translation, rotation and squash amplitudes.
   double get motion {

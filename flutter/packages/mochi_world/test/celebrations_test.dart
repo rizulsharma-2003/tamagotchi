@@ -83,7 +83,8 @@ void main() {
         }
         Reaction? reaction;
         if (delivery == EventDelivery.live) {
-          final firstMilestone = !event.isSimulated && event.kind == EventKind.report && event.report?.kind == ReportKind.milestone && !reached;
+          final firstMilestone =
+              !event.isSimulated && event.kind == EventKind.report && event.report?.kind == ReportKind.milestone && !reached;
           if (firstMilestone) reached = true;
           final primaryID = registry.primarySession(now: received)?.id;
           reaction = EventToAnimationMapper.reaction(
@@ -129,7 +130,14 @@ void main() {
   test('the reasons behind each celebration', () {
     final c = Celebrations();
     var ts = 1800000000.0;
-    CompanionEvent e(String id, String name, {String origin = 'hook', String? session = 's1', Map<String, Object?> extra = const {}, double after = 1}) {
+    CompanionEvent e(
+      String id,
+      String name, {
+      String origin = 'hook',
+      String? session = 's1',
+      Map<String, Object?> extra = const {},
+      double after = 1,
+    }) {
       ts += after;
       return EventNormalizer.normalize({
         'id': id,
@@ -154,7 +162,10 @@ void main() {
     c.observe(e('9', 'UserPromptSubmit'));
     c.observe(e('10', 'PostToolUseFailure', extra: {'tool': 'Bash', 'toolCategory': 'shell'}));
     c.observe(e('11', 'PostToolUseFailure', extra: {'tool': 'Bash', 'toolCategory': 'shell'}));
-    expect(c.observe(e('12', 'PostToolUseFailure', extra: {'tool': 'Bash', 'toolCategory': 'shell'}))?.reason, CelebrationReason.investigating);
+    expect(
+      c.observe(e('12', 'PostToolUseFailure', extra: {'tool': 'Bash', 'toolCategory': 'shell'}))?.reason,
+      CelebrationReason.investigating,
+    );
     expect(c.observe(e('13', 'Stop'))?.reason, CelebrationReason.caseClosed);
     final milestone = {
       'report': {'kind': 'milestone', 'status': 'reached'},

@@ -291,7 +291,11 @@ abstract final class EventNormalizer {
     final key = s('projectKey') ?? (projectPath == null ? null : projectKeyForPath(projectPath));
     final project = key == null
         ? null
-        : ProjectRef(displayName: s('project') ?? (projectPath == null ? null : displayNameForPath(projectPath)) ?? 'Project', key: key, path: projectPath);
+        : ProjectRef(
+            displayName: s('project') ?? (projectPath == null ? null : displayNameForPath(projectPath)) ?? 'Project',
+            key: key,
+            path: projectPath,
+          );
 
     final metadata = <String, String>{};
     void put(String key, String? value) {
@@ -307,7 +311,9 @@ abstract final class EventNormalizer {
     put('permissionMode', s('permissionMode'));
     put('host', s('host'));
     if (n('batchCount') case final count?) metadata['batchCount'] = '$count';
-    if (wire['batchTools'] case final List<Object?> tools when tools.isNotEmpty) metadata['batchTools'] = tools.whereType<String>().join(',');
+    if (wire['batchTools'] case final List<Object?> tools when tools.isNotEmpty) {
+      metadata['batchTools'] = tools.whereType<String>().join(',');
+    }
     if (n('durationMs') case final duration?) metadata['durationMs'] = '$duration';
     if (b('backgrounded') == true) metadata['background'] = 'true';
 

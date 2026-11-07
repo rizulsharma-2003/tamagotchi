@@ -156,7 +156,13 @@ class CompanionBeat {
 }
 
 class InteractionScript {
-  const InteractionScript({required this.id, required this.duration, required this.pet, required this.companion, required this.requiresCompanion});
+  const InteractionScript({
+    required this.id,
+    required this.duration,
+    required this.pet,
+    required this.companion,
+    required this.requiresCompanion,
+  });
 
   final InteractionID id;
   final double duration;
@@ -580,7 +586,11 @@ abstract final class InteractionLibrary {
     compPose.x += Ease.lerp(compBeat.from, compBeat.to, compProgress) * motion;
     if (compBeat.held != null) compPose.held = compBeat.held;
 
-    return InteractionFrame(pet: petPose, companion: compPose, props: props(playback.id, t: t, variant: playback.variant, reduced: motion == 0));
+    return InteractionFrame(
+      pet: petPose,
+      companion: compPose,
+      props: props(playback.id, t: t, variant: playback.variant, reduced: motion == 0),
+    );
   }
 
   static List<SceneProp> props(InteractionID id, {required double t, required int variant, required bool reduced}) {
@@ -595,7 +605,9 @@ abstract final class InteractionLibrary {
         }
         if (t >= 3.4 && t < 4.3) {
           final p = Ease.segment(t, 3.4, 4.3);
-          return [SceneProp(ScenePropKind.ball, x: Ease.lerp(0.9, 0.12, p), y: Ease.lerp(1.05, 0.55, p) + 0.6 * Ease.hop(p), rotation: -t * 8)];
+          return [
+            SceneProp(ScenePropKind.ball, x: Ease.lerp(0.9, 0.12, p), y: Ease.lerp(1.05, 0.55, p) + 0.6 * Ease.hop(p), rotation: -t * 8),
+          ];
         }
         return [];
       case InteractionID.highFive || InteractionID.caseClosed:

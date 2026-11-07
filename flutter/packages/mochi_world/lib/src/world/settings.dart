@@ -21,8 +21,12 @@ class CategoryDelivery {
   final bool banner;
   final bool sound;
 
-  CategoryDelivery copyWith({bool? animate, bool? badge, bool? banner, bool? sound}) =>
-      CategoryDelivery(animate: animate ?? this.animate, badge: badge ?? this.badge, banner: banner ?? this.banner, sound: sound ?? this.sound);
+  CategoryDelivery copyWith({bool? animate, bool? badge, bool? banner, bool? sound}) => CategoryDelivery(
+    animate: animate ?? this.animate,
+    badge: badge ?? this.badge,
+    banner: banner ?? this.banner,
+    sound: sound ?? this.sound,
+  );
 
   Map<String, Object?> toJson() => {'animate': animate, 'badge': badge, 'banner': banner, 'sound': sound};
 
@@ -130,7 +134,11 @@ class QuietHours {
 
   static QuietHours fromJson(Object? json) {
     final j = asMap(json);
-    return QuietHours(enabled: boolean(j, 'enabled', false), startMinute: integer(j, 'startMinute', 22 * 60), endMinute: integer(j, 'endMinute', 8 * 60));
+    return QuietHours(
+      enabled: boolean(j, 'enabled', false),
+      startMinute: integer(j, 'startMinute', 22 * 60),
+      endMinute: integer(j, 'endMinute', 8 * 60),
+    );
   }
 }
 

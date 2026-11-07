@@ -103,7 +103,12 @@ class MapperContext {
 
 abstract final class EventToAnimationMapper {
   /// The looping animation that represents a session's current phase.
-  static CompanionAnimation companionLoop(SessionSnapshot? session, {required DateTime now, required double sleepAfter, required bool offline}) {
+  static CompanionAnimation companionLoop(
+    SessionSnapshot? session, {
+    required DateTime now,
+    required double sleepAfter,
+    required bool offline,
+  }) {
     if (offline) return CompanionAnimation.offline;
     if (session == null) return CompanionAnimation.idleAtDesk;
     final quietFor = now.difference(session.lastEventAt).inMicroseconds / 1e6;
@@ -150,7 +155,12 @@ abstract final class EventToAnimationMapper {
   /// Swift's `stableHash` of an event id for the milestone dance: a 31-multiplier over its UTF-8 bytes, 32 bits.
   static int stableHash(String id) => utf8.encode(id).fold(0, (h, byte) => (h * 31 + byte) & 0xFFFFFFFF);
 
-  static Reaction? reaction(CompanionEvent event, {SessionTransition? transition, SessionSnapshot? session, required MapperContext context}) {
+  static Reaction? reaction(
+    CompanionEvent event, {
+    SessionTransition? transition,
+    SessionSnapshot? session,
+    required MapperContext context,
+  }) {
     final label = session?.displayName ?? event.project?.displayName;
     final prefix = (context.multipleLiveSessions || !context.isPrimary) ? (label == null ? '' : '$label · ') : '';
     final bannerBody = label ?? 'Claude Code';
@@ -169,12 +179,20 @@ abstract final class EventToAnimationMapper {
 
       case EventKind.promptSubmitted:
         if (!context.isPrimary) return null;
-        return const Reaction(category: NotificationCategory.toolActivity, pet: PetAnimation.leanForward, companion: CompanionAnimation.readTaskCard);
+        return const Reaction(
+          category: NotificationCategory.toolActivity,
+          pet: PetAnimation.leanForward,
+          companion: CompanionAnimation.readTaskCard,
+        );
 
       case EventKind.toolStarting:
         if (!context.isPrimary) return null;
         final typing = event.toolCategory == ToolCategory.edit || event.toolCategory == ToolCategory.shell;
-        return Reaction(category: NotificationCategory.toolActivity, priority: AnimationPriority.ambient, sound: typing ? SoundCue.keyboard : null);
+        return Reaction(
+          category: NotificationCategory.toolActivity,
+          priority: AnimationPriority.ambient,
+          sound: typing ? SoundCue.keyboard : null,
+        );
 
       case EventKind.toolSucceeded:
         if (!context.isPrimary) return null;
@@ -193,15 +211,24 @@ abstract final class EventToAnimationMapper {
       case EventKind.toolFailed:
         if (event.interrupted) {
           if (!context.isPrimary) return null;
-          return Reaction(category: NotificationCategory.toolActivity, pet: PetAnimation.confusedTilt, caption: '${prefix}tool interrupted');
+          return Reaction(
+            category: NotificationCategory.toolActivity,
+            pet: PetAnimation.confusedTilt,
+            caption: '${prefix}tool interrupted',
+          );
         }
         final outcome = event.buildTestOutcome;
-        final category = outcome != null && context.celebrateCommandResults ? NotificationCategory.buildTest : NotificationCategory.toolFailure;
+        final category = outcome != null && context.celebrateCommandResults
+            ? NotificationCategory.buildTest
+            : NotificationCategory.toolFailure;
         final tool = event.toolName == null ? 'A tool' : EventNormalizer.friendlyToolName(event.toolName!);
         final caption = outcome != null
             ? prefix + (outcome.kind == CommandKind.test ? 'a test command failed' : 'a build command failed')
             : '$prefix$tool reported an error';
-        final banner = BannerContent(title: outcome?.summary ?? '$tool reported an error', body: '$bannerBody — Claude may still be working on it.');
+        final banner = BannerContent(
+          title: outcome?.summary ?? '$tool reported an error',
+          body: '$bannerBody — Claude may still be working on it.',
+        );
         if (transition?.startedInvestigating == true && context.isPrimary) {
           return Reaction(
             category: category,
@@ -251,21 +278,37 @@ abstract final class EventToAnimationMapper {
 
       case EventKind.permissionDenied:
         if (!context.isPrimary) return null;
-        return Reaction(category: NotificationCategory.toolActivity, pet: PetAnimation.confusedTilt, caption: '${prefix}auto mode declined a call');
+        return Reaction(
+          category: NotificationCategory.toolActivity,
+          pet: PetAnimation.confusedTilt,
+          caption: '${prefix}auto mode declined a call',
+        );
 
       case EventKind.notification:
         if (event.metadata['notificationType'] == 'agent_completed') {
-          return Reaction(category: NotificationCategory.turnCompleted, pet: PetAnimation.happyBounce, caption: '${prefix}background agent finished');
+          return Reaction(
+            category: NotificationCategory.turnCompleted,
+            pet: PetAnimation.happyBounce,
+            caption: '${prefix}background agent finished',
+          );
         }
         return null;
 
       case EventKind.subagentStarted:
         if (!context.isPrimary) return null;
-        return const Reaction(category: NotificationCategory.toolActivity, pet: PetAnimation.lookAround, priority: AnimationPriority.ambient);
+        return const Reaction(
+          category: NotificationCategory.toolActivity,
+          pet: PetAnimation.lookAround,
+          priority: AnimationPriority.ambient,
+        );
 
       case EventKind.subagentStopped:
         if (!context.isPrimary) return null;
-        return const Reaction(category: NotificationCategory.toolActivity, companion: CompanionAnimation.nod, priority: AnimationPriority.ambient);
+        return const Reaction(
+          category: NotificationCategory.toolActivity,
+          companion: CompanionAnimation.nod,
+          priority: AnimationPriority.ambient,
+        );
 
       case EventKind.turnCompleted:
         final buildTest = session?.buildTestThisTurn;
@@ -287,7 +330,9 @@ abstract final class EventToAnimationMapper {
         var sound = SoundCue.success;
         if (session?.investigatedThisTurn == true) {
           interaction = InteractionID.caseClosed;
-        } else if (buildTest != null && buildTest.passed && (buildTest.source == BuildTestSource.explicitReport || context.celebrateCommandResults)) {
+        } else if (buildTest != null &&
+            buildTest.passed &&
+            (buildTest.source == BuildTestSource.explicitReport || context.celebrateCommandResults)) {
           interaction = InteractionID.trophyCelebration;
           sound = SoundCue.celebration;
         } else if (transition?.turnDurationTrusted == true &&
@@ -357,7 +402,9 @@ abstract final class EventToAnimationMapper {
             );
           case (ReportKind.milestone, _):
             final rare = Ease.hash(stableHash(event.id), 7) < 0.34;
-            final interaction = context.firstMilestone ? InteractionID.graduation : (rare ? InteractionID.syncDance : InteractionID.victoryDance);
+            final interaction = context.firstMilestone
+                ? InteractionID.graduation
+                : (rare ? InteractionID.syncDance : InteractionID.victoryDance);
             return Reaction(
               category: NotificationCategory.milestone,
               pet: PetAnimation.victory,

@@ -5,7 +5,14 @@ import '../model/json.dart';
 
 /// What is playing now.
 class Playing<A extends CharacterAnimationKind> {
-  const Playing({required this.animation, required this.priority, required this.startedAt, this.duration, required this.token, this.scriptID});
+  const Playing({
+    required this.animation,
+    required this.priority,
+    required this.startedAt,
+    this.duration,
+    required this.token,
+    this.scriptID,
+  });
 
   final A animation;
   final AnimationPriority priority;
@@ -91,7 +98,14 @@ class CharacterAnimator<A extends CharacterAnimationKind> {
   bool get isPlayingOneShot => _current.duration != null;
 
   /// Starts a one-shot (or a scripted segment) on top of the base.
-  PlayResult play(A animation, {required AnimationPriority priority, required double at, double? duration, String? scriptID, bool ignoreCooldown = false}) {
+  PlayResult play(
+    A animation, {
+    required AnimationPriority priority,
+    required double at,
+    double? duration,
+    String? scriptID,
+    bool ignoreCooldown = false,
+  }) {
     final now = at;
     if (!ignoreCooldown && animation.cooldown > 0) {
       final last = _lastStarted[animation];

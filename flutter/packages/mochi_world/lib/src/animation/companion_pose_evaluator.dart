@@ -392,7 +392,13 @@ abstract final class CompanionPoseEvaluator {
         p.lookX = Keys.value(t, const [(0, 0), (0.2, -0.75), (0.45, 0.2), (0.65, -0.8), (1.4, -0.6)]);
         p.y += 0.13 * Ease.bump(t, 0.25, 0.45) * m;
         p.effects = [
-          Effect(EffectKind.exclamation, x: 0.45, y: 1.32, scale: Ease.outBack(Ease.segment(t, 0.25, 0.45)), opacity: Ease.bump(t, 0.25, 1.2)),
+          Effect(
+            EffectKind.exclamation,
+            x: 0.45,
+            y: 1.32,
+            scale: Ease.outBack(Ease.segment(t, 0.25, 0.45)),
+            opacity: Ease.bump(t, 0.25, 1.2),
+          ),
         ];
 
       case CompanionAnimation.rpsShake:
@@ -471,7 +477,13 @@ abstract final class LegacyEffects {
       }(),
   ];
 
-  static List<Effect> sparkles(double t, {required (double, double) around, required int count, required double spread, required int seed}) => [
+  static List<Effect> sparkles(
+    double t, {
+    required (double, double) around,
+    required int count,
+    required double spread,
+    required int seed,
+  }) => [
     for (var index = 0; index < count; index++)
       () {
         final angle = Ease.hash(index, seed) * 2 * math.pi;

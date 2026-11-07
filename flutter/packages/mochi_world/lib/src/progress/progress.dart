@@ -179,10 +179,19 @@ class ProgressState {
       if (date != null) state.unlocked[e.key] = date;
     }
     state.affectionPoints = integer(j, 'affectionPoints', 0);
-    state.interactionDays = [for (final d in (j['interactionDays'] is List ? j['interactionDays'] as List : const [])) if (d is String) d];
-    state.dailyPoints = {for (final e in asMap(j['dailyPoints']).entries) if (e.value is num) e.key: (e.value as num).toInt()};
+    state.interactionDays = [
+      for (final d in (j['interactionDays'] is List ? j['interactionDays'] as List : const []))
+        if (d is String) d,
+    ];
+    state.dailyPoints = {
+      for (final e in asMap(j['dailyPoints']).entries)
+        if (e.value is num) e.key: (e.value as num).toInt(),
+    };
     state.dailyPointsDay = string(j, 'dailyPointsDay') ?? '';
-    state.projectKeys = [for (final k in (j['projectKeys'] is List ? j['projectKeys'] as List : const [])) if (k is String) k];
+    state.projectKeys = [
+      for (final k in (j['projectKeys'] is List ? j['projectKeys'] as List : const []))
+        if (k is String) k,
+    ];
     state.observedSessions = integer(j, 'observedSessions', 0);
     state.observedTurns = integer(j, 'observedTurns', 0);
     state.milestones = integer(j, 'milestones', 0);
@@ -215,8 +224,7 @@ class InteractionResult {
 /// Records what earns friendship and achievements (Swift `AchievementEngine`). Persistence is the host's: read
 /// [state] (or `state.toJson()`) after a change, and pass a saved state in.
 class AchievementEngine {
-  AchievementEngine({ProgressState? state, this.calendar = const WorldCalendar.local(), this.onChange})
-    : state = state ?? ProgressState();
+  AchievementEngine({ProgressState? state, this.calendar = const WorldCalendar.local(), this.onChange}) : state = state ?? ProgressState();
 
   ProgressState state;
   final WorldCalendar calendar;

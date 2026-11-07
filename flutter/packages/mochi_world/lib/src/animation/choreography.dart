@@ -15,8 +15,7 @@ abstract final class Choreo {
   static double smooth(double x) => Ease.smooth(x);
 
   /// Smoothly moves from `from` to `to` while `t` crosses [a, b].
-  static double ramp(double t, double a, double b, double from, double to) =>
-      from + (to - from) * Ease.smooth(Ease.segment(t, a, b));
+  static double ramp(double t, double a, double b, double from, double to) => from + (to - from) * Ease.smooth(Ease.segment(t, a, b));
 
   /// Ease-in (accelerating) ramp.
   static double rampIn(double t, double a, double b, double from, double to) {
@@ -35,8 +34,7 @@ abstract final class Choreo {
       from + (to - from) * Ease.outBack(Ease.segment(t, a, b), overshoot);
 
   /// A quick "perk up" with a gentle overshoot (ears, a startled look): fast but never a snap.
-  static double perk(double t, double a, double b, double from, double to) =>
-      from + (to - from) * Ease.outBack(Ease.segment(t, a, b), 1.0);
+  static double perk(double t, double a, double b, double from, double to) => from + (to - from) * Ease.outBack(Ease.segment(t, a, b), 1.0);
 
   /// 0 outside [a, b], 1 inside, with smooth fades of `fade` seconds at both ends.
   static double window(double t, double a, double b, {required double fade}) {
@@ -285,7 +283,14 @@ abstract final class PetFX {
     }
   }
 
-  static void confetti(PetPose p, {required double t, required double originY, required int count, required int seed, required bool reduced}) {
+  static void confetti(
+    PetPose p, {
+    required double t,
+    required double originY,
+    required int count,
+    required int seed,
+    required bool reduced,
+  }) {
     if (!(t > 0 && t < 1.9)) return;
     for (var index = 0; index < count; index++) {
       final angle = Ease.lerp(-2.4, -0.7, Ease.hash(index, seed)) * -1;

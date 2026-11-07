@@ -572,7 +572,8 @@ class MochiWorld {
       }
       if (!started) {
         if (reaction.pet case final animation?) pet.play(animation, priority: reaction.priority, at: t);
-        if (reaction.companion case final animation? when companionPresent && !_departing && companion.current.animation != CompanionAnimation.absent) {
+        if (reaction.companion case final animation?
+            when companionPresent && !_departing && companion.current.animation != CompanionAnimation.absent) {
           companion.play(animation, priority: reaction.priority, at: t);
         }
       }
@@ -658,7 +659,11 @@ class MochiWorld {
     if (decision.animate && interaction == null) pet.play(PetAnimation.excitedJump, priority: AnimationPriority.reaction, at: t);
     if (decision.sound) _playSound(SoundCue.achievement);
     if (decision.banner) {
-      effects?.postBanner(BannerContent(title: 'Achievement unlocked: ${id.title}', body: id.criteria), NotificationCategory.achievement, null);
+      effects?.postBanner(
+        BannerContent(title: 'Achievement unlocked: ${id.title}', body: id.criteria),
+        NotificationCategory.achievement,
+        null,
+      );
     }
   }
 
@@ -690,15 +695,30 @@ class MochiWorld {
     if (script.requiresCompanion && !_companionAvailable) return InteractionRequest.refused;
     // Mochi is out on a desktop adventure: nobody beside Patch.
     if (script.requiresCompanion && adventureActive) return InteractionRequest.refused;
-    return _beginInteraction(id, priority: priority, variant: variant, label: label) ? InteractionRequest.started : InteractionRequest.refused;
+    return _beginInteraction(id, priority: priority, variant: variant, label: label)
+        ? InteractionRequest.started
+        : InteractionRequest.refused;
   }
 
   bool _beginInteraction(InteractionID id, {required AnimationPriority priority, required int variant, String? label}) {
     final script = InteractionLibrary.script(id, variant: variant);
     if (script.requiresCompanion && !_companionAvailable) return false;
     final t = _uptime();
-    final playback = InteractionPlayback(id: id, startedAt: t, variant: variant, companionLoop: _companionLoopForScripts(), sessionLabel: label);
-    final petResult = pet.play(PetAnimation.scripted, priority: priority, at: t, duration: script.duration, scriptID: id.name, ignoreCooldown: true);
+    final playback = InteractionPlayback(
+      id: id,
+      startedAt: t,
+      variant: variant,
+      companionLoop: _companionLoopForScripts(),
+      sessionLabel: label,
+    );
+    final petResult = pet.play(
+      PetAnimation.scripted,
+      priority: priority,
+      at: t,
+      duration: script.duration,
+      scriptID: id.name,
+      ignoreCooldown: true,
+    );
     if (petResult is! PlayStarted) return false;
     final companionResult = companion.play(
       CompanionAnimation.scripted,
@@ -743,7 +763,10 @@ class MochiWorld {
     };
     if (!_settings.pauseReactions) {
       pet.play(animation, priority: AnimationPriority.user, at: t, ignoreCooldown: true);
-      if (companionPresent && kind != PetInteraction.pet && companion.current.animation.isLoop && companion.base != CompanionAnimation.waiting) {
+      if (companionPresent &&
+          kind != PetInteraction.pet &&
+          companion.current.animation.isLoop &&
+          companion.base != CompanionAnimation.waiting) {
         companion.play(CompanionAnimation.nod, priority: AnimationPriority.ambient, at: t + 0.01);
       }
       if (_settings.soundEnabled && !NotificationPolicy.isQuiet(_settings, date, calendar: calendar)) {
@@ -752,7 +775,11 @@ class MochiWorld {
       effects?.userDidInteract(kind);
     }
     if (result.levelUp) {
-      toast = WorldToast(title: 'Friendship level ${progress.friendshipLevel}', detail: '${_settings.petName} is happy you\'re here.', until: t + 6);
+      toast = WorldToast(
+        title: 'Friendship level ${progress.friendshipLevel}',
+        detail: '${_settings.petName} is happy you\'re here.',
+        until: t + 6,
+      );
     }
     for (final id in result.unlocked) {
       _announce(id);
@@ -884,7 +911,9 @@ class MochiWorld {
     timeline.removeWhere((e) => e.isSimulated);
     resultCards.removeWhere((_, card) => card.isSimulated);
     if (attention?.sessionID case final id? when registry[id] == null) attention = null;
-    if (_settings.pinnedSessionID case final pinned? when registry[pinned] == null) _settings = _settings.copyWith(pinnedSessionID: () => null);
+    if (_settings.pinnedSessionID case final pinned? when registry[pinned] == null) {
+      _settings = _settings.copyWith(pinnedSessionID: () => null);
+    }
     _updatePresence();
     _updateBases();
   }
@@ -966,7 +995,9 @@ class MochiWorld {
     if (t - _lastPruneAt > 60) {
       _lastPruneAt = t;
       registry.prune(date);
-      if (_settings.pinnedSessionID case final pinned? when registry[pinned] == null) _settings = _settings.copyWith(pinnedSessionID: () => null);
+      if (_settings.pinnedSessionID case final pinned? when registry[pinned] == null) {
+        _settings = _settings.copyWith(pinnedSessionID: () => null);
+      }
       resultCards.removeWhere((_, card) => !(_seconds(date, card.completedAt) < 3600));
     }
 
@@ -1078,14 +1109,20 @@ class MochiWorld {
     final session = primarySession;
     if (companionPresent && !_departing) {
       final loop = EventToAnimationMapper.companionLoop(session, now: date, sleepAfter: _sleepAfter, offline: bridgeError != null);
-      if (companion.base == CompanionAnimation.sleep && loop != CompanionAnimation.sleep && !companion.isPlayingOneShot && !_settings.pauseReactions) {
+      if (companion.base == CompanionAnimation.sleep &&
+          loop != CompanionAnimation.sleep &&
+          !companion.isPlayingOneShot &&
+          !_settings.pauseReactions) {
         companion.play(CompanionAnimation.wakeUp, priority: AnimationPriority.ambient, at: t);
       }
       companion.setBase(loop, at: t);
     } else if (!companionPresent) {
       companion.setBase(CompanionAnimation.absent, at: t);
     }
-    pet.setBase(EventToAnimationMapper.petLoop(session, now: date, asleep: petAsleep || (focus?.petNaps ?? false)), at: t);
+    pet.setBase(
+      EventToAnimationMapper.petLoop(session, now: date, asleep: petAsleep || (focus?.petNaps ?? false)),
+      at: t,
+    );
     if (_settings.pauseReactions && interaction?.petToken != null) pet.cancel(interaction!.petToken!, at: t);
   }
 
@@ -1136,7 +1173,13 @@ class MochiWorld {
     CompanionPose singleCompanion() {
       final current = companion.current;
       final animation = current.animation == CompanionAnimation.scripted ? CompanionAnimation.idleAtDesk : current.animation;
-      return CompanionPoseEvaluator.pose(animation, elapsed: current.elapsed(time), duration: current.duration, context: companionContext, detail: detail);
+      return CompanionPoseEvaluator.pose(
+        animation,
+        elapsed: current.elapsed(time),
+        duration: current.duration,
+        context: companionContext,
+        detail: detail,
+      );
     }
 
     final playback = interaction;
@@ -1256,13 +1299,18 @@ CompanionEvent? eventFromJson(Object? json) {
     toolCategory: enumByName(ToolCategory.values, j['toolCategory']),
     toolUseID: string(j, 'toolUseID'),
     attention: enumByName(AttentionKind.values, j['attention']),
-    report: reportKind == null || reportStatus == null ? null : ExplicitReport(kind: reportKind, status: reportStatus, label: string(r, 'label')),
+    report: reportKind == null || reportStatus == null
+        ? null
+        : ExplicitReport(kind: reportKind, status: reportStatus, label: string(r, 'label')),
     commandKind: enumByName(CommandKind.values, j['commandKind']),
     commandReliable: boolean(j, 'commandReliable', false),
     exitCode: j['exitCode'] is num ? (j['exitCode'] as num).toInt() : null,
     interrupted: boolean(j, 'interrupted', false),
     inSubagent: boolean(j, 'inSubagent', false),
-    metadata: {for (final e in asMap(j['metadata']).entries) if (e.value is String) e.key: e.value as String},
+    metadata: {
+      for (final e in asMap(j['metadata']).entries)
+        if (e.value is String) e.key: e.value as String,
+    },
     message: string(j, 'message'),
     origin: origin,
     delivery: enumByName(EventDelivery.values, j['delivery']) ?? EventDelivery.live,
