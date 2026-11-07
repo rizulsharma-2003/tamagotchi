@@ -2,6 +2,7 @@
 // scans, and who's connected. The Dart counterpart of the Mac's LinkController (Sources/App/Features/Phone).
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:mochi_link/mochi_link.dart';
@@ -43,6 +44,7 @@ class LinkHost extends ChangeNotifier {
     required this.hostName,
     this.relay = defaultRelay,
     this.platform = 'windows',
+    this.phonesHintFile,
     DateTime Function()? clock,
     void Function(String message)? log,
   }) : _vault = vault,
@@ -70,6 +72,11 @@ class LinkHost extends ChangeNotifier {
   /// What the relay lists this device as.
   final String platform;
 
+  /// Remembers whether another device has joined this PC's room (not a secret: "1" or "0"), so Settings says
+  /// "paired" correctly before the relay has answered, or while offline. Null: kept in memory only.
+  final String? phonesHintFile;
+  bool? _phonesHint;
+
   LinkCredentials? _credentials;
   RelayLink? _link;
   final List<StreamSubscription<Object?>> _subscriptions = [];
@@ -89,7 +96,18 @@ class LinkHost extends ChangeNotifier {
   final StreamController<void> _connected = StreamController.broadcast(sync: true);
 
   bool get loaded => _loaded;
-  bool get paired => _credentials != null;
+
+  /// A phone (or Mochi Cloud) is in this PC's room. The room itself may exist without one: Mochi makes it quietly at
+  /// first launch so it can check for updates ([ensureRoom]), and pairing then only invites into it.
+  bool get paired {
+    if (_credentials == null) return false;
+    // The relay's word once it has spoken (it always lists this PC too); until then, what it said last time.
+    if (_peers.isNotEmpty) return devices.isNotEmpty;
+    return _phonesHint ?? true;
+  }
+
+  /// This PC has its room on the relay (with or without phones).
+  bool get hasRoom => _credentials != null;
   LinkCredentials? get credentials => _credentials;
   RelayLink? get link => _link;
 
@@ -131,11 +149,50 @@ class LinkHost extends ChangeNotifier {
     } on Object catch (error) {
       _say('the saved pairing could not be read (${error.runtimeType})');
     }
-    if (saved != null && saved.roomKey != null && saved.role == 'host') _use(saved);
+    if (saved != null && saved.roomKey != null && saved.role == 'host') {
+      _phonesHint = _readHint();
+      _use(saved);
+    }
     _loaded = true;
     notifyListeners();
   }
 
+  /// This PC's room, made quietly if it has none yet (or the relay ended the old one): the update check needs the
+  /// room's credential even before any phone is paired. Null when the relay can't be reached; nothing is shown.
+  Future<LinkCredentials?> ensureRoom() async {
+    final current = _credentials;
+    if (current != null && _status != LinkStatus.removed) return current;
+    try {
+      return await _makeRoom();
+    } on Object catch (error) {
+      _say('the room could not be made (${error.runtimeType})');
+      return null;
+    }
+  }
+
+  Future<LinkCredentials>? _making;
+
+  /// Makes the room and keeps its credential (once, however many ask at the same time).
+  Future<LinkCredentials> _makeRoom() => _making ??= () async {
+    try {
+      if (_credentials != null) await _forget();
+      final made = await _api.createRoom(relay: relay, platform: platform, name: hostName);
+      try {
+        await _vault.save(made);
+      } on Object {
+        // A room nobody can get back into: delete it again.
+        unawaited(_api.deleteRoom(made).catchError((Object _) {}));
+        throw const LinkPairingException("Couldn't save the link on this PC.");
+      }
+      _setHint(false);
+      _use(made);
+      _say('made the room');
+      notifyListeners();
+      return made;
+    } finally {
+      _making = null;
+    }
+  }();
   /// Shows a fresh pairing code, making the room first if this PC doesn't have one yet.
   Future<void> showCode() async {
     if (_working) return;
@@ -144,19 +201,7 @@ class LinkHost extends ChangeNotifier {
     notifyListeners();
     try {
       var credentials = _credentials;
-      if (credentials == null || _status == LinkStatus.removed) {
-        if (credentials != null) await _forget();
-        final made = await _api.createRoom(relay: relay, platform: platform, name: hostName);
-        try {
-          await _vault.save(made);
-        } on Object {
-          // A room nobody can get back into: delete it again.
-          unawaited(_api.deleteRoom(made).catchError((Object _) {}));
-          throw const LinkPairingException("Couldn't save the link on this PC.");
-        }
-        _use(made);
-        credentials = made;
-      }
+      if (credentials == null || _status == LinkStatus.removed) credentials = await _makeRoom();
       _code = await _api.invite(credentials, hostName: hostName);
       _codeExpires = _clock().add(codeLifetime);
       _codeKnownDevices = _peers.isEmpty ? null : {for (final peer in devices) peer.device};
@@ -214,6 +259,7 @@ class LinkHost extends ChangeNotifier {
   Future<void> _forget() async {
     await _disconnect();
     _credentials = null;
+    _setHint(null);
     _code = null;
     _codeExpires = null;
     try {
@@ -250,8 +296,10 @@ class LinkHost extends ChangeNotifier {
 
   void _presenceChanged(LinkPresence presence) {
     final wasOnline = _status == LinkStatus.online;
+    final wasPaired = paired;
     _status = presence.status;
     _peers = presence.peers;
+    if (_peers.isNotEmpty && devices.isNotEmpty != _phonesHint) _setHint(devices.isNotEmpty);
     // A phone that joined used up the code.
     final known = _codeKnownDevices;
     if (_code != null && known == null) {
@@ -263,9 +311,40 @@ class LinkHost extends ChangeNotifier {
       _code = null;
       _codeExpires = null;
     }
-    if (presence.status == LinkStatus.online && !wasOnline && !_connected.isClosed) _connected.add(null);
+    // Online again, or the first phone just joined a room that had none: everything is published afresh.
+    final joined = paired && !wasPaired && presence.status == LinkStatus.online && wasOnline;
+    if ((presence.status == LinkStatus.online && !wasOnline || joined) && !_connected.isClosed) _connected.add(null);
     if (presence.status == LinkStatus.removed) _say('the relay ended this room');
     notifyListeners();
+  }
+
+  bool? _readHint() {
+    final path = phonesHintFile;
+    if (path == null) return _phonesHint;
+    try {
+      final file = File(path);
+      if (!file.existsSync()) return null;
+      return file.readAsStringSync().trim() == '1';
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  void _setHint(bool? phones) {
+    _phonesHint = phones;
+    final path = phonesHintFile;
+    if (path == null) return;
+    try {
+      final file = File(path);
+      if (phones == null) {
+        if (file.existsSync()) file.deleteSync();
+      } else {
+        file.parent.createSync(recursive: true);
+        file.writeAsStringSync(phones ? '1' : '0');
+      }
+    } on FileSystemException {
+      // Only a hint.
+    }
   }
 
   /// Connection events only: never values or secrets.

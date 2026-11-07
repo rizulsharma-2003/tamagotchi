@@ -408,14 +408,25 @@ void main() {
       expect(find.text('Not paired'), findsOneWidget);
     });
 
-    testWidgets('paired, but nobody has joined yet: no test to send, no Live Activity line', (tester) async {
+    testWidgets('a room nobody has joined yet (made for updates, or a code not scanned yet) is not paired', (tester) async {
       await room(tester, const []);
+      await open(tester, pane: SettingsTab.phones);
+      expect(t.desktop.link.hasRoom, isTrue);
+      expect(t.desktop.link.paired, isFalse);
+      expect(find.text('Not paired'), findsOneWidget);
+      expect(find.text('Unpair This PC…'), findsNothing);
+      expect(find.text('Send a Test to All Phones'), findsNothing);
+      expect(find.text('Live Activity'), findsNothing);
+      expect(find.textContaining('Mochi on your phones: pairing'), findsOneWidget);
+    });
+
+    testWidgets('only Mochi Cloud in the room: paired, but no phone to send a test to', (tester) async {
+      await room(tester, [peer('dev_cloud', 'cloud', 'cloud', 'Mochi Cloud')]);
       await open(tester, pane: SettingsTab.phones);
       expect(find.text('None paired yet'), findsOneWidget);
       final test = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Send a Test to All Phones'));
       expect(test.onPressed, isNull);
       expect(find.text('Live Activity'), findsNothing);
-      expect(find.textContaining('Mochi on your phones: pairing'), findsOneWidget);
     });
 
     testWidgets('unpaired: Pair a Phone… opens the pairing page with a fresh code', (tester) async {
