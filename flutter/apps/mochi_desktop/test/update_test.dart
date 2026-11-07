@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:mochi_desktop/src/update/self_install.dart';
+import 'package:mochi_wire/mochi_wire.dart' show InstallLayout;
 import 'package:mochi_desktop/src/update/update_feed.dart';
 import 'package:mochi_desktop/src/update/update_keys.dart';
 import 'package:mochi_desktop/src/update/update_manifest.dart';
@@ -613,6 +614,8 @@ void main() {
       expect(entry['InstallDate'], '20261107');
       expect(entry['NoModify'], 1);
       expect(entry['EstimatedSize'], greaterThan(0));
+      // A click on one of Mochi's notifications in the notification centre starts the installed Mochi.
+      expect(system.keys['${InstallLayout.toastActivatorKey}\\LocalServer32']?[''], '"${rig.layout.exe}"');
 
       expect(moved, [rig.layout.exe], reason: 'Start with Windows now starts the installed copy');
 

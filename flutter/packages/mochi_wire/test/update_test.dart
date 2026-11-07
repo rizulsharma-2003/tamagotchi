@@ -477,7 +477,9 @@ void main() {
       system = FakeUninstallSystem()
         ..keys[layout.uninstallKey] = {'DisplayName': 'Mochi'}
         ..keys[runKey] = {'Mochi': '"${layout.exe}"', 'Other': r'"C:\Other\other.exe"'}
-        ..keys[approvedKey] = {'Mochi': 'x'};
+        ..keys[approvedKey] = {'Mochi': 'x'}
+        ..keys[InstallLayout.toastActivatorKey] = {'': 'Mochi'}
+        ..keys[InstallLayout.appUserModelIdKey] = {'DisplayName': 'Mochi'};
       out = StringBuffer();
     });
 
@@ -499,6 +501,9 @@ void main() {
       expect(system.deleteLater, [layout.installDirectory]);
       expect(File(layout.shortcut).existsSync(), isFalse);
       expect(system.keys.containsKey(layout.uninstallKey), isFalse);
+      // What Mochi's Windows notifications registered goes too.
+      expect(system.keys.containsKey(InstallLayout.toastActivatorKey), isFalse);
+      expect(system.keys.containsKey(InstallLayout.appUserModelIdKey), isFalse);
       expect(system.keys[runKey], {'Other': r'"C:\Other\other.exe"'});
       expect(system.keys[approvedKey], isEmpty);
       expect(Directory(UpdateFiles(paths).directory).existsSync(), isFalse);
