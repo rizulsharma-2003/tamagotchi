@@ -144,6 +144,7 @@ class _PetSurfaceState extends State<PetSurface> {
 
   /// A click on Mochi (or Patch) in the taskbar opens the popover, as on the Mac; off the taskbar a click pets Mochi.
   void _tap() {
+    widget.stroll.log?.call('pet: tap');
     final popover = widget.onOpenPopover;
     if (widget.stroll.onTaskbar && popover != null) return popover();
     widget.desktop.interact('pet');
@@ -151,6 +152,7 @@ class _PetSurfaceState extends State<PetSurface> {
 
   /// Enter: the popover from the taskbar, Mochi's window from the desktop.
   void _activate() {
+    widget.stroll.log?.call('pet: activate (keyboard)');
     final popover = widget.onOpenPopover;
     if (widget.stroll.onTaskbar && popover != null) return popover();
     widget.onAction(ShellAction.showMain);
@@ -199,7 +201,9 @@ class _PetSurfaceState extends State<PetSurface> {
           container: true,
           button: true,
           label: '$name. ${_mood.describe(name)}.$patchText${bubble != null && bubble != _mood.describe(name) ? ' $bubble.' : ''}',
-          hint: onTaskbar && widget.onOpenPopover != null ? 'Press Enter for the popover, Space to pet' : 'Press Enter to open Mochi, Space to pet',
+          hint: onTaskbar && widget.onOpenPopover != null
+              ? 'Press Enter for the popover, Space to pet'
+              : 'Press Enter to open Mochi, Space to pet',
           excludeSemantics: true,
           child: Stack(
             children: [

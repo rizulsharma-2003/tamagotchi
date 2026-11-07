@@ -147,8 +147,15 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   final int taskbarChecks;
   final int measureChecks;
 
-  /// The pointer checks between two raises of the window over the taskbar.
-  static const int raiseEvery = 5;
+  /// How often the window goes back over the taskbar (seconds), besides at once when the taskbar was clicked.
+  static const double raisePeriod = 0.5;
+
+  /// How often the pointer is checked while it's near Mochi or Patch: a click that comes right after the pointer
+  /// gets there still reaches them (the Mac polls faster near the bar too).
+  static const Duration nearPointerInterval = Duration(milliseconds: 33);
+
+  /// How close counts as near (logical pixels around their bodies).
+  static const double nearMargin = 90;
 
   /// Development: what the stroll sees and does (a `stroll-debug` file in Mochi's folder turns it on).
   final void Function(String message)? log;
@@ -186,7 +193,6 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   double? _homeNear;
   Timer? _summonTimer;
   int _checks = 0;
-  int _pointerChecks = 0;
   Timer? _frameTimer;
   Timer? _wakeTimer;
   Timer? _pointerTimer;
@@ -530,6 +536,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   /// Off the taskbar: the window takes clicks again and nothing watches the pointer.
   void _leaveTaskbar() {
     _halt();
+    _nearPointer = false;
     _lastHome = _home ?? _lastHome;
     _home = null;
     _summonTimer?.cancel();
@@ -660,13 +667,35 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     final stage = _stage;
     final frame = _frame;
     if (window == null || stage == null || frame == null || !onTaskbar) return;
-    _pointerChecks++;
+    final now = _clock();
     final inFront = taskbar.taskbarInFront();
-    if ((inFront && !_taskbarWasInFront) || _pointerChecks % raiseEvery == 0) window.raise();
+    if ((inFront && !_taskbarWasInFront) || now - _lastRaise >= raisePeriod) {
+      window.raise();
+      _lastRaise = now;
+    }
     _taskbarWasInFront = inFront;
     final cursor = taskbar.cursor();
     _setClickThrough(!(_dragging || (cursor != null && _overBody(stage, frame, cursor.$1, cursor.$2))));
+    // Faster while the pointer is near them, the usual pace otherwise.
+    final margin = (nearMargin * stage.scale).round();
+    final near =
+        cursor != null &&
+        bodies().any(
+          (body) =>
+              PixelRect(body.left - margin, body.top - margin, body.right + margin, body.bottom + margin).contains(cursor.$1, cursor.$2),
+        );
+    if (near != _nearPointer && _pointerTimer != null) {
+      _nearPointer = near;
+      _pointerTimer?.cancel();
+      _pointerTimer = Timer.periodic(near ? nearPointerInterval : pointerInterval, (_) => _pointer());
+    }
   }
+
+  bool _nearPointer = false;
+  double _lastRaise = double.negativeInfinity;
+
+  /// The pointer is being checked often (it's near Mochi or Patch).
+  bool get pointerNear => _nearPointer;
 
   /// The pointer is over Mochi (or Patch, at his desk on the taskbar).
   bool _overBody(TaskbarStage stage, PixelRect frame, int x, int y) => bodies().any((body) => body.contains(x, y));
@@ -704,11 +733,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     // A moment with Patch is the reaction itself: Mochi is on its way over to him, or already there.
     final together = companion?.pending != null || companion?.interaction != null;
     if (hold == null || !onTaskbar || _dragging || together) return;
-    stroller.react(
-      _clock(),
-      hold,
-      attentive: cue == PetCue.finished || cue == PetCue.snag || cue == PetCue.replied,
-    );
+    stroller.react(_clock(), hold, attentive: cue == PetCue.finished || cue == PetCue.snag || cue == PetCue.replied);
     _tick();
   }
 

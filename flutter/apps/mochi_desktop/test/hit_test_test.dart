@@ -68,6 +68,23 @@ void main() {
     return window.clickThrough.isEmpty || window.clickThrough.last;
   }
 
+  hitTest('near Mochi the pointer is checked three times as often, so a quick click still lands', (tester) async {
+    final (stroll, window, taskbar) = await start(tester, 1);
+    final body = stroll.bodies().single;
+    expect(stroll.pointerNear, isFalse);
+    taskbar.pointer = (body.left - 60, body.top + 5);
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(stroll.pointerNear, isTrue, reason: 'close to Mochi');
+    // Onto Mochi: clicks are let in within one fast check.
+    taskbar.pointer = ((body.left + body.right) ~/ 2, (body.top + body.bottom) ~/ 2);
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(window.clickThrough.last, isFalse);
+    taskbar.pointer = (body.right + 400, body.top);
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(stroll.pointerNear, isFalse, reason: 'far away: the usual pace');
+    expect(window.clickThrough.last, isTrue);
+  });
+
   for (final scale in [1.0, 1.5, 2.0]) {
     final percent = '${(scale * 100).round()}%';
 

@@ -131,6 +131,15 @@ class DesktopAppState extends State<DesktopApp> {
   @override
   void initState() {
     super.initState();
+    // Development: with the stroll's debug log on, Flutter's errors go there too (a release build has no console).
+    final log = _stroll.log;
+    if (log != null) {
+      final previous = FlutterError.onError;
+      FlutterError.onError = (details) {
+        log('error: ${details.exceptionAsString()} ${details.stack.toString().split('\n').take(6).join(' | ')}');
+        previous?.call(details);
+      };
+    }
     unawaited(_loadLibrary());
     _subscriptions.add(widget.shell.actions.listen(handle));
     _subscriptions.add(desktop.cues.listen(_noteActivity));
@@ -387,7 +396,9 @@ class _MainSurface extends StatelessWidget {
             onBack: page == MainPage.home ? null : back,
             onPair: page == MainPage.pairing || settingsPage ? null : () => state.open(MainPage.pairing),
             onSettings: settingsPage ? null : () => state.open(MainPage.settings),
-            trailing: settingsPage ? _ClaudeStatusPill(desktop: desktop, onTap: () => state.settingsNavigation.tab = SettingsTab.claude) : null,
+            trailing: settingsPage
+                ? _ClaudeStatusPill(desktop: desktop, onTap: () => state.settingsNavigation.tab = SettingsTab.claude)
+                : null,
           ),
           Expanded(
             child: switch (page) {

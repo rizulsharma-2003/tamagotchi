@@ -757,15 +757,31 @@ class _Footer extends StatelessWidget {
   final VoidCallback onSettings;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: Space.xs, vertical: 2),
-    child: Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      children: [
-        TextButton.icon(onPressed: onOpenMain, icon: const Icon(Icons.open_in_new_rounded, size: 16), label: Text('Open $pet')),
-        TextButton.icon(onPressed: onAsk, icon: const Icon(Icons.auto_awesome_rounded, size: 16), label: Text('Ask $pet')),
-        TextButton.icon(onPressed: onSettings, icon: const Icon(Icons.settings_rounded, size: 16), label: const Text('Settings')),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final style = TextButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: Space.s),
+      visualDensity: VisualDensity.compact,
+    );
+    Widget button(String text, IconData icon, VoidCallback onPressed) => TextButton.icon(
+      style: style,
+      onPressed: onPressed,
+      icon: Icon(icon, size: 16),
+      label: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
+    );
+    final buttons = [
+      button('Open $pet', Icons.open_in_new_rounded, onOpenMain),
+      button('Ask $pet', Icons.auto_awesome_rounded, onAsk),
+      button('Settings', Icons.settings_rounded, onSettings),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Space.xs, vertical: 2),
+      // One row, as on the Mac; wrapped when the text is large.
+      child: MediaQuery.textScalerOf(context).scale(1) > 1.2
+          ? Wrap(alignment: WrapAlignment.spaceBetween, children: buttons)
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [for (final b in buttons) Flexible(child: b)],
+            ),
+    );
+  }
 }
