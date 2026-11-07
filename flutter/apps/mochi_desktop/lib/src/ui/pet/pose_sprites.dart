@@ -5,8 +5,9 @@
 //
 // - A picture is drawn exactly where the art would be: at the same scale, and at the same fraction of a pixel (the
 //   picture's origin keeps the fractional part of where it's drawn), so a copy lands on the same pixels the art would
-//   have: the same pixels, exactly (test/performance_test.dart). Where the origin moves continuously (Mochi pottering
-//   beside Patch), the fraction is kept to a quarter of a pixel, so the pictures can be reused.
+//   have, to within what the art itself varies by when it's drawn a few pixels along (test/performance_test.dart).
+//   Where the origin moves continuously (Mochi pottering beside Patch), the fraction is kept to a quarter of a pixel, so
+//   the pictures can be reused.
 // - Each picture's key is everything its drawing depends on: the pose itself (every field), the time-dependent bits
 //   of Patch's drawing (CompanionRenderer.timeKey), the coat, what they wear, light or dark, the detail level, the size
 //   and the display's scale. The last ones are the cache's context: when it changes (another display scale, another
