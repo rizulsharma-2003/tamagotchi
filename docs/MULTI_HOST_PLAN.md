@@ -1,5 +1,7 @@
 # Multi-host Mochi Link rooms: design
 
+> **Status: PARKED (2026-11-07).** The user doesn't want multi-host support for now and will bring it back with a better plan. Don't implement any of this unless they ask. Kept as a reference only.
+
 **Status:** design for review, 2026-11-07. No code has been written for it yet.
 **What it is:** one Mochi Link room that holds a Mac **and** a Windows PC (or several of each), so the iPhone and the
 Android phone pair once and see every computer.
