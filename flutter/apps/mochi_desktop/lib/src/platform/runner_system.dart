@@ -6,7 +6,12 @@
 // - `session`: the session was locked, unlocked or switched (WTSRegisterSessionNotification's WTS_* codes);
 // - `power`: the PC is going to sleep or woke (PBT_APMSUSPEND / PBT_APMRESUMEAUTOMATIC);
 // - `hotkey`: one of Mochi's shortcuts was pressed (WM_HOTKEY with its id);
+// - `toastActivated`: one of Mochi's Windows notifications was clicked (its `launch` argument; windows/runner/toasts.cpp);
 // - `state` (asked): the display and lock state now (the lock from WTSQuerySessionInformation at launch).
+//
+// And Windows notifications through WinRT's ToastNotificationManager in the runner: `toastStart` (registers Mochi's
+// click handler, a COM class), `toastShow` (XML, the AppUserModelID, a tag) and `toastSetting` (whether Windows lets
+// Mochi's notifications show).
 //
 // The runner registers shortcuts with RegisterHotKey on its own window (`registerHotKey`, `unregisterHotKey`), so Windows
 // tells Mochi only when one of its own combinations is pressed.
@@ -75,8 +80,44 @@ class RunnerSystem implements HotkeyRegistrar {
       case 'hotkey':
         final id = call.arguments;
         if (id is int) _pressed.add(id);
+      case 'toastActivated':
+        final argument = call.arguments;
+        _toastClicks.add(argument is String ? argument : '');
     }
     return null;
+  }
+
+  final StreamController<String> _toastClicks = StreamController.broadcast();
+
+  /// A Mochi notification was clicked: its argument.
+  Stream<String> get toastClicks => _toastClicks.stream;
+
+  /// Registers Mochi's click handler, the COM class [clsid] ("{…}").
+  Future<bool> startToasts(String clsid) async {
+    try {
+      return await _channel.invokeMethod<bool>('toastStart', {'clsid': clsid}) ?? false;
+    } on Object {
+      return false;
+    }
+  }
+
+  /// Shows a toast; Windows' HRESULT (0: shown).
+  Future<int> showToast({required String appId, required String xml, required String tag}) async {
+    try {
+      return await _channel.invokeMethod<int>('toastShow', {'appId': appId, 'xml': xml, 'tag': tag}) ?? -1;
+    } on Object {
+      return -1;
+    }
+  }
+
+  /// Windows' NotificationSetting for [appId] (0 on; 1 off for the app; 2 off for the user; 3 group policy; 4 the
+  /// manifest), or -1.
+  Future<int> toastSetting(String appId) async {
+    try {
+      return await _channel.invokeMethod<int>('toastSetting', {'appId': appId}) ?? -1;
+    } on Object {
+      return -1;
+    }
   }
 
   @override

@@ -198,7 +198,9 @@ class MochiDesktop {
       },
       updater: updater,
       installer: installer,
-      toasts: windows ? Win32Toasts(installed: () => installer.installed, executable: Platform.resolvedExecutable) : null,
+      toasts: windows && system != null
+          ? Win32Toasts(system: system, installed: () => installer.installed, executable: Platform.resolvedExecutable)
+          : null,
       sound: Platform.isWindows ? Win32SoundOutput() : null,
       usage: system == null ? null : Win32Usage(system),
       hotkeys: system,

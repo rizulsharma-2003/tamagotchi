@@ -16,6 +16,12 @@ inline UINT MochiShowMainMessage() {
   return message;
 }
 
+// The window message the toast click handler (toasts.cpp) posts with the click's argument (a heap std::wstring*).
+inline UINT MochiToastMessage() {
+  static const UINT message = ::RegisterWindowMessageW(L"MochiToastActivated");
+  return message;
+}
+
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
  public:

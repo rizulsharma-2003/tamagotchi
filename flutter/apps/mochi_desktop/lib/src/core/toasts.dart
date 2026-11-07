@@ -113,7 +113,7 @@ abstract interface class ToastService {
   Future<void> start(void Function(ToastTarget target) onOpen);
 
   /// Reads Windows' notification settings again (Settings › Notifications shows them).
-  void refresh();
+  Future<void> refresh();
 
   /// False when it couldn't be shown.
   Future<bool> show(Toast toast);
@@ -134,7 +134,7 @@ class UnsupportedToasts implements ToastService {
   Future<void> start(void Function(ToastTarget target) onOpen) async {}
 
   @override
-  void refresh() {}
+  Future<void> refresh() async {}
 
   @override
   Future<bool> show(Toast toast) async => false;

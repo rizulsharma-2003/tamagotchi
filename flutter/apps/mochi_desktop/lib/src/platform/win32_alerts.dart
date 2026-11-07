@@ -1,30 +1,50 @@
 // Windows notifications and Mochi's sounds (docs/SPRINT_2.md W1).
 //
-// Toasts: flutter_local_notifications_windows (C++/WinRT ToastNotificationManager), for an unpackaged app identified by
-// the AppUserModelID `InsideEdge.Mochi`: the installed copy's Start-menu shortcut carries it, the runner sets it on the
-// process (windows/runner/main.cpp), and the plugin registers it under HKCU\Software\Classes\AppUserModelId with Mochi's
-// name, icon and the COM class that hears clicks (the installer registers that class's LocalServer32, so a click in the
-// notification centre starts Mochi if it isn't running). Running from where it was downloaded, Mochi has no Start-menu
-// entry and doesn't set any of this up: Settings says so and offers to install.
+// Toasts: WinRT's ToastNotificationManager, called by the runner through WRL (windows/runner/toasts.cpp; no plugin, no
+// ATL), for an unpackaged app identified by the AppUserModelID `InsideEdge.Mochi`: the installed copy's Start-menu
+// shortcut carries it, the runner sets it on the process (windows/runner/main.cpp), and Mochi registers it under
+// HKCU\Software\Classes\AppUserModelId with its name, icon and the COM class that hears clicks (CustomActivator; the
+// runner registers the class while Mochi runs, and the installer registers Mochi.exe as its LocalServer32, so a click in
+// the notification centre starts Mochi if it isn't running). Running from where it was downloaded, Mochi has no
+// Start-menu entry and sets none of this up: Settings says so and offers to install.
 //
 // Sounds: the Mac's synthesized tones as a WAV in memory, played with winmm's PlaySound (asynchronous, no default sound
 // if it fails), silent when Windows' sound scheme is "No Sounds".
 
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_local_notifications_windows/flutter_local_notifications_windows.dart';
 import 'package:mochi_wire/mochi_wire.dart' show InstallLayout;
 import 'package:win32/win32.dart';
 
 import '../core/sounds.dart';
 import '../core/toasts.dart';
+import 'runner_system.dart';
 
-/// The COM class Windows calls when one of Mochi's toasts is clicked (registered by the plugin while Mochi runs, and
-/// by the installer as Mochi.exe's LocalServer32).
-const String toastActivatorGuid = 'd67ae0d6-41e2-4d4b-961e-faec8753952d';
+typedef _GetAppIdNative = Int32 Function(Pointer<Pointer<Utf16>> id);
+typedef _GetAppId = int Function(Pointer<Pointer<Utf16>> id);
+
+/// The AppUserModelID this process runs as (the runner sets it before any window), for Settings › Developer; null if
+/// none was set or it can't be read.
+String? processAppUserModelId() {
+  try {
+    final get = DynamicLibrary.open('shell32.dll').lookupFunction<_GetAppIdNative, _GetAppId>('GetCurrentProcessExplicitAppUserModelID');
+    final id = calloc<Pointer<Utf16>>();
+    try {
+      if (get(id) != S_OK || id.value == nullptr) return null;
+      final text = id.value.toDartString();
+      CoTaskMemFree(id.value.cast());
+      return text;
+    } finally {
+      calloc.free(id);
+    }
+  } on Object {
+    return null;
+  }
+}
 
 /// HKEY_CURRENT_USER values (DWORDs and strings), or null.
 abstract final class UserRegistry {
@@ -52,16 +72,37 @@ abstract final class UserRegistry {
     if (RegGetValue(HKEY_CURRENT_USER, subKey, value, RRF_RT_REG_SZ, nullptr, buffer, size) != ERROR_SUCCESS) return null;
     return buffer.cast<Utf16>().toDartString();
   });
+
+  /// Writes REG_SZ values under [key] (made if needed); false if Windows refused.
+  static bool writeStrings(String key, Map<String, String> values) => using((arena) {
+    final subKey = key.toNativeUtf16(allocator: arena);
+    for (final MapEntry(key: name, :value) in values.entries) {
+      final result = RegSetKeyValue(
+        HKEY_CURRENT_USER,
+        subKey,
+        name.toNativeUtf16(allocator: arena),
+        REG_SZ,
+        value.toNativeUtf16(allocator: arena),
+        (value.length + 1) * 2,
+      );
+      if (result != ERROR_SUCCESS) return false;
+    }
+    return true;
+  });
 }
 
 class Win32Toasts implements ToastService {
-  Win32Toasts({required bool Function() installed, required String executable}) : _installed = installed, _executable = executable;
+  Win32Toasts({required this.system, required bool Function() installed, required String executable})
+    : _installed = installed,
+      _executable = executable;
 
+  final RunnerSystem system;
   final bool Function() _installed;
   final String _executable;
-  FlutterLocalNotificationsWindows? _plugin;
+  bool _started = false;
   bool _failed = false;
   ToastAvailability _availability = ToastAvailability.notInstalled;
+  StreamSubscription<String>? _clicks;
 
   static const String _appSettings = r'Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\InsideEdge.Mochi';
   static const String _allApps = r'Software\Microsoft\Windows\CurrentVersion\PushNotifications';
@@ -76,55 +117,53 @@ class Win32Toasts implements ToastService {
   @override
   Future<void> start(void Function(ToastTarget target) onOpen) async {
     if (!_installed()) {
-      refresh();
+      await refresh();
       return;
     }
-    try {
-      final plugin = FlutterLocalNotificationsWindows();
-      final ready = await plugin.initialize(
-        settings: WindowsInitializationSettings(
-          appName: 'Mochi',
-          appUserModelId: InstallLayout.appUserModelId,
-          guid: toastActivatorGuid,
-          iconPath: File(_icon).existsSync() ? _icon : null,
-        ),
-        onDidReceiveNotificationResponse: (response) => onOpen(ToastTarget.parse(response.payload)),
-      );
-      _plugin = ready ? plugin : null;
-      _failed = !ready;
-    } on Object catch (error) {
-      debugPrint('Mochi: Windows notifications could not be set up (${error.runtimeType})');
-      _failed = true;
-    }
-    refresh();
+    _clicks ??= system.toastClicks.listen((argument) => onOpen(ToastTarget.parse(argument)));
+    // Windows' record of Mochi's identity: its name and icon on each notification, and the class that hears clicks.
+    final registered = UserRegistry.writeStrings(InstallLayout.appUserModelIdKey, {
+      'DisplayName': InstallLayout.displayName,
+      if (File(_icon).existsSync()) 'IconUri': _icon,
+      'CustomActivator': InstallLayout.toastActivatorClsid,
+    });
+    _started = registered && await system.startToasts(InstallLayout.toastActivatorClsid);
+    _failed = !_started;
+    if (_failed) debugPrint('Mochi: Windows notifications could not be set up');
+    await refresh();
   }
 
   @override
-  void refresh() {
+  Future<void> refresh() async {
     if (!_installed()) {
       _availability = ToastAvailability.notInstalled;
-    } else if (_failed || _plugin == null) {
-      _availability = ToastAvailability.failed;
-    } else if (UserRegistry.dword(_allApps, 'ToastEnabled') == 0) {
-      _availability = ToastAvailability.offForAll;
-    } else if (UserRegistry.dword(_appSettings, 'Enabled') == 0) {
-      _availability = ToastAvailability.offForMochi;
-    } else {
-      _availability = ToastAvailability.ready;
+      return;
     }
+    if (_failed || !_started) {
+      _availability = ToastAvailability.failed;
+      return;
+    }
+    // Windows' own answer (NotificationSetting), else what its Settings keep in the registry.
+    _availability = switch (await system.toastSetting(InstallLayout.appUserModelId)) {
+      0 => ToastAvailability.ready,
+      1 => ToastAvailability.offForMochi,
+      2 || 3 => ToastAvailability.offForAll,
+      4 => ToastAvailability.failed,
+      _ =>
+        UserRegistry.dword(_allApps, 'ToastEnabled') == 0
+            ? ToastAvailability.offForAll
+            : UserRegistry.dword(_appSettings, 'Enabled') == 0
+            ? ToastAvailability.offForMochi
+            : ToastAvailability.ready,
+    };
   }
 
   @override
   Future<bool> show(Toast toast) async {
-    final plugin = _plugin;
-    if (plugin == null || !_availability.works) return false;
-    try {
-      await plugin.showRawXml(id: toast.tag, xml: toast.xml());
-      return true;
-    } on Object catch (error) {
-      debugPrint('Mochi: a Windows notification could not be shown (${error.runtimeType})');
-      return false;
-    }
+    if (!_started || !_availability.works) return false;
+    final result = await system.showToast(appId: InstallLayout.appUserModelId, xml: toast.xml(), tag: '${toast.tag}');
+    if (result != 0) debugPrint('Mochi: a Windows notification could not be shown (0x${(result & 0xFFFFFFFF).toRadixString(16)})');
+    return result == 0;
   }
 
   @override
@@ -138,8 +177,8 @@ class Win32Toasts implements ToastService {
 
   @override
   void dispose() {
-    _plugin?.dispose();
-    _plugin = null;
+    unawaited(_clicks?.cancel());
+    _clicks = null;
   }
 }
 

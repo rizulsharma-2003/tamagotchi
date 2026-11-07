@@ -6,8 +6,32 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "toasts.h"
+#include "utils.h"
 
 namespace {
+
+std::wstring Utf16FromUtf8(const std::string& text) {
+  if (text.empty()) {
+    return std::wstring();
+  }
+  const int length = ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
+  if (length <= 0) {
+    return std::wstring();
+  }
+  std::wstring wide(static_cast<size_t>(length), L'\0');
+  ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), wide.data(), length);
+  return wide;
+}
+
+std::wstring StringArgument(const flutter::EncodableMap& arguments, const char* name) {
+  const auto found = arguments.find(flutter::EncodableValue(name));
+  if (found == arguments.end()) {
+    return std::wstring();
+  }
+  const auto* value = std::get_if<std::string>(&found->second);
+  return value == nullptr ? std::wstring() : Utf16FromUtf8(*value);
+}
 
 // GUID_CONSOLE_DISPLAY_STATE: the console display is off (0), on (1) or dimmed (2).
 constexpr GUID kConsoleDisplayState = {0x6fe69556, 0x704a, 0x47a0, {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
@@ -98,6 +122,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  mochi_toasts::Stop();
   if (display_notification_ != nullptr) {
     ::UnregisterPowerSettingNotification(display_notification_);
     display_notification_ = nullptr;
@@ -123,6 +148,16 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   if (message == MochiShowMainMessage()) {
     if (instance_channel_) {
       instance_channel_->InvokeMethod("showMain", nullptr);
+    }
+    return 0;
+  }
+
+  // A toast was clicked (toasts.cpp posts its argument here, on the UI thread).
+  if (message == MochiToastMessage()) {
+    auto* text = reinterpret_cast<std::wstring*>(lparam);
+    if (text != nullptr) {
+      SendSystem("toastActivated", flutter::EncodableValue(Utf8FromUtf16(text->c_str())));
+      delete text;
     }
     return 0;
   }
@@ -214,6 +249,21 @@ void FlutterWindow::HandleSystemCall(const flutter::MethodCall<flutter::Encodabl
       ::UnregisterHotKey(GetHandle(), id);
     }
     result->Success();
+    return;
+  }
+  if (method == "toastStart" && arguments != nullptr) {
+    const bool started = mochi_toasts::Start(GetHandle(), MochiToastMessage(), StringArgument(*arguments, "clsid"));
+    result->Success(flutter::EncodableValue(started));
+    return;
+  }
+  if (method == "toastShow" && arguments != nullptr) {
+    const HRESULT shown = mochi_toasts::Show(StringArgument(*arguments, "appId"), StringArgument(*arguments, "xml"),
+                                             StringArgument(*arguments, "tag"));
+    result->Success(flutter::EncodableValue(static_cast<int32_t>(shown)));
+    return;
+  }
+  if (method == "toastSetting" && arguments != nullptr) {
+    result->Success(flutter::EncodableValue(static_cast<int32_t>(mochi_toasts::Setting(StringArgument(*arguments, "appId")))));
     return;
   }
   result->NotImplemented();

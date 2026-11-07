@@ -237,10 +237,12 @@ class _NotificationsPaneState extends State<NotificationsPane> {
   void initState() {
     super.initState();
     // Windows Settings may have changed while Mochi's Settings was closed.
-    widget.host.desktop.toasts.refresh();
+    _refresh();
   }
 
-  void _refresh() => setState(widget.host.desktop.toasts.refresh);
+  void _refresh() => widget.host.desktop.toasts.refresh().then((_) {
+    if (mounted) setState(() {});
+  }).ignore();
 
   @override
   Widget build(BuildContext context) {

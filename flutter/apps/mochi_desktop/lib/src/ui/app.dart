@@ -149,6 +149,13 @@ class DesktopAppState extends State<DesktopApp> {
     // Development: with the stroll's debug log on, Flutter's errors go there too (a release build has no console).
     final log = _stroll.log;
     if (log != null) {
+      // The PC's rhythm, the badge and Windows notifications too, every 15 seconds (development only).
+      _rhythmLog = Timer.periodic(const Duration(seconds: 15), (_) {
+        final reactions = desktop.reactions;
+        log('rhythm: ${desktop.rhythm.activity} resting=${desktop.rhythm.resting} away=${desktop.rhythm.away} '
+            'napping=${desktop.rhythm.nap.asleep} · toasts ${desktop.toasts.availability.name}, ${reactions.bannersPosted} shown · '
+            'sounds ${desktop.sounds.played} · badge ${reactions.badge?.kind.name}');
+      });
       final previous = FlutterError.onError;
       FlutterError.onError = (details) {
         log('error: ${details.exceptionAsString()} ${details.stack.toString().split('\n').take(6).join(' | ')}');
@@ -375,6 +382,7 @@ class DesktopAppState extends State<DesktopApp> {
   }
 
   bool _askFirst = false;
+  Timer? _rhythmLog;
 
   /// The session a Windows notification was about: its card is outlined in Mochi's window.
   String? _focusSession;
@@ -498,6 +506,7 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.settings.removeListener(_settingsChanged);
     _warmUpTimer?.cancel();
     desktop.updater.removeListener(_updatesChanged);
+    _rhythmLog?.cancel();
     _stroll.dispose();
     _companion.dispose();
     _meter?.dispose();

@@ -467,7 +467,7 @@ class FakeToasts implements ToastService {
   Future<void> start(void Function(ToastTarget target) onOpen) async => this.onOpen = onOpen;
 
   @override
-  void refresh() => refreshes++;
+  Future<void> refresh() async => refreshes++;
 
   @override
   Future<bool> show(Toast toast) async {
