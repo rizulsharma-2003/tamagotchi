@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart' show SeasonalEvent;
 import 'package:mochi_art/pose_tracks.dart';
@@ -25,9 +27,13 @@ class HomeScreen extends StatefulWidget {
     required this.onSettings,
     this.askFirst = false,
     this.onInstall,
+    this.focusSession,
   });
 
   final MochiDesktop desktop;
+
+  /// Opened from a Windows notification about this session: its card is scrolled to and outlined.
+  final String? focusSession;
 
   /// Opened from the popover's "Ask Mochi": the question box has the focus.
   final bool askFirst;
@@ -55,9 +61,31 @@ class _HomeScreenState extends State<HomeScreen> {
   MochiDesktop get desktop => widget.desktop;
   CompanionDirector get companion => widget.companion;
 
+  /// The focused session's card.
+  final GlobalKey _focusedCard = GlobalKey();
+
+  @override
+  void didUpdateWidget(HomeScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.focusSession != null && widget.focusSession != old.focusSession) _revealFocused();
+  }
+
+  /// Scrolls to the focused session's card (down a screen at a time until the list has built it).
+  void _revealFocused([int tries = 6]) => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+    final card = _focusedCard.currentContext;
+    if (card != null) {
+      Scrollable.ensureVisible(card, alignment: 0.3, duration: Duration.zero);
+    } else if (tries > 0 && _scroll.hasClients && _scroll.offset < _scroll.position.maxScrollExtent) {
+      _scroll.jumpTo((_scroll.offset + _scroll.position.viewportDimension).clamp(0, _scroll.position.maxScrollExtent));
+      _revealFocused(tries - 1);
+    }
+  });
+
   @override
   void initState() {
     super.initState();
+    if (widget.focusSession != null) _revealFocused();
     // Opened for Ask Mochi: down to the question box (the list builds it once it's near), which takes the focus.
     if (widget.askFirst) {
       void down(int times) => WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -66,11 +94,21 @@ class _HomeScreenState extends State<HomeScreen> {
         if (times > 1) down(times - 1);
       });
       down(3);
+      // From a shortcut or the popover the window grows from the pet's size to its own a few frames later: down again
+      // once it has.
+      for (final wait in const [Duration(milliseconds: 250), Duration(milliseconds: 700)]) {
+        _askTimers.add(Timer(wait, () => down(2)));
+      }
     }
   }
 
+  final List<Timer> _askTimers = [];
+
   @override
   void dispose() {
+    for (final timer in _askTimers) {
+      timer.cancel();
+    }
     _scroll.dispose();
     super.dispose();
   }
@@ -113,7 +151,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               )
             else
-              for (final session in live) ...[SessionCard(session: session, now: sessions.now), const SizedBox(height: Space.s)],
+              for (final session in live) ...[
+                SessionCard(
+                  key: session.id == widget.focusSession ? _focusedCard : null,
+                  session: session,
+                  now: sessions.now,
+                  highlighted: session.id == widget.focusSession,
+                ),
+                const SizedBox(height: Space.s),
+              ],
             const SizedBox(height: Space.m),
             const SectionTitle(title: 'Ask Mochi'),
             const SizedBox(height: Space.s),
@@ -151,7 +197,7 @@ class _Header extends StatelessWidget {
       SeasonalEvent.userBirthday => 'Happy birthday!',
       SeasonalEvent.mochiBirthday => "$pet's birthday",
     };
-    final mood = PetMood.of(desktop.sessions, now: now, lastActivity: lastActivity());
+    final mood = PetMood.of(desktop.sessions, now: now, lastActivity: lastActivity(), rhythm: desktop.rhythm);
     final link = desktop.link;
     final phones = link.devices.where((peer) => peer.role == 'pocket').toList();
     final online = phones.where((peer) => peer.online).length;

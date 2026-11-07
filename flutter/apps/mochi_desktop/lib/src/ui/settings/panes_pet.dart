@@ -6,12 +6,16 @@ import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 
 import '../../core/desktop_settings.dart';
+import '../../core/hotkeys.dart';
+import '../../core/notifications.dart' show QuietHours;
+import '../../core/pc_rhythm.dart';
 import '../../core/seasons.dart';
 import '../../platform/startup.dart';
 import '../../platform/taskbar.dart';
 import 'previews.dart';
 import 'settings_kit.dart';
 import 'settings_tabs.dart';
+import 'shortcut_row.dart';
 
 const List<String> monthNames = [
   'January',
@@ -133,30 +137,21 @@ class _GeneralPaneState extends State<GeneralPane> {
             ToggleRow(
               title: 'Pause all reactions',
               subtitle:
-                  'Sessions keep updating; $pet stops celebrating, worrying and waving at Claude’s moments, here and on '
-                  'the taskbar.',
+                  'Sessions keep updating; $pet and ${host.companion} stop reacting, and nothing plays sounds or shows '
+                  'Windows notifications.',
               value: settings.pauseReactions,
               onChanged: (value) => settings.pauseReactions = value,
+            ),
+            ToggleRow(
+              title: 'Quiet mode',
+              subtitle: 'No sounds and no Windows notifications until you turn it off.',
+              value: settings.quietMode,
+              onChanged: (value) => settings.quietMode = value,
             ),
             ActionsRow(children: [PaneLink(host: host, tab: SettingsTab.notifications, label: 'Choose the moments')]),
           ],
         ),
-        SettingsGroup(
-          title: 'From the Mac',
-          children: [
-            SoonRow(
-              title: 'Quiet hours and quiet mode',
-              detail: 'Times when $pet stays silent. Mochi for Windows makes no sounds and shows no Windows notifications yet.',
-            ),
-            SoonRow(
-              title: 'Naps that follow this PC',
-              detail:
-                  'On a Mac, $pet sleeps while the computer rests and wakes when you’re back. Here $pet naps after '
-                  '30 minutes without news from Claude.',
-            ),
-            SoonRow(title: 'A shortcut to show or hide $pet', detail: 'Use the tray icon’s menu for now.'),
-          ],
-        ),
+        _QuietHoursGroup(settings: settings),
         SettingsGroup(
           title: 'Start over',
           footer: 'Your pairing, Claude Code’s hooks and Mochi’s folder aren’t touched.',
@@ -175,6 +170,104 @@ class _GeneralPaneState extends State<GeneralPane> {
       ],
     );
   }
+}
+
+/// The Mac's Quiet hours: on or off, from and to (every half hour, and whatever an older file has).
+class _QuietHoursGroup extends StatelessWidget {
+  const _QuietHoursGroup({required this.settings});
+
+  final DesktopSettings settings;
+
+  static List<int> times(int current) => ({for (var minute = 0; minute < 24 * 60; minute += 30) minute, current}.toList()..sort());
+
+  @override
+  Widget build(BuildContext context) {
+    final quiet = settings.quietHours;
+    return SettingsGroup(
+      title: 'Quiet hours',
+      footer: 'During quiet hours and quiet mode there are no sounds or Windows notifications. Animations and badges still show.',
+      children: [
+        ToggleRow(
+          title: 'Quiet hours',
+          subtitle: quiet.enabled
+              ? 'Every day from ${QuietHours.format(quiet.startMinute)} to ${QuietHours.format(quiet.endMinute)}.'
+              : 'A quiet stretch every day, overnight if you like.',
+          value: quiet.enabled,
+          onChanged: (value) => settings.quietHours = quiet.copyWith(enabled: value),
+        ),
+        MenuRow<int>(
+          label: 'From',
+          value: quiet.startMinute,
+          items: [for (final minute in times(quiet.startMinute)) (minute, QuietHours.format(minute))],
+          onChanged: quiet.enabled ? (value) => settings.quietHours = quiet.copyWith(startMinute: value) : null,
+        ),
+        MenuRow<int>(
+          label: 'To',
+          value: quiet.endMinute,
+          items: [for (final minute in times(quiet.endMinute)) (minute, QuietHours.format(minute))],
+          onChanged: quiet.enabled ? (value) => settings.quietHours = quiet.copyWith(endMinute: value) : null,
+        ),
+      ],
+    );
+  }
+}
+
+/// The Mac's Characters › Naps: Mochi sleeps while this PC rests, awake while you work, and what the PC is doing now.
+class _NapsGroup extends StatelessWidget {
+  const _NapsGroup({required this.host});
+
+  final SettingsHost host;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: host.desktop.rhythm,
+    builder: (context, _) {
+      final p = context.palette;
+      final settings = host.desktop.settings;
+      final rhythm = host.desktop.rhythm;
+      final pet = host.pet;
+      final activity = rhythm.activity;
+      final (state, ok) = switch (activity) {
+        null => ('Unknown', false),
+        _ when activity.displaysAsleep => ('Locked or display off', false),
+        _ when rhythm.resting => ('Resting', false),
+        _ when activity.keepsDisplayAwake && activity.idleSeconds >= 60 => ('Kept awake: a video, call or presentation', true),
+        _ when activity.cpuLoad >= SystemActivity.busyLoad => ('Busy', true),
+        _ when activity.userActive => ('In use', true),
+        _ => ('Quiet for a moment', true),
+      };
+      return SettingsGroup(
+        title: 'Naps',
+        footer:
+            '$pet also sleeps when your display goes off or the PC is locked, stays up while a video, a call or a '
+            'presentation keeps the screen on, Claude is working or the PC is busy, and wakes with a stretch when you’re '
+            'back. Only the time since your last input is read, never what you type.',
+        children: [
+          ToggleRow(
+            title: 'Sleep while my PC rests, awake while I work',
+            value: settings.followSystem,
+            onChanged: (value) => settings.followSystem = value,
+          ),
+          MenuRow<int>(
+            label: 'Rests after, without typing or clicking',
+            value: settings.restAfterMinutes,
+            items: [
+              for (final minutes in _minuteChoices(const [1, 2, 3, 5, 10, 15, 20, 30, 45, 60], settings.restAfterMinutes))
+                (minutes, minutes == 1 ? '1 min' : '$minutes min'),
+            ],
+            onChanged: settings.followSystem ? (value) => settings.restAfterMinutes = value : null,
+          ),
+          if (rhythm.available)
+            StatusRow(title: 'This PC now', ok: ok, icon: Icons.computer_rounded, tint: ok ? p.success : null, detail: state)
+          else
+            NoteRow(
+              text: 'Naps follow the PC in Mochi for Windows. Here $pet naps after 30 minutes without news from Claude.',
+              icon: Icons.info_outline_rounded,
+            ),
+        ],
+      );
+    },
+  );
 }
 
 // MARK: - Characters
@@ -257,6 +350,7 @@ class CharactersPane extends StatelessWidget {
             ),
           ],
         ),
+        _NapsGroup(host: host),
         SettingsGroup(
           title: 'Companion',
           footer: switch (settings.companionVisibility) {
@@ -380,13 +474,22 @@ class DesktopPetPane extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SettingsGroup(
-          footer: 'Show $pet again any time from the tray icon’s menu.',
+          footer: settings.shortcut(MochiShortcut.pet) == null
+              ? 'Show $pet again any time from the tray icon’s menu.'
+              : 'Show or hide $pet any time with ${settings.shortcut(MochiShortcut.pet)!.label}, the tray icon’s menu, or '
+                    'right-click › Hide the desktop pet.',
           children: [
             ToggleRow(
               title: 'Show the desktop pet',
               subtitle: '$pet stays on your desktop, above your windows, while Mochi’s window is closed.',
               value: settings.showPet,
               onChanged: (value) => settings.showPet = value,
+            ),
+            ShortcutRow(
+              desktop: host.desktop,
+              shortcut: MochiShortcut.pet,
+              title: 'Shortcut to show or hide $pet',
+              subtitle: 'Press it anywhere, in any app. The Mac’s is ⌃⌥⌘P; here it’s ${Hotkey.petDefault.label}.',
             ),
           ],
         ),

@@ -85,7 +85,7 @@ void main() {
       final settings = DesktopSettings(document);
       expect(settings.companionName, 'Byte');
       expect((settings.companionVisibility, settings.companionOnTaskbar), (CompanionVisibility.duringSessions, true));
-      expect(document.json!['v'], 3);
+      expect(document.json!['v'], DesktopSettings.version);
       expect(document.json!['companionOnTaskbar'], isTrue);
     });
 
@@ -349,7 +349,8 @@ void main() {
         turn('b', 'StopFailure');
         t.desktop.sessions.apply(hook('Notification', session: 'c', notificationType: 'permission_prompt', at: launch));
       });
-      expect(cues, [PetCue.snag, PetCue.needsYou]);
+      // Each prompt gets Mochi's lean (Tool activity › Animate); the finished turn doesn't celebrate.
+      expect(cues, [PetCue.attend, PetCue.attend, PetCue.snag, PetCue.needsYou]);
     });
 
     test('Pause all reactions stops them all', () async {

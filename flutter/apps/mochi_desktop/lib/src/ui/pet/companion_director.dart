@@ -71,8 +71,10 @@ class CompanionDirector extends ChangeNotifier {
     double Function()? clock,
     math.Random? random,
     bool Function()? reducedMotion,
+    bool Function()? petAsleep,
     this.tick = const Duration(seconds: 5),
   }) : _lastActivity = lastActivity,
+       _petAsleep = petAsleep,
        _clock = clock ?? _monotonic(),
        _random = random ?? math.Random(),
        _reducedMotion = reducedMotion ?? (() => false) {
@@ -96,6 +98,9 @@ class CompanionDirector extends ChangeNotifier {
   final Duration tick;
 
   final DateTime Function()? _lastActivity;
+
+  /// Whether Mochi is napping now (the PC's rhythm); null: after 30 quiet minutes.
+  final bool Function()? _petAsleep;
   final double Function() _clock;
   final math.Random _random;
   final bool Function() _reducedMotion;
@@ -366,8 +371,12 @@ class CompanionDirector extends ChangeNotifier {
             t,
           );
         }
-      case PetCue.snag:
-        if (present) shot = (animation: CompanionAnimation.concerned, start: t);
+      case PetCue.snag || PetCue.worry:
+        if (present && !_together(t)) shot = (animation: CompanionAnimation.concerned, start: t);
+      case PetCue.cheer:
+        if (present && !_together(t)) shot = (animation: CompanionAnimation.nod, start: t);
+      case PetCue.greet:
+        if (present && !_together(t)) shot = (animation: CompanionAnimation.greet, start: t);
       case PetCue.needsYou:
         // He looks up from the laptop and waves, then waits with you.
         if (present && !_together(t)) shot = (animation: CompanionAnimation.greet, start: t);
@@ -443,8 +452,8 @@ class CompanionDirector extends ChangeNotifier {
     final activity = this.activity;
     final busy = interaction != null || pending != null || _playingShot(t);
     final idleFor = now.difference(_lastActivity?.call() ?? sessions.lastEventAt ?? now).inMilliseconds / 1000;
-    // Mochi naps after 30 quiet minutes: no games then.
-    final asleep = idleFor >= 30 * 60;
+    // Mochi naps while the PC rests (or after 30 quiet minutes): no games then.
+    final asleep = _petAsleep?.call() ?? idleFor >= 30 * 60;
     if (activity == ClaudeActivity.waiting || busy || asleep) return false;
     final day = DateTime(now.year, now.month, now.day).difference(DateTime(2000)).inDays;
     if (day != _countsDay) {

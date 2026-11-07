@@ -9,17 +9,25 @@ import 'core/ask_mochi.dart';
 import 'core/claude_cli.dart';
 import 'core/desktop_settings.dart';
 import 'core/hook_setup.dart';
+import 'core/hotkeys.dart';
+import 'core/pc_rhythm.dart';
 import 'core/pet_cues.dart';
+import 'core/reactions.dart';
 import 'core/session_store.dart';
 import 'core/sessions.dart';
+import 'core/sounds.dart';
+import 'core/toasts.dart';
 import 'core/turn_summaries.dart';
 import 'demo.dart';
 import 'link/link_host.dart';
 import 'link/phone_sync.dart';
 import 'platform/credential_vault.dart';
+import 'platform/runner_system.dart';
 import 'platform/startup.dart';
 import 'platform/system.dart';
+import 'platform/win32_alerts.dart';
 import 'platform/win32_install.dart';
+import 'platform/win32_usage.dart';
 import 'update/self_install.dart';
 import 'update/update_feed.dart';
 import 'update/update_keys.dart';
@@ -53,12 +61,27 @@ class MochiDesktop {
     DateTime Function()? clock,
     Updater? updater,
     SelfInstaller? installer,
+    ToastService? toasts,
+    SoundOutput? sound,
+    UsageSampler? usage,
+    HotkeyRegistrar? hotkeys,
   }) : _claude = claude,
        _locateClaude = locateClaude,
        startup = startup ?? const UnsupportedStartup(),
        updater = updater ?? Updater.unsupported(),
        installer = installer ?? SelfInstaller.unsupported(),
+       toasts = toasts ?? const UnsupportedToasts(),
        _bridge = bridge ?? BridgeServer(paths) {
+    sounds = MochiSounds(output: sound ?? const SilentOutput(), volume: () => settings.soundVolume, clock: clock);
+    reactions = Reactions(settings: settings, sessions: sessions, cue: cue, toasts: this.toasts, sounds: sounds, clock: clock);
+    rhythm = PcRhythm(settings: settings, sampler: usage);
+    this.hotkeys = Hotkeys(
+      registrar: hotkeys ?? const UnsupportedHotkeys(),
+      chosen: settings.shortcut,
+      onPressed: (shortcut) {
+        if (!_shortcuts.isClosed) _shortcuts.add(shortcut);
+      },
+    );
     ask = AskMochi(
       sessions: sessions,
       runner: claude,
@@ -77,6 +100,8 @@ class MochiDesktop {
       cue: cue,
       summarize: _summarize,
       clock: clock,
+      away: () => rhythm.away,
+      resting: () => rhythm.resting,
     );
   }
 
@@ -148,6 +173,8 @@ class MochiDesktop {
             helper: HookSetup.findBundledHelper,
           )
         : Updater.unsupported();
+    // The PC's state and the global shortcuts come through the runner (Windows only).
+    final system = Platform.isWindows ? RunnerSystem() : null;
     return MochiDesktop(
       paths: paths,
       settings: settings,
@@ -171,6 +198,12 @@ class MochiDesktop {
       },
       updater: updater,
       installer: installer,
+      toasts: windows && system != null
+          ? Win32Toasts(system: system, installed: () => installer.installed, executable: Platform.resolvedExecutable)
+          : null,
+      sound: Platform.isWindows ? Win32SoundOutput() : null,
+      usage: system == null ? null : Win32Usage(system),
+      hotkeys: system,
     );
   }
 
@@ -182,6 +215,34 @@ class MochiDesktop {
   final SystemMotion motion;
   late final AskMochi ask;
   late final PhoneSync phone;
+
+  /// How Mochi answers Claude's moments: animations, the badge, Windows notifications and sounds (Settings ›
+  /// Notifications).
+  late final Reactions reactions;
+  late final MochiSounds sounds;
+
+  /// Windows notifications.
+  final ToastService toasts;
+
+  /// The PC's rhythm: Mochi naps while it rests (Settings › Characters › Naps), and the phones hear only while you're
+  /// away (Settings › Phones).
+  late final PcRhythm rhythm;
+
+  /// The global shortcuts (Settings › Desktop Pet and Assistant).
+  late final Hotkeys hotkeys;
+
+  // Delivered as they come (a click on a notification and a shortcut arrive from Windows, never during a build).
+  final StreamController<ToastTarget> _opens = StreamController.broadcast(sync: true);
+  final StreamController<MochiShortcut> _shortcuts = StreamController.broadcast(sync: true);
+
+  /// A Windows notification was clicked: open where it points.
+  Stream<ToastTarget> get opens => _opens.stream;
+
+  /// One of Mochi's shortcuts was pressed.
+  Stream<MochiShortcut> get shortcuts => _shortcuts.stream;
+
+  /// The primary session just before the event being applied (whether that event is about the session Mochi follows).
+  String? _previousPrimary;
 
   /// Opens links (About, the agent) in the browser; null in tests.
   final UrlOpener? opener;
@@ -234,9 +295,20 @@ class MochiDesktop {
     _drainSpool();
     await link.start();
     phone.start();
-    _prune = Timer.periodic(const Duration(minutes: 1), (_) => sessions.prune());
+    _prune = Timer.periodic(const Duration(minutes: 1), (_) {
+      sessions.prune();
+      reactions.pruned();
+    });
     _startUpdates();
+    rhythm.start();
+    await toasts.start((target) {
+      if (!_opens.isClosed) _opens.add(target);
+    });
+    settings.addListener(_shortcutsChanged);
+    await hotkeys.start();
   }
+
+  void _shortcutsChanged() => unawaited(hotkeys.apply());
 
   /// The installed copy keeps its Settings › Apps entry and the hooks' helper in step with this version, and checks
   /// for updates. Mochi says when one is ready, and after it was updated.
@@ -272,23 +344,14 @@ class MochiDesktop {
 
   void _live(WireEvent event) {
     phone.record(event);
+    _previousPrimary = sessions.primary?.id;
     sessions.apply(event);
+    _previousPrimary = null;
   }
 
-  /// Claude's moments, live only, as Settings allows (General › Pause reactions, Notifications › On this PC).
-  void _transition(SessionTransition transition) {
-    if (transition.delivery == Delivery.late || !transition.phaseChanged || settings.pauseReactions) return;
-    switch (transition.phase) {
-      case SessionPhase.turnCompleted:
-        if (settings.celebrateFinished) cue(PetCue.finished);
-      case SessionPhase.waitingForUser:
-        cue(PetCue.needsYou);
-      case SessionPhase.turnFailed:
-        if (settings.showSnags) cue(PetCue.snag);
-      default:
-        break;
-    }
-  }
+  /// Every applied event: live ones get Mochi's reaction, as Settings › Notifications allows (late ones from the spool
+  /// only update the badge).
+  void _transition(SessionTransition transition) => reactions.handle(transition, previousPrimary: _previousPrimary);
 
   /// Petting, play or treats on this PC (Mochi reacts, and so do the phones).
   void interact(String kind) {
@@ -323,12 +386,18 @@ class MochiDesktop {
     _greeting?.cancel();
     updater.stop();
     phone.stop();
+    settings.removeListener(_shortcutsChanged);
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }
     await _bridge.dispose();
     link.dispose();
     motion.dispose();
+    rhythm.dispose();
+    hotkeys.dispose();
+    toasts.dispose();
     await _cues.close();
+    await _opens.close();
+    await _shortcuts.close();
   }
 }

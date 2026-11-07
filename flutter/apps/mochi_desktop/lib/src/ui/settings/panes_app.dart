@@ -8,7 +8,10 @@ import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_wire/mochi_wire.dart';
 
+import '../../core/hotkeys.dart';
+import '../../core/notifications.dart' show NotificationPolicy;
 import '../../desktop.dart';
+import '../../platform/win32_alerts.dart' show processAppUserModelId;
 import '../../update/updater.dart';
 import 'previews.dart';
 import 'settings_kit.dart';
@@ -214,12 +217,44 @@ class _DeveloperPaneState extends State<DeveloperPane> {
       'Spool: ${spool.lines} waiting (${spool.bytes} bytes) · late ${desktop.sessions.lateEvents} · dropped ${desktop.sessions.droppedEvents}',
       'Link: ${credentials == null ? 'not paired' : '${credentials.relay} · room ${credentials.room} · device ${credentials.device} (${credentials.role})'} · ${desktop.link.status.name}',
       for (final peer in desktop.link.devices) '  ${peer.device} · ${peer.role} · ${peer.platform ?? '?'} · ${peer.online ? 'online' : 'away'}',
+      for (final (label, value) in _moments()) '$label: $value',
     ].join('\n');
+  }
+
+  /// Mochi's moments on this PC (the Mac's DebugHooks: sounds played, banners posted, quiet), the PC's rhythm and the
+  /// shortcuts.
+  List<(String, String)> _moments() {
+    final activity = desktop.rhythm.activity;
+    final settings = desktop.settings;
+    String shortcut(MochiShortcut shortcut) {
+      final chosen = settings.shortcut(shortcut);
+      if (chosen == null) return 'none';
+      final problem = desktop.hotkeys.problem(shortcut);
+      if (problem != null) return '${chosen.label} (taken)';
+      return desktop.hotkeys.registered(shortcut) == chosen ? '${chosen.label} (registered)' : chosen.label;
+    }
+
+    return [
+      ('Windows app identity', (Platform.isWindows ? processAppUserModelId() : null) ?? 'none'),
+      ('Windows notifications', '${desktop.toasts.availability.name} · ${desktop.reactions.bannersPosted} shown'),
+      ('Sounds played', '${desktop.sounds.played}${settings.soundEnabled ? '' : ' (sounds are off)'}'),
+      ('Quiet now', NotificationPolicy.isQuiet(settings, desktop.sessions.now) ? 'yes' : 'no'),
+      ('Badge', desktop.reactions.badge == null ? 'none' : '${desktop.reactions.badge!.kind.name} (${desktop.reactions.badge!.level.name})'),
+      (
+        'This PC',
+        activity == null
+            ? 'unknown'
+            : 'idle ${activity.idleSeconds.round()} s · display ${activity.displaysAsleep ? 'off or locked' : 'on'}'
+                  '${activity.keepsDisplayAwake ? ' · kept awake' : ''} · CPU ${(activity.cpuLoad * 100).round()}% · '
+                  '${desktop.rhythm.resting ? 'resting' : 'active'}${desktop.rhythm.away == true ? ' · away' : ''}',
+      ),
+      ('Shortcuts', '${shortcut(MochiShortcut.pet)} · ${shortcut(MochiShortcut.ask)}'),
+    ];
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([desktop.link, desktop.bridgeProblem]),
+    listenable: Listenable.merge([desktop.link, desktop.bridgeProblem, desktop.rhythm, desktop.reactions, desktop.hotkeys]),
     builder: (context, _) {
       final p = context.palette;
       final bridge = desktop.bridge;
@@ -229,6 +264,11 @@ class _DeveloperPaneState extends State<DeveloperPane> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          SettingsGroup(
+            title: 'Moments, the PC and shortcuts',
+            footer: 'What Mochi did with Claude’s moments since it started, and what it reads of this PC (never what you type).',
+            children: [for (final (label, value) in _moments()) InfoRow(label: label, value: value, selectable: true)],
+          ),
           SettingsGroup(
             title: 'Hook bridge',
             children: [

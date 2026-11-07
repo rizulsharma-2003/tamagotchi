@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_art/pose_tracks.dart';
 
+import '../../core/pc_rhythm.dart';
 import '../../core/pet_cues.dart';
 import '../../core/session_store.dart';
 import '../../core/sessions.dart';
@@ -49,13 +50,15 @@ enum PetMood {
     relaxed || happy || concerned => PetAnimation.idle,
   };
 
-  /// Mochi's mood for [sessions] at [now]: the primary session's phase, or a nap after [napAfter] with nothing going
-  /// on (counted from [lastActivity]: the last hook event, pet or launch).
+  /// Mochi's mood for [sessions] at [now]: the primary session's phase, or else a nap: with the PC's [rhythm], while
+  /// the PC rests (Settings › Characters › Naps); without it, after [napAfter] with nothing going on (counted from
+  /// [lastActivity]: the last hook event, pet or launch).
   static PetMood of(
     SessionStore sessions, {
     required DateTime now,
     required DateTime lastActivity,
     Duration napAfter = const Duration(minutes: 30),
+    PcRhythm? rhythm,
   }) {
     final primary = sessions.primary;
     if (primary != null && primary.isLive && !primary.isStale(now)) {
@@ -73,6 +76,7 @@ enum PetMood {
           break;
       }
     }
+    if (rhythm != null) return rhythm.asleep(now: now, lastActivity: lastActivity) ? napping : relaxed;
     return now.difference(lastActivity) >= napAfter ? napping : relaxed;
   }
 }
@@ -111,11 +115,42 @@ class PetDirector {
         _play(PetAnimation.concerned, time);
       case PetCue.needsYou:
         _play(PetAnimation.wave, time);
+      case PetCue.greet:
+        if (!_interacting(time)) _play(PetAnimation.greet, time);
+      case PetCue.goodbye:
+        if (!_interacting(time)) _play(PetAnimation.wave, time);
+      case PetCue.attend:
+        if (!_busy(time)) _play(PetAnimation.leanForward, time);
+      case PetCue.nod:
+        // Tool calls come thick and fast: a nod only now and then, and never over another moment (the Mac plays it at
+        // ambient priority).
+        if (!_busy(time) && time - _lastNod >= nodGap) {
+          _lastNod = time;
+          _play(PetAnimation.nod, time);
+        }
+      case PetCue.puzzled:
+        if (!_interacting(time)) _play(PetAnimation.confusedTilt, time);
+      case PetCue.cheer:
+        _play(PetAnimation.happyBounce, time);
+      case PetCue.worry:
+        _play(PetAnimation.concerned, time);
+      case PetCue.celebrate:
+        _play(PetAnimation.victory, time);
       case PetCue.updateReady:
         if (!_interacting(time)) _play(PetAnimation.wave, time);
       case PetCue.updated:
         _play(PetAnimation.happyBounce, time);
     }
+  }
+
+  /// The least time between two nods for tool calls (seconds).
+  static const double nodGap = 20;
+  double _lastNod = -1e9;
+
+  /// Any moment is still playing (for the small ones, which never cut another short).
+  bool _busy(double time) {
+    final current = shot;
+    return current != null && time - current.start < 2.5;
   }
 
   /// A pet, play or treat is still playing: news doesn't cut it short.

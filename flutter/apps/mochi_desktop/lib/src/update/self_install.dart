@@ -185,6 +185,11 @@ class SelfInstaller extends ChangeNotifier {
       'NoModify': 1,
       'NoRepair': 1,
     });
+    // A click on one of Mochi's notifications in the notification centre starts Mochi if it isn't running (Windows
+    // starts the activator's LocalServer32). Only the real install: a test layout would take the real one's place.
+    if (!layout.test) {
+      system.writeUninstallEntry('${InstallLayout.toastActivatorKey}\\LocalServer32', {'': '"${layout.exe}"'});
+    }
   }
 
   /// At launch of the installed copy: Settings › Apps shows this version; the shortcut is there.

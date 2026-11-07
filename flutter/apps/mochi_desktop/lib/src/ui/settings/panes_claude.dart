@@ -9,9 +9,11 @@ import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_wire/mochi_wire.dart';
 
+import '../../core/hotkeys.dart';
 import '../../desktop.dart';
 import 'settings_kit.dart';
 import 'settings_tabs.dart';
+import 'shortcut_row.dart';
 
 /// "5 min ago" for a moment.
 String ago(DateTime then, DateTime now) => relativeTime(then.millisecondsSinceEpoch / 1000, now: now);
@@ -323,8 +325,17 @@ class _AssistantPaneState extends State<AssistantPane> {
           title: 'Ask $pet',
           children: [
             TextRow(
-              'Type to $pet in Mochi’s window. Quick commands like “status”, “open youtube” or “focus for 25 minutes” '
-              'are answered on the spot; anything else goes to Claude, which can search the web.',
+              'Type to $pet in Mochi’s window${settings.shortcut(MochiShortcut.ask) == null ? '' : ', or press ${settings.shortcut(MochiShortcut.ask)!.label} anywhere'}. '
+              'Quick commands like “status”, “open youtube” or “focus for 25 minutes” are answered on the spot; anything '
+              'else goes to Claude, which can search the web.',
+            ),
+            ShortcutRow(
+              desktop: host.desktop,
+              shortcut: MochiShortcut.ask,
+              title: 'Shortcut',
+              subtitle:
+                  'Opens Mochi’s window with the question box ready, from any app; press it again to close it. The Mac '
+                  'uses ⌥Space, which Windows keeps for its window menu.',
             ),
             ActionsRow(children: [FilledButton(onPressed: host.onHome, child: Text('Open Ask $pet'))]),
           ],
@@ -360,7 +371,6 @@ class _AssistantPaneState extends State<AssistantPane> {
         SettingsGroup(
           title: 'From the Mac',
           children: [
-            SoonRow(title: 'A shortcut for Ask $pet', detail: 'Tap a key combination anywhere to type to $pet, or hold it to talk.'),
             SoonRow(title: 'Talking and spoken answers', detail: 'Hold the shortcut to talk; $pet reads answers aloud.'),
             SoonRow(
               title: 'Messages to your Claude sessions',

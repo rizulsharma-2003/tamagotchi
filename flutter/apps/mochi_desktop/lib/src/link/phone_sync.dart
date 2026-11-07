@@ -70,9 +70,19 @@ class PhoneSync {
     this.look,
     DateTime Function()? clock,
     this.tickInterval = const Duration(seconds: 2),
+    bool? Function()? away,
+    bool Function()? resting,
   }) : _cue = cue,
        _summarize = summarize,
-       _clock = clock ?? DateTime.now;
+       _clock = clock ?? DateTime.now,
+       _away = away,
+       _resting = resting;
+
+  /// You're away from this PC (null: Mochi can't tell), for "Only notify me when I'm away from this PC".
+  final bool? Function()? _away;
+
+  /// The PC is resting: Mochi sleeps on the phones too (the room's `claude.resting`).
+  final bool Function()? _resting;
 
   final LinkHost host;
   final SessionStore sessions;
@@ -106,6 +116,9 @@ class PhoneSync {
 
   /// The last summary made, for the main window ("web: Fixed the login bug").
   String? lastSummary;
+
+  /// Summaries kept off the phones because you were at this PC ("Only notify me when I'm away").
+  int skippedWhileHere = 0;
 
   double get _now => _clock().millisecondsSinceEpoch / 1000;
 
@@ -160,7 +173,7 @@ class PhoneSync {
 
   /// A new phase goes out within seconds; a different tool alone only now and then (Swift `publishShared`).
   void _publishMirror({required bool force}) {
-    final mirror = sessions.mirror();
+    final mirror = sessions.mirror(resting: _resting?.call() ?? false);
     final published = _publishedMirror;
     final same =
         published != null &&
@@ -204,9 +217,10 @@ class PhoneSync {
     phaseSince: (session.phaseSince.millisecondsSinceEpoch / 1000).roundToDouble(),
   );
 
-  /// The hook helper includes Claude's words only while this file exists.
+  /// The hook helper includes Claude's words only while this file exists: while summaries are shared and a phone can get
+  /// them (the Mac's `syncSummaryFlag`), so nothing of what Claude says is read, or summarized, for nobody.
   void _syncSummaryFlag() {
-    final on = settings.shareSummaries;
+    final on = settings.shareSummaries && host.paired;
     if (on == _summaryFlag) return;
     _summaryFlag = on;
     try {
@@ -270,6 +284,12 @@ class PhoneSync {
     lastSummary = '${report.project}: ${summary.done}';
     _publishSessions(force: true);
     if (!host.paired) return;
+    // "Only notify me when I'm away from this PC": the card is up to date on the phones, but they don't ring while
+    // you're here (the Mac: 3 minutes without input).
+    if (settings.notifyOnlyWhenAway && _away?.call() == false) {
+      skippedWhileHere++;
+      return;
+    }
     final card = PhoneSessionCard(
       id: report.sessionId,
       project: report.project,

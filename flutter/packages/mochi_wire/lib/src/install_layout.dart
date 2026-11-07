@@ -22,6 +22,15 @@ class InstallLayout {
 
   /// Windows' identity for Mochi's notifications and taskbar grouping (the shortcut carries it).
   static const String appUserModelId = 'InsideEdge.Mochi';
+
+  /// The COM class Windows calls when one of Mochi's notifications is clicked (Mochi registers it while it runs; the
+  /// installed copy is its LocalServer32, so a click starts Mochi when it isn't running).
+  static const String toastActivatorClsid = '{D67AE0D6-41E2-4D4B-961E-FAEC8753952D}';
+
+  /// What Windows keeps about Mochi's notifications in HKEY_CURRENT_USER: the activator's class, and the
+  /// AppUserModelID's name, icon and activator (written by the notifications plugin).
+  static const String toastActivatorKey = 'Software\\Classes\\CLSID\\$toastActivatorClsid';
+  static const String appUserModelIdKey = 'Software\\Classes\\AppUserModelId\\$appUserModelId';
   static const String exeName = 'Mochi.exe';
   static const String displayName = 'Mochi';
   static const String publisher = 'InsideEdge';

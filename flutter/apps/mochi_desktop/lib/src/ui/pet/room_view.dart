@@ -85,7 +85,7 @@ class _RoomViewState extends State<RoomView> {
 
   void _follow() {
     final sessions = widget.desktop.sessions;
-    final mood = PetMood.of(sessions, now: sessions.now, lastActivity: widget.lastActivity());
+    final mood = PetMood.of(sessions, now: sessions.now, lastActivity: widget.lastActivity(), rhythm: widget.desktop.rhythm);
     if (mood != _pet.mood) {
       _pet.follow(mood, time: _time);
       if (mounted) setState(() {});

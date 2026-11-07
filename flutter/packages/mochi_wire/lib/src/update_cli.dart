@@ -266,6 +266,11 @@ class UpdateCli {
     if (system != null) {
       try {
         system.deleteKey(layout.uninstallKey);
+        // What Mochi's notifications registered (a test layout never registers them).
+        if (!layout.test) {
+          system.deleteKey(InstallLayout.toastActivatorKey);
+          system.deleteKey(InstallLayout.appUserModelIdKey);
+        }
         final run = system.readString(_runKey, _runValue);
         if (run != null && layout.contains(_commandPath(run))) {
           system.deleteValue(_runKey, _runValue);

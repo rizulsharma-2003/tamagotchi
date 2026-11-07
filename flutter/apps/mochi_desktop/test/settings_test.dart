@@ -125,11 +125,16 @@ void main() {
       await everyone(tester);
       await open(tester, pane: SettingsTab.phones);
       expect(find.text("Mochi on Rizul's iPhone and realme RMX3242: pairing, Claude’s summaries and talking to Mochi from a phone."), findsOneWidget);
-      for (final tab in [SettingsTab.general, SettingsTab.assistant, SettingsTab.agent, SettingsTab.fun, SettingsTab.notifications]) {
+      for (final tab in [SettingsTab.assistant, SettingsTab.agent, SettingsTab.fun, SettingsTab.notifications]) {
         tester.state<DesktopAppState>(find.byType(DesktopApp)).settingsNavigation.tab = tab;
         await tester.pump(const Duration(milliseconds: 300));
         expect(find.text(SoonRow.tag), findsWidgets, reason: tab.title);
       }
+      // Sprint 2's W1, W2 and W4 took General's last ones: quiet hours, naps that follow the PC, the pet's shortcut.
+      tester.state<DesktopAppState>(find.byType(DesktopApp)).settingsNavigation.tab = SettingsTab.general;
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text(SoonRow.tag), findsNothing);
     });
   });
 
@@ -146,7 +151,7 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Notifications').first);
       await tester.pump(const Duration(milliseconds: 300));
       expect(state.settingsNavigation.tab, SettingsTab.notifications);
-      expect(find.text('Celebrate when Claude finishes'), findsOneWidget);
+      expect(find.text('Play sounds'), findsOneWidget);
       // The pet card opens Characters.
       await tester.tap(find.bySemanticsLabel(RegExp(r'^Mochi, with Patch\. Change how Mochi looks')));
       await tester.pump(const Duration(milliseconds: 300));
@@ -246,8 +251,9 @@ void main() {
         if (node != null) focused.add(node);
       }
       expect(focused.length, greaterThanOrEqualTo(14));
-      expect(tester.getSemantics(find.byType(Switch).first).label, contains('Celebrate when Claude finishes'));
-      expect(tester.widget<Switch>(find.byType(Switch).first).value, isTrue);
+      expect(tester.getSemantics(find.byType(Switch).first).label, contains('Play sounds'));
+      expect(tester.widget<Switch>(find.byType(Switch).first).value, isFalse, reason: 'sounds are off by default, as on the Mac');
+      expect(find.bySemanticsLabel(RegExp('^Turn completed: Animate')), findsOneWidget, reason: 'each checkbox says what it is');
       handle.dispose();
     });
   });
@@ -263,10 +269,20 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
       }
 
-      await flip('Celebrate when Claude finishes');
-      await flip('Worry when a turn fails');
+      Future<void> tick(String label) async {
+        final box = find.bySemanticsLabel(label);
+        await tester.ensureVisible(box);
+        await tester.tap(box);
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+
+      await tick('Turn completed: Animate');
+      await tick('API errors: Animate');
       expect((settings.celebrateFinished, settings.showSnags), (false, false));
       expect(t.document.json!['celebrateFinished'], false);
+      expect((t.document.json!['categoryDelivery'] as Map)['turnCompleted'], {'animate': false, 'badge': false, 'banner': false, 'sound': true});
+      await flip('Play sounds');
+      expect(t.document.json!['soundEnabled'], true);
 
       state.settingsNavigation.tab = SettingsTab.phones;
       await tester.pump(const Duration(milliseconds: 300));

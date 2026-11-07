@@ -8,6 +8,8 @@ import 'package:mochi_art/mochi_art.dart' show RenderDetail;
 import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 
+import '../../core/hotkeys.dart' show MochiShortcut;
+import '../../core/notifications.dart' show NotificationCategory;
 import '../../core/pet_cues.dart';
 import '../../core/sessions.dart' show Attention;
 import '../../desktop.dart';
@@ -79,6 +81,25 @@ class _PetSurfaceState extends State<PetSurface> {
   void initState() {
     super.initState();
     _cues = widget.desktop.cues.listen(_cue);
+    widget.desktop.hotkeys.addListener(_shortcutsChanged);
+    _shortcutsChanged();
+  }
+
+  /// The problems Mochi already mentioned.
+  final Set<String> _saidProblems = {};
+
+  /// A shortcut another app already has: Mochi says so, once (the Mac's "My shortcut … is taken").
+  void _shortcutsChanged() {
+    final hotkeys = widget.desktop.hotkeys;
+    for (final shortcut in MochiShortcut.values) {
+      final problem = hotkeys.problem(shortcut);
+      final hotkey = widget.desktop.settings.shortcut(shortcut);
+      if (problem == null || hotkey == null || !_saidProblems.add('${shortcut.name}:${hotkey.label}')) continue;
+      final pane = shortcut == MochiShortcut.ask ? 'Assistant' : 'Desktop Pet';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _say('My shortcut ${hotkey.label} is taken: pick another in Settings › $pane', const Duration(seconds: 8));
+      });
+    }
   }
 
   void _cue(PetCue cue) {
@@ -93,10 +114,18 @@ class _PetSurfaceState extends State<PetSurface> {
       case PetCue.updated:
         final version = widget.desktop.updater.updatedTo;
         _say(version == null ? 'Mochi is up to date!' : 'Mochi updated to $version!', const Duration(seconds: 8));
+      case PetCue.greet || PetCue.goodbye || PetCue.cheer || PetCue.worry || PetCue.celebrate || PetCue.puzzled:
+        // The Mac's caption for the moment ("session started", "web · a test command failed").
+        final caption = widget.desktop.reactions.caption;
+        if (caption != null && caption.isNotEmpty) _say(sentence(caption), const Duration(seconds: 6));
       default:
         break;
     }
   }
+
+  /// "session started" → "Session started" (a caption led by a project's name keeps it as it is).
+  static String sentence(String caption) =>
+      caption.contains(' · ') ? caption : '${caption[0].toUpperCase()}${caption.substring(1)}';
 
   void _say(String text, Duration duration) {
     _bubbleTimer?.cancel();
@@ -110,6 +139,7 @@ class _PetSurfaceState extends State<PetSurface> {
   @override
   void dispose() {
     unawaited(_cues?.cancel());
+    widget.desktop.hotkeys.removeListener(_shortcutsChanged);
     _bubbleTimer?.cancel();
     super.dispose();
   }
@@ -170,7 +200,10 @@ class _PetSurfaceState extends State<PetSurface> {
 
   @override
   Widget build(BuildContext context) {
-    final needsYou = _mood == PetMood.needsYou;
+    final settings = widget.desktop.settings;
+    // The bubble that stays up while Claude needs you is that moment's animation (Settings › Notifications).
+    final needsYou =
+        _mood == PetMood.needsYou && !settings.pauseReactions && settings.delivery(NotificationCategory.needsAttention).animate;
     final duo = widget.stroll.onTaskbar ? widget.stroll.duo : null;
     final companion = widget.companion;
     final bubble = needsYou ? _needsYou(patch: duo != null) : _bubble;
@@ -182,7 +215,6 @@ class _PetSurfaceState extends State<PetSurface> {
       });
     }
     final onTaskbar = widget.stroll.onTaskbar;
-    final settings = widget.desktop.settings;
     final name = settings.petName;
     final now = widget.desktop.sessions.now;
     // With Patch beside Mochi, the spoken label says what he's up to too.
@@ -262,6 +294,8 @@ class _PetSurfaceState extends State<PetSurface> {
                           companionAccessory: settings.wornByCompanion(now),
                           deskAccessory: settings.deskAccessory,
                           burst: onTaskbar,
+                          rhythm: widget.desktop.rhythm,
+                          badge: widget.desktop.reactions.badge?.level,
                         ),
                       ),
                     ),
