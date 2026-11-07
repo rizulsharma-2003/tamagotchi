@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart' show SeasonalEvent;
 import 'package:mochi_art/pose_tracks.dart';
@@ -92,11 +94,21 @@ class _HomeScreenState extends State<HomeScreen> {
         if (times > 1) down(times - 1);
       });
       down(3);
+      // From a shortcut or the popover the window grows from the pet's size to its own a few frames later: down again
+      // once it has.
+      for (final wait in const [Duration(milliseconds: 250), Duration(milliseconds: 700)]) {
+        _askTimers.add(Timer(wait, () => down(2)));
+      }
     }
   }
 
+  final List<Timer> _askTimers = [];
+
   @override
   void dispose() {
+    for (final timer in _askTimers) {
+      timer.cancel();
+    }
     _scroll.dispose();
     super.dispose();
   }

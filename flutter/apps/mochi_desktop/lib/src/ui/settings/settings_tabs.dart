@@ -93,13 +93,13 @@ enum SettingsTab {
 
   /// The pane's header line. [phoneNames] names the paired phones ("Rizul's iPhone and Pixel 8"), or "your phones".
   String blurb({String pet = 'Mochi', String companion = 'Patch', String phoneNames = 'your phones'}) => switch (this) {
-    general => 'Names, starting with Windows, the window’s theme and how $pet reacts.',
+    general => 'Names, starting with Windows, the window’s theme, how $pet reacts and quiet hours.',
     characters => 'Looks for $pet and $companion: the coat, what they wear, the desk and the room, and when $companion is around.',
     claude => 'Connect Claude Code so $pet follows your sessions and reacts to what they do.',
     assistant => 'Ask $pet questions and quick commands, here on this PC or from your phones.',
     phones => 'Mochi on $phoneNames: pairing, Claude’s summaries and talking to $pet from a phone.',
     agent => '$pet keeps an eye on Gmail, Google Calendar and Notion and tells you what matters.',
-    notifications => 'Which of Claude’s moments $pet reacts to, here and on your phones.',
+    notifications => 'Which of Claude’s moments $pet reacts to, which get a Windows notification, and how they sound.',
     desktop => 'Let $pet sit on your desktop or stroll along the taskbar, with $companion at his desk.',
     fun => 'Holidays, games, adventures and little surprises.',
     privacy => 'What leaves this PC, what Mochi keeps here, and where.',
@@ -110,16 +110,19 @@ enum SettingsTab {
   /// More words search finds the pane by.
   String get keywords => switch (this) {
     general => 'name names pet companion startup start with windows sign in login boot theme light dark appearance '
-        'reactions pause quiet hours sounds naps reset',
+        'reactions pause quiet mode quiet hours do not disturb reset',
     characters => 'pet companion colour color coat accessory accessories hat glasses wear desk theme office room look '
-        'mochi patch costume show linger stays naps sleep visibility always never sessions',
+        'mochi patch costume show linger stays naps sleep rest idle away pc rhythm visibility always never sessions',
     claude => 'hooks connect sessions integration claude code helper bridge settings.json backup troubleshoot',
-    assistant => 'ask mochi voice talk shortcut quick commands model haiku sonnet brain approvals',
+    assistant => 'ask mochi voice talk shortcut hotkey keyboard ctrl alt space quick commands model haiku sonnet brain '
+        'approvals',
     phones => 'phones phone iphone android mochi pocket pair pairing link relay unpair test devices summaries talking '
-        'live activity',
+        'away only when live activity',
     agent => 'gmail calendar notion mail meetings tasks briefing vip done cloud watcher',
-    notifications => 'alerts notifications toast banner sounds reactions celebrate finished needs you snag',
-    desktop => 'desktop pet taskbar roam stroll walk window position show hide patch companion desk',
+    notifications => 'alerts notifications toast toasts banner badge sounds sound volume keyboard taps quiet reactions '
+        'celebrate finished needs you snag errors build test categories animate',
+    desktop => 'desktop pet taskbar roam stroll walk window position show hide shortcut hotkey keyboard patch companion '
+        'desk',
     fun => 'games adventure seasons seasonal holidays halloween diwali christmas new year valentine birthday treats '
         'focus recap room furniture talking',
     privacy => 'privacy data history relay encryption summaries share keep folder clear',

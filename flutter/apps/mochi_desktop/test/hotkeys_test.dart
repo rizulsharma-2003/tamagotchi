@@ -223,6 +223,22 @@ void main() {
       expect(t.desktop.settings.shortcut(MochiShortcut.ask), Hotkey.askDefault);
     });
 
+    testWidgets('the focus taken elsewhere while recording (Windows hands it back when the window comes forward) comes back', (tester) async {
+      await open(tester, SettingsTab.assistant);
+      final change = find.text('Change…');
+      await tester.ensureVisible(change);
+      await tester.tap(change);
+      await tester.pump(const Duration(milliseconds: 100));
+      // Something else takes the focus, as Windows' focus restore does on activation.
+      final elsewhere = Focus.of(tester.element(find.text('Open Ask Mochi')));
+      elsewhere.requestFocus();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(elsewhere.hasPrimaryFocus, isFalse, reason: 'the recorder took it back');
+      await press(tester, [LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.altLeft], LogicalKeyboardKey.keyJ);
+      expect(t.desktop.settings.shortcut(MochiShortcut.ask), const Hotkey(0x4A, ctrl: true, alt: true));
+      expect(find.text('Press the new shortcut… (Esc cancels)'), findsNothing);
+    });
+
     testWidgets('Desktop Pet: a combination another app has is reported; Mochi’s other one is refused', (tester) async {
       t.hotkeys.taken.add(Hotkey.petDefault);
       await open(tester, SettingsTab.desktop);

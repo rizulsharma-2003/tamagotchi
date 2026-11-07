@@ -31,6 +31,7 @@ class _ShortcutRowState extends State<ShortcutRow> {
 
   @override
   void dispose() {
+    FocusManager.instance.removeListener(_keepFocus);
     if (_recording) desktop.hotkeys.resume().ignore();
     _recorder.dispose();
     super.dispose();
@@ -41,18 +42,27 @@ class _ShortcutRowState extends State<ShortcutRow> {
       _recording = true;
       _refused = null;
     });
-    // The keys come here first (not to a button, where Space or Enter would press it).
+    // The keys come here (never to a button, where Space or Enter would press it), and stay here: on Windows, the
+    // window coming forward under the click can hand the focus back to where it was a moment later.
     _recorder.requestFocus();
+    FocusManager.instance.addListener(_keepFocus);
     // Mochi's own shortcuts let go meanwhile, so pressing one records it instead of running it.
     await desktop.hotkeys.suspend();
   }
 
+  void _keepFocus() {
+    if (_recording && mounted && !_recorder.hasPrimaryFocus) _recorder.requestFocus();
+  }
+
   Future<void> _stop() async {
     if (!_recording) return;
+    FocusManager.instance.removeListener(_keepFocus);
     setState(() => _recording = false);
     await desktop.hotkeys.resume();
   }
 
+  /// While recording every key is the recorder's: the first that isn't a modifier makes the combination; Escape on its
+  /// own cancels.
   KeyEventResult _key(FocusNode node, KeyEvent event) {
     if (!_recording) return KeyEventResult.ignored;
     if (event is! KeyDownEvent) return KeyEventResult.handled;
