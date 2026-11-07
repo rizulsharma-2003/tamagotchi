@@ -6,4 +6,4 @@
 // verify updates, so it never installs one.
 
 /// base64url, 32 bytes.
-const String windowsUpdatePublicKey = '';
+const String windowsUpdatePublicKey = 'diN0kXqwasnEXre3BnkOTlnu8XQUELDaRBAZqlRwrgw';
