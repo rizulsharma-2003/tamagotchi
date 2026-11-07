@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mochi_link/mochi_link.dart';
 
 import '../model/pocket_model.dart';
 import '../model/updates_history.dart';
@@ -13,13 +14,17 @@ import 'home_screen.dart' show spokenTimeFor;
 /// updates by day ("Earlier today", "Yesterday", "Tuesday, 4 Nov"): what came in and when, and what you or your
 /// computer marked done, where and when. Pull down to ask your computer to check again. Each update is its own small
 /// clay card, in a lazily built list. "Read aloud" reads what's waiting; leaving the screen stops it, as on the iPhone.
+/// With Mochi Cloud set up, an email's long-press menu has "Draft a reply…".
 class UpdatesScreen extends StatefulWidget {
-  const UpdatesScreen({super.key, required this.model, required this.opener, required this.reader, required this.checkNow});
+  const UpdatesScreen({super.key, required this.model, required this.opener, required this.reader, required this.checkNow, this.draft});
 
   final PocketModel model;
   final LinkOpener opener;
   final UpdatesReader reader;
   final VoidCallback checkNow;
+
+  /// "Draft a reply…" for an email (null: Mochi Cloud isn't set up).
+  final void Function(AgentNote note)? draft;
 
   @override
   State<UpdatesScreen> createState() => _UpdatesScreenState();
@@ -149,7 +154,12 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
       for (final note in waiting)
         card(
           key: ValueKey(note.id),
-          UpdateRow(note: note, opener: opener, onDone: () => model.markDone([note.id])),
+          UpdateRow(
+            note: note,
+            opener: opener,
+            onDone: () => model.markDone([note.id]),
+            onDraft: widget.draft == null ? null : () => widget.draft!(note),
+          ),
         ),
       if (looked != null)
         Padding(
@@ -173,6 +183,7 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
               doneButton: false,
               onDone: () => model.markDone([entry.id]),
               onNotDone: () => model.markNotDone(entry.id),
+              onDraft: widget.draft == null ? null : () => widget.draft!(entry.note),
               caption: _caption(context, entry),
             ),
           ),

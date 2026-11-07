@@ -18,7 +18,8 @@ import 'home_screen.dart' show connectionPill;
 const String appVersion = '0.1.0';
 
 /// Settings: Mochi Link (who this phone is paired with, the relay and the Mac's presence, Unpair), notifications, Mochi
-/// on the lock screen, appearance, and Mochi's voice (iOS/MochiPocket/PocketLink.swift `LinkCard`, PocketSettingsView).
+/// on the lock screen, appearance, Mochi's voice and Mochi Cloud (iOS/MochiPocket/PocketLink.swift `LinkCard`,
+/// PocketSettingsView).
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.model, required this.notifier, required this.settings, required this.reader, this.live});
 
@@ -133,6 +134,8 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
             _appearance(),
             const SizedBox(height: Space.l),
             _voice(),
+            const SizedBox(height: Space.l),
+            _cloud(),
             const SizedBox(height: Space.l),
             Text(
               'Mochi for Android $appVersion · Mochi Link protocol $linkClientVersion',
@@ -593,6 +596,105 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
             ],
           );
         },
+      ),
+    );
+  }
+
+  // MARK: Mochi Cloud
+
+  /// Mochi Cloud (the iPhone's Settings › Mochi Cloud): whether its hourly news has reached this phone, whether Check now
+  /// can use it while the computer is off, and where Check now goes.
+  Widget _cloud() {
+    final p = context.palette;
+    final host = model.host;
+    final seen = model.cloudSeenAt;
+    final available = model.cloudAvailable;
+    final always = settings.checkNowUsesCloud;
+    return ClayCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(header: true, child: Text('Mochi Cloud', style: context.type.headline)),
+          const SizedBox(height: Space.m),
+          _check(
+            'Hourly checks',
+            ok: seen != null,
+            detail: seen == null ? 'No news from the cloud yet' : 'Last news ${relativeTime(seen)}',
+          ),
+          _check('Check now without ${host.yours}', ok: available, detail: available ? 'Ready' : 'Add the API trigger on ${host.yours}'),
+          const SizedBox(height: Space.s),
+          MergeSemantics(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Check now always asks Mochi Cloud',
+                    style: context.type.subheadline.copyWith(fontWeight: FontWeight.w600, color: p.ink),
+                  ),
+                ),
+                const SizedBox(width: Space.s),
+                Switch(value: always, onChanged: (value) => settings.checkNowUsesCloud = value),
+              ],
+            ),
+          ),
+          const SizedBox(height: Space.xs),
+          Text(
+            always
+                ? 'Check now goes straight to the cloud, whether ${host.yours} is on or off. Answers take a minute or two and arrive '
+                      'as a notification.'
+                : "Check now asks ${host.yours} first (faster when it's on) and the cloud only when it doesn't answer.",
+            style: context.type.footnote,
+          ),
+          const SizedBox(height: Space.s),
+          Text(
+            "While ${host.yours} is off, a Claude task in Anthropic's cloud checks your mail, calendar and Notion every hour from "
+            '8 am to 11 pm and notifies you here. News ${host.yours} already gave you arrives quietly. Set it up in '
+            "${host.yours}'s Settings › Agent › Mochi Cloud.",
+            style: context.type.footnote,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A status line: a tick or an empty circle, what it is, and how it stands (under it when the text is large).
+  Widget _check(String title, {required bool ok, required String detail}) {
+    final p = context.palette;
+    final stacked = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final titleText = Text(title, style: context.type.subheadline.copyWith(color: p.ink));
+    final detailText = Text(detail, style: context.type.footnote);
+    return MergeSemantics(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Space.xs),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                ok ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                size: 18,
+                color: ok ? p.success : p.inkSecondary,
+                semanticLabel: ok ? 'Yes' : 'Not yet',
+              ),
+            ),
+            const SizedBox(width: Space.s),
+            Expanded(
+              child: stacked
+                  ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [titleText, detailText])
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: titleText),
+                        const SizedBox(width: Space.s),
+                        Flexible(
+                          child: Text(detail, textAlign: TextAlign.end, style: context.type.footnote),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

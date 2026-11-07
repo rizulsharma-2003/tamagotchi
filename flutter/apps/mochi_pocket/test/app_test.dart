@@ -472,7 +472,8 @@ void main() {
     // Off: saved, and nothing stays.
     await tester.tap(find.text('Show on Lock Screen'));
     await tester.pump();
-    await tester.tap(find.byType(Switch));
+    // The lock screen's switch (Mochi Cloud has one further down).
+    await tester.tap(find.byType(Switch).first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(settings.showOnLockScreen, isFalse);

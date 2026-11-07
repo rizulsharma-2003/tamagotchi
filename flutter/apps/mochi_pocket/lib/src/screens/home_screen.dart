@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:mochi_link/mochi_link.dart';
 
 import '../live/live_updates.dart';
 import '../model/app_settings.dart';
@@ -16,6 +17,7 @@ import '../voice/updates_reader.dart';
 import '../widgets/agent_card.dart';
 import '../widgets/cards.dart';
 import '../widgets/clay.dart';
+import '../widgets/draft_sheet.dart';
 import '../widgets/session_card.dart';
 import 'settings_screen.dart';
 import 'updates_screen.dart';
@@ -70,13 +72,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _bubbleTimer;
   MacConnection? _announced;
   StreamSubscription<String>? _liveActions;
+  StreamSubscription<void>? _cloudTookOver;
 
   /// Claude's sessions on the computer, where Open the Session brings you.
   final GlobalKey _sessions = GlobalKey();
 
   PocketModel get model => widget.model;
-
-  static const String _checkText = "What's pending?";
 
   @override
   void initState() {
@@ -84,6 +85,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _announced = model.connection;
     model.addListener(_modelChanged);
     _liveActions = widget.liveActions?.listen(_liveAction);
+    // The computer didn't pick up "Check now", so Mochi Cloud did: say so rather than wait for it (the iPhone's
+    // `cloudTookOver`).
+    _cloudTookOver = model.cloudTookOver.listen(
+      (_) => _say(
+        '${model.host.yoursCapitalized} is away, so Mochi Cloud is checking — your news arrives as a notification in a minute '
+        'or two.',
+        seconds: 10,
+      ),
+    );
   }
 
   /// Open the Session in Mochi's ongoing notification (Claude needs you): to Claude's sessions on the computer, where
@@ -117,6 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     model.removeListener(_modelChanged);
     unawaited(_liveActions?.cancel());
+    unawaited(_cloudTookOver?.cancel());
     _bubbleTimer?.cancel();
     _typed.dispose();
     _field.dispose();
@@ -185,11 +196,30 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   bool get _checking {
-    final latest = model.exchanges.where((exchange) => exchange.text == _checkText).lastOrNull;
+    if (model.cloudChecking) return true;
+    final latest = model.exchanges.where((exchange) => exchange.text == PocketModel.checkText).lastOrNull;
     return latest != null &&
         (latest.state == ExchangeState.sending || latest.state == ExchangeState.working) &&
         DateTime.now().difference(latest.sentAt) < const Duration(minutes: 2);
   }
+
+  /// "Check now" (the iPhone's `checkForUpdates`): straight to Mochi Cloud when that's on and set up, otherwise the
+  /// computer first. Mochi says where it went.
+  Future<void> _checkNow() async {
+    final route = await model.checkNow(useCloud: widget.settings.checkNowUsesCloud);
+    if (!mounted) return;
+    switch (route) {
+      case CheckRoute.cloud:
+        _say('Asking Mochi Cloud… your news arrives as a notification in a minute or two.', seconds: 8);
+      case CheckRoute.computer when !model.macOnline && !model.cloudAvailable:
+        _say("${model.host.yoursCapitalized} is away. I'll pass it on when it wakes.");
+      case CheckRoute.computer || CheckRoute.busy || CheckRoute.failed:
+        break;
+    }
+  }
+
+  /// "Draft a reply…" on an email: Mochi Cloud writes it into Gmail Drafts.
+  void _draft(AgentNote note) => unawaited(showDraftReply(context, note: note, ask: (words) => model.draftReply(note, words)));
 
   void _openSettings() => Navigator.of(context).push(
     MaterialPageRoute<void>(
@@ -200,7 +230,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openUpdates() => Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) => UpdatesScreen(model: model, opener: widget.opener, reader: widget.reader, checkNow: () => model.send(_checkText)),
+      builder: (_) => UpdatesScreen(
+        model: model,
+        opener: widget.opener,
+        reader: widget.reader,
+        checkNow: _checkNow,
+        draft: model.draftsAvailable ? _draft : null,
+      ),
     ),
   );
 
@@ -281,8 +317,13 @@ class _HomeScreenState extends State<HomeScreen> {
           opener: widget.opener,
           markDone: (note) => _markDone(note.id, note.title),
           seeAll: _openUpdates,
-          checkNow: () => model.send(_checkText),
+          checkNow: () => unawaited(_checkNow()),
           checking: _checking,
+          cloudChecking: model.cloudChecking,
+          cloudAvailable: model.cloudAvailable,
+          cloudSeen: model.cloudSeenAt != null,
+          cloudError: model.cloudError,
+          draft: model.draftsAvailable ? _draft : null,
           speaking: widget.reader.speaking,
           speak: () =>
               widget.reader.toggle(model.waiting, talkBack: MediaQuery.accessibleNavigationOf(context), time: spokenTimeFor(context)),

@@ -23,8 +23,8 @@ enum Appearance {
   static Appearance parse(Object? name) => values.where((value) => value.name == name).firstOrNull ?? system;
 }
 
-/// This phone's own choices (not shared with the Mac): appearance, Mochi's voice, and Mochi on the lock screen while
-/// Claude works. Kept in a small file in the app's private folder (the push handler reads it too); a change applies at
+/// This phone's own choices (not shared with the Mac): appearance, Mochi's voice, Mochi on the lock screen while
+/// Claude works, and where "Check now" goes. Kept in a small file in the app's private folder (the push handler reads it too); a change applies at
 /// once.
 class AppSettings extends ChangeNotifier {
   AppSettings(this._document);
@@ -35,6 +35,7 @@ class AppSettings extends ChangeNotifier {
   VoiceCharacter _character = VoiceCharacter.mochi;
   String? _voiceName;
   bool _showOnLockScreen = true;
+  bool _checkNowUsesCloud = true;
 
   Appearance get appearance => _appearance;
   VoiceCharacter get character => _character;
@@ -46,6 +47,11 @@ class AppSettings extends ChangeNotifier {
   /// unless you turn it off.
   bool get showOnLockScreen => _showOnLockScreen;
 
+  /// "Check now always asks Mochi Cloud" (the iPhone's Settings › Mochi Cloud): straight to the cloud when it's set
+  /// up, whether the computer is on or off; off, the computer first and the cloud only when it doesn't answer. On
+  /// unless you turn it off, as on the iPhone.
+  bool get checkNowUsesCloud => _checkNowUsesCloud;
+
   Future<void> load() async {
     final json = await _document.read();
     _appearance = Appearance.parse(json?['appearance']);
@@ -53,6 +59,7 @@ class AppSettings extends ChangeNotifier {
     final voice = json?['voiceName'];
     _voiceName = voice is String && voice.isNotEmpty ? voice : null;
     _showOnLockScreen = json?['showOnLockScreen'] != false;
+    _checkNowUsesCloud = json?['checkNowUsesCloud'] != false;
     notifyListeners();
   }
 
@@ -80,6 +87,12 @@ class AppSettings extends ChangeNotifier {
     _changed();
   }
 
+  set checkNowUsesCloud(bool value) {
+    if (value == _checkNowUsesCloud) return;
+    _checkNowUsesCloud = value;
+    _changed();
+  }
+
   void _changed() {
     notifyListeners();
     unawaited(_save());
@@ -92,6 +105,7 @@ class AppSettings extends ChangeNotifier {
         'voiceCharacter': _character.name,
         'voiceName': ?_voiceName,
         'showOnLockScreen': _showOnLockScreen,
+        'checkNowUsesCloud': _checkNowUsesCloud,
       });
     } on Object catch (error) {
       debugPrint('Mochi: settings were not saved (${error.runtimeType})');
