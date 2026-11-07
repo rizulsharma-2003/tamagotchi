@@ -203,37 +203,32 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
       case Surface.hidden:
         await windowManager.hide();
       case Surface.pet:
-        await windowManager.setAlwaysOnTop(true);
-        await windowManager.setSkipTaskbar(true);
-        await windowManager.setResizable(false);
-        await windowManager.setHasShadow(false);
+        await _form(onTop: true, skipTaskbar: true, resizable: false, shadow: false);
         await windowManager.setMinimumSize(SurfaceSizes.petMinimum);
-        await windowManager.setSize(petSize);
-        if (petPosition != null) {
-          await windowManager.setPosition(petPosition);
-        } else {
-          // Bottom left, just above the taskbar (the work area), where Windows 11 shows its widgets tile.
-          await windowManager.setAlignment(Alignment.bottomLeft);
+        // Back from the popover on Windows, the stroll has already put the window back exactly where it was.
+        if (previous != Surface.popover || _petWindow == null) {
+          await windowManager.setSize(petSize);
+          if (petPosition != null) {
+            await windowManager.setPosition(petPosition);
+          } else {
+            // Bottom left, just above the taskbar (the work area), where Windows 11 shows its widgets tile.
+            await windowManager.setAlignment(Alignment.bottomLeft);
+          }
         }
         // Shown without taking the focus from whatever you're typing in.
-        await windowManager.show(inactive: true);
+        if (previous != Surface.pet && previous != Surface.popover) await windowManager.show(inactive: true);
       case Surface.popover:
         _focusBefore = _petWindow?.focusOwner() ?? 0;
-        // A flyout: over everything, not in the taskbar, its own shadow and rounded corners, with the focus.
-        await windowManager.setAlwaysOnTop(true);
-        await windowManager.setSkipTaskbar(true);
-        await windowManager.setResizable(false);
-        await windowManager.setHasShadow(false);
+        // A flyout: over everything, not in the taskbar, its own rounded corners, with the focus.
+        await _form(onTop: true, skipTaskbar: true, resizable: false, shadow: false);
         await windowManager.setMinimumSize(SurfaceSizes.petMinimum);
         // On Windows the stroll has already put the window there, exactly, in one move (so nothing in it jumps);
         // elsewhere, one move and resize here.
         if (_petWindow == null && petPosition != null) await windowManager.setBounds(petPosition & petSize);
-        await windowManager.show();
+        if (previous == Surface.hidden || previous == Surface.main) await windowManager.show();
         await windowManager.focus();
       case Surface.main:
-        await windowManager.setAlwaysOnTop(false);
-        await windowManager.setSkipTaskbar(false);
-        await windowManager.setHasShadow(true);
+        await _form(onTop: false, skipTaskbar: false, resizable: _resizable ?? false, shadow: true);
         if (previous != Surface.main) {
           await windowManager.setMinimumSize(SurfaceSizes.mainMinimum);
           await windowManager.setSize(mainSize);
@@ -244,9 +239,36 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
           await windowManager.setBounds(Rect.fromCenter(center: bounds.center, width: mainSize.width, height: mainSize.height));
         }
         _mainShown = mainSize;
-        await windowManager.setResizable(true);
+        if (_resizable != true) {
+          await windowManager.setResizable(true);
+          _resizable = true;
+        }
         await windowManager.show();
         await windowManager.focus();
+    }
+  }
+
+  bool? _onTop, _skipTaskbar, _resizable, _shadow;
+
+  /// The window's form, changing only what differs: each of these calls makes Windows redo something (taking the
+  /// taskbar's tab away repaints the taskbar, and always-on-top activates the window), and the pet and the popover
+  /// share them all, so going between those two changes nothing.
+  Future<void> _form({required bool onTop, required bool skipTaskbar, required bool resizable, required bool shadow}) async {
+    if (_onTop != onTop) {
+      await windowManager.setAlwaysOnTop(onTop);
+      _onTop = onTop;
+    }
+    if (_skipTaskbar != skipTaskbar) {
+      await windowManager.setSkipTaskbar(skipTaskbar);
+      _skipTaskbar = skipTaskbar;
+    }
+    if (_resizable != resizable) {
+      await windowManager.setResizable(resizable);
+      _resizable = resizable;
+    }
+    if (_shadow != shadow) {
+      await windowManager.setHasShadow(shadow);
+      _shadow = shadow;
     }
   }
 

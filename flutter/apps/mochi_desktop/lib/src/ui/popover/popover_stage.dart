@@ -109,10 +109,10 @@ class PopoverStage extends StatefulWidget {
   final VoidCallback onClosed;
 
   /// The transitions' lengths.
-  static const Duration opening = Duration(milliseconds: 420);
-  static const Duration genieIn = Duration(milliseconds: 380);
-  static const Duration closingLength = Duration(milliseconds: 560);
-  static const Duration genieOut = Duration(milliseconds: 320);
+  static const Duration opening = Duration(milliseconds: 500);
+  static const Duration genieIn = Duration(milliseconds: 450);
+  static const Duration closingLength = Duration(milliseconds: 640);
+  static const Duration genieOut = Duration(milliseconds: 380);
   static const Duration fade = Duration(milliseconds: 120);
 
   @override
