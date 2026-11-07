@@ -13,8 +13,11 @@ import '../core/hotkeys.dart';
 import '../core/pet_cues.dart';
 import '../core/toasts.dart';
 import '../desktop.dart';
+import '../platform/process_cpu.dart';
 import '../platform/taskbar.dart';
+import 'perf_meter.dart';
 import 'pet/companion_director.dart';
+import 'pet/pet_director.dart' show PetMood;
 import '../update/updater.dart';
 import 'pet/pet_surface.dart';
 import 'pet/taskbar_stroll.dart';
@@ -118,6 +121,47 @@ class DesktopAppState extends State<DesktopApp> {
     null => null,
   };
 
+  /// Development: with a `perf-debug` file in Mochi's folder, what each state costs goes to `perf.log` there.
+  PerfMeter? _perf;
+
+  /// What Mochi is doing, for the perf meter.
+  String perfState() {
+    switch (_surface) {
+      case Surface.hidden:
+        return 'hidden';
+      case Surface.main:
+        return 'main window';
+      case Surface.popover:
+        return _popoverClosing ? 'popover closing' : 'popover';
+      case Surface.pet:
+        final mood = _stroll.mood == PetMood.napping ? 'napping' : 'calm';
+        final patch = _stroll.home != null ? ' with Patch' : '';
+        return switch (_stroll.placement) {
+          PetPlacement.taskbar => '${_stroll.moving ? 'roaming' : mood}$patch',
+          PetPlacement.standing => 'standing, $mood',
+          PetPlacement.hidden => 'out of the way (full screen)',
+          PetPlacement.away => 'placing',
+        };
+    }
+  }
+
+  void _startPerf() {
+    final folder = desktop.paths.home;
+    if (!File('$folder${Platform.pathSeparator}perf-debug').existsSync()) return;
+    final file = File('$folder${Platform.pathSeparator}perf.log');
+    _perf = PerfMeter(
+      state: perfState,
+      cpu: processCpuMicroseconds,
+      log: (line) {
+        try {
+          file.writeAsStringSync('${DateTime.now().toIso8601String()} $line\n', mode: FileMode.append);
+        } on Object {
+          // Diagnostics only.
+        }
+      },
+    );
+  }
+
   MochiDesktop get desktop => widget.desktop;
   Surface get surface => _surface;
   MainPage get page => _page;
@@ -163,6 +207,7 @@ class DesktopAppState extends State<DesktopApp> {
       };
     }
     unawaited(_loadLibrary());
+    _startPerf();
     _subscriptions.add(widget.shell.actions.listen(handle));
     _subscriptions.add(desktop.cues.listen(_noteActivity));
     _subscriptions.add(desktop.opens.listen(openFromNotification));
@@ -510,6 +555,7 @@ class DesktopAppState extends State<DesktopApp> {
     _stroll.dispose();
     _companion.dispose();
     _meter?.dispose();
+    _perf?.dispose();
     super.dispose();
   }
 

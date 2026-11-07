@@ -310,7 +310,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
       final scale = _stage?.scale ?? 1;
       _stop();
       // Nothing else runs while the genie plays (the walk, the pointer, UI Automation, the raise), and frames come on time.
-      shell.petWindow?.preciseTimers(true);
+      _precise(true);
       return _enqueue(() async {
         // Off the taskbar; the window lets every click through until the popover is all the way out.
         _halt();
@@ -348,7 +348,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     _resumeX = null;
     popover = null;
     _stop();
-    shell.petWindow?.preciseTimers(false);
+    _precise(false);
     return _enqueue(() async {
       _leaveTaskbar();
       _placement = PetPlacement.away;
@@ -358,6 +358,16 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
         await _uncover();
       }
     });
+  }
+
+  /// Windows' timers to the millisecond (timeBeginPeriod) only while the popover's transitions run.
+  bool _preciseOn = false;
+  bool get preciseTimers => _preciseOn;
+
+  void _precise(bool on) {
+    if (on != _preciseOn) log?.call('precise timers: ${on ? 'on' : 'off'}');
+    _preciseOn = on;
+    shell.petWindow?.preciseTimers(on);
   }
 
   /// Whether the window is out of sight behind a picture of itself while it changes size ([PetWindow.cover]).
@@ -379,6 +389,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Mochi's mood (from the pet's view): what it does on the taskbar.
+  PetMood get mood => _mood;
   set mood(PetMood mood) {
     if (mood == _mood) return;
     _mood = mood;
@@ -435,7 +446,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   /// The popover is all the way out: clicks reach it, and pass through the rest of the window to the taskbar.
   void popoverOpened() {
     _popoverOpen = true;
-    shell.petWindow?.preciseTimers(false);
+    _precise(false);
     _popoverTimer?.cancel();
     _popoverTimer = Timer.periodic(nearPointerInterval, (_) => _popoverPointer());
     _popoverPointer();
@@ -447,7 +458,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     _popoverTimer?.cancel();
     _popoverTimer = null;
     _setClickThrough(true);
-    shell.petWindow?.preciseTimers(true);
+    _precise(true);
   }
 
   /// Mochi has landed: the window goes back to the pet's own rect (where the pet draws Mochi just as it was drawn).
@@ -456,7 +467,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     final window = shell.petWindow;
     _popoverTimer?.cancel();
     _popoverTimer = null;
-    window?.preciseTimers(false);
+    _precise(false);
     if (geometry == null || window == null || geometry.mochi == null) return;
     // Out of sight behind a still picture of Mochi on its spot until the pet has drawn it there ([show]).
     _covered = window.cover();
@@ -996,7 +1007,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   void dispose() {
     _disposed = true;
     _stop();
-    shell.petWindow?.preciseTimers(false);
+    _precise(false);
     if (_covered) shell.petWindow?.uncover();
     unawaited(_cues.cancel());
     settings.removeListener(_settingsChanged);
