@@ -206,6 +206,18 @@ class FakeShell implements DesktopShell {
   @override
   Future<void> startDragging() async => drags++;
 
+  /// Each edge a resize started from.
+  final List<WindowEdge> resizes = [];
+
+  /// What [size] answers: the main window's size, unless a test set another.
+  Size? sizeNow;
+
+  @override
+  Future<void> startResizing(WindowEdge edge) async => resizes.add(edge);
+
+  @override
+  Future<Size?> size() async => sizeNow ?? mainSize;
+
   @override
   Future<Offset?> position() async => dropAt;
 

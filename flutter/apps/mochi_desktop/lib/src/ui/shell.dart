@@ -38,8 +38,14 @@ enum ShellAction {
   dismissPopover,
   /// A verified update is waiting: install it now (Mochi quits and starts again).
   restartToUpdate,
+
+  /// The main window was resized (a drag on its edge ended): remember the size.
+  windowResized,
   quit,
 }
+
+/// An edge or corner of the window, for resizing it by hand.
+enum WindowEdge { top, bottom, left, right, topLeft, topRight, bottomLeft, bottomRight }
 
 abstract interface class DesktopShell {
   /// Shows [surface]: the pet at [petPosition] (screen coordinates; null: bottom left, just above the taskbar), with
@@ -68,6 +74,13 @@ abstract interface class DesktopShell {
 
   /// Moves the window with the mouse (call on a drag start).
   Future<void> startDragging();
+
+  /// Resizes the window with the mouse from [edge] (call on a drag start on an edge: the window has no frame of its
+  /// own to grab).
+  Future<void> startResizing(WindowEdge edge);
+
+  /// The window's size now (logical pixels).
+  Future<Size?> size();
 
   /// Where the window is now (to remember the pet's spot).
   Future<Offset?> position();
@@ -289,6 +302,32 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
 
   @override
   Future<void> startDragging() => windowManager.startDragging();
+
+  @override
+  Future<void> startResizing(WindowEdge edge) => windowManager.startResizing(switch (edge) {
+    WindowEdge.top => ResizeEdge.top,
+    WindowEdge.bottom => ResizeEdge.bottom,
+    WindowEdge.left => ResizeEdge.left,
+    WindowEdge.right => ResizeEdge.right,
+    WindowEdge.topLeft => ResizeEdge.topLeft,
+    WindowEdge.topRight => ResizeEdge.topRight,
+    WindowEdge.bottomLeft => ResizeEdge.bottomLeft,
+    WindowEdge.bottomRight => ResizeEdge.bottomRight,
+  });
+
+  @override
+  Future<Size?> size() async {
+    try {
+      return await windowManager.getSize();
+    } on Object {
+      return null;
+    }
+  }
+
+  @override
+  void onWindowResized() {
+    if (_surface == Surface.main) _actions.add(ShellAction.windowResized);
+  }
 
   @override
   Future<Offset?> position() async {

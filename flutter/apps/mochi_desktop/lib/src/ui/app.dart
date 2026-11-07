@@ -20,6 +20,7 @@ import 'popover/frame_meter.dart';
 import 'popover/popover_stage.dart';
 import 'popover/popover_view.dart';
 import 'screens/home_screen.dart';
+import 'widgets/resize_edges.dart';
 import 'screens/pairing_screen.dart';
 import 'screens/settings_screen.dart';
 import 'shell.dart';
@@ -250,6 +251,8 @@ class DesktopAppState extends State<DesktopApp> {
         if (_surface == Surface.popover && (opened == null || _clock() - opened > popoverSettle)) closePopover();
       case ShellAction.restartToUpdate:
         unawaited(restartToUpdate());
+      case ShellAction.windowResized:
+        unawaited(_rememberSize());
       case ShellAction.quit:
         unawaited(_quit());
     }
@@ -267,7 +270,7 @@ class DesktopAppState extends State<DesktopApp> {
     if (page == MainPage.settings && (_page != MainPage.settings || _surface != Surface.main)) {
       _settingsFromWindow = _surface == Surface.main;
     }
-    widget.shell.mainSize = page == MainPage.settings ? settingsSize() : SurfaceSizes.main;
+    widget.shell.mainSize = page == MainPage.settings ? settingsSize() : mainWindowSize();
     setState(() => _page = page);
     _show(Surface.main);
   }
@@ -281,9 +284,15 @@ class DesktopAppState extends State<DesktopApp> {
     if (desktop.link.code == null && !desktop.link.working) unawaited(desktop.link.showCode());
   }
 
-  /// The Settings window's size: the Mac's, or as much of a small screen as fits (Windows' work area).
-  Size settingsSize() {
-    const wanted = SurfaceSizes.settings;
+  /// Mochi's own window (home and pairing): the size you last gave it, or the default.
+  Size mainWindowSize() => _fit(desktop.settings.mainWindowSize ?? SurfaceSizes.main);
+
+  /// The Settings window's size: the size you last gave it, else the Mac's, or as much of a small screen as fits
+  /// (Windows' work area).
+  Size settingsSize() => _fit(desktop.settings.settingsWindowSize ?? SurfaceSizes.settings);
+
+  /// [wanted], no smaller than the window's minimum and no bigger than the screen's work area.
+  Size _fit(Size wanted) {
     if (!Platform.isWindows || !_stroll.taskbar.available) return wanted;
     final reading = _stroll.taskbar.read();
     if (reading == null) return wanted;
@@ -293,6 +302,19 @@ class DesktopAppState extends State<DesktopApp> {
       math.max(SurfaceSizes.mainMinimum.width, math.min(wanted.width, width)),
       math.max(SurfaceSizes.mainMinimum.height, math.min(wanted.height, height)),
     );
+  }
+
+  /// You resized the window by its edge: Mochi remembers the size, for this page's kind of window.
+  Future<void> _rememberSize() async {
+    if (_surface != Surface.main) return;
+    final size = await widget.shell.size();
+    if (size == null || size.width < SurfaceSizes.mainMinimum.width - 1 || size.height < SurfaceSizes.mainMinimum.height - 1) return;
+    widget.shell.mainSize = size;
+    if (_page == MainPage.settings) {
+      if (desktop.settings.settingsWindowSize != size) desktop.settings.settingsWindowSize = size;
+    } else if (desktop.settings.mainWindowSize != size) {
+      desktop.settings.mainWindowSize = size;
+    }
   }
 
   /// Back to the desktop pet (or nothing, with the pet turned off). Mochi keeps running in the tray.
@@ -640,7 +662,9 @@ class _MainSurface extends StatelessWidget {
       },
       child: FocusScope(
         autofocus: true,
-        child: ClipRRect(
+        child: ResizeEdges(
+          onResize: (edge) => unawaited(state.widget.shell.startResizing(edge)),
+          child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: settingsPage
               ? ListenableBuilder(
@@ -649,6 +673,7 @@ class _MainSurface extends StatelessWidget {
                   child: column,
                 )
               : MochiBackground(child: column),
+          ),
         ),
       ),
     );

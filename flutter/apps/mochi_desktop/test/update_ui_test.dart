@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_art/pose_tracks.dart';
+import 'package:mochi_desktop/src/desktop.dart' show appVersion, appBuild;
 import 'package:mochi_desktop/src/core/pet_cues.dart';
 import 'package:mochi_desktop/src/ui/app.dart';
 import 'package:mochi_desktop/src/ui/screens/home_screen.dart';
@@ -111,7 +112,8 @@ void main() {
           await check(tester);
           await open(tester, textScale: scale);
           expect(tester.takeException(), isNull);
-          expect(inUpdates(find.text('0.1.0 (build 1)')), findsOneWidget);
+          // About shows the app's own version (the release script moves it).
+          expect(inUpdates(find.text('$appVersion (build $appBuild)')), findsOneWidget);
           expect(inUpdates(find.text('Mochi is up to date')), findsOneWidget);
           expect(inUpdates(find.textContaining('Checked')), findsOneWidget);
           expect(inUpdates(find.text('Download updates automatically')), findsOneWidget);

@@ -96,6 +96,8 @@ class DesktopSettings extends ChangeNotifier {
   bool _acceptCommands = true;
   String _model = 'haiku';
   Offset? _petPosition;
+  Size? _mainWindowSize;
+  Size? _settingsWindowSize;
   final List<String> _handledCommands = [];
   String _petName = defaultPetName;
   String _companionName = defaultCompanionName;
@@ -131,6 +133,8 @@ class DesktopSettings extends ChangeNotifier {
     _petPosition = position is List && position.length == 2 && position.every((value) => value is num)
         ? Offset((position[0] as num).toDouble(), (position[1] as num).toDouble())
         : null;
+    _mainWindowSize = _windowSize(json['mainWindowSize']);
+    _settingsWindowSize = _windowSize(json['settingsWindowSize']);
     final handled = json['handledCommands'];
     _handledCommands
       ..clear()
@@ -205,6 +209,21 @@ class DesktopSettings extends ChangeNotifier {
   /// Where you last left the desktop pet (screen coordinates). Null: bottom left, just above the taskbar.
   Offset? get petPosition => _petPosition;
   set petPosition(Offset? value) => _set(() => _petPosition = value);
+
+  /// The size you last gave Mochi's window (home and pairing) and the Settings window by dragging an edge; null: the
+  /// default size.
+  Size? get mainWindowSize => _mainWindowSize;
+  set mainWindowSize(Size? value) => _set(() => _mainWindowSize = value);
+  Size? get settingsWindowSize => _settingsWindowSize;
+  set settingsWindowSize(Size? value) => _set(() => _settingsWindowSize = value);
+
+  /// A saved window size, if it's a sane one (logical pixels).
+  static Size? _windowSize(Object? value) {
+    if (value is! List || value.length != 2 || !value.every((v) => v is num)) return null;
+    final width = (value[0] as num).toDouble(), height = (value[1] as num).toDouble();
+    if (width < 200 || height < 200 || width > 10000 || height > 10000) return null;
+    return Size(width, height);
+  }
 
   /// The pet's name as typed in Settings (at most [maxNameLength] characters); [petName] is what shows.
   String get petNameText => _petName;
@@ -346,6 +365,8 @@ class DesktopSettings extends ChangeNotifier {
     'acceptCommands': _acceptCommands,
     'model': _model,
     if (_petPosition != null) 'petPosition': [_petPosition!.dx, _petPosition!.dy],
+    if (_mainWindowSize != null) 'mainWindowSize': [_mainWindowSize!.width, _mainWindowSize!.height],
+    if (_settingsWindowSize != null) 'settingsWindowSize': [_settingsWindowSize!.width, _settingsWindowSize!.height],
     'handledCommands': List<String>.of(_handledCommands),
     'petName': _petName,
     'companionName': _companionName,
