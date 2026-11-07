@@ -510,6 +510,9 @@ void main() {
       expect(alerts.first.title, 'Claude finished');
       expect(alerts.first.body, 'mac-Tamagotchi: tests pass.');
       expect(alerts.first.userInfo, {'card': 'session-1'});
+      // The sender's push hint rides in the clear on the socket too: the phone picks the notification's actions by it.
+      expect(alerts.first.category, 'turn');
+      expect(alerts.first.threadId, 'session-1');
       expect(alerts.last.title, isNull);
       expect(alerts.last.body, 'Queued while away');
       expect([for (final ack in socket.sentOp('ack')) ack['id']], ['a1', 'a1', 'a2']);

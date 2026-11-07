@@ -7,6 +7,7 @@ import 'json.dart';
 import 'link_credentials.dart';
 import 'link_crypto.dart';
 import 'pairing_code.dart';
+import 'relay_link.dart';
 
 /// The relay refused or couldn't be reached.
 class LinkPairingException implements Exception {
@@ -116,21 +117,43 @@ abstract final class LinkPairing {
     await _call(from.relay, '/v1/rooms/${from.room}/devices/$device', 'DELETE', null, bearer: from.bearer, client: client);
   }
 
+  /// `POST /v1/rooms/{room}/send`: one frame over HTTPS instead of the socket, for a device that has no socket open
+  /// (Mochi Cloud, or a phone answering a notification while its app is closed). [frame] is exactly what the socket
+  /// would carry ([RelayLink.frame]: a sealed `put` or `send`, or `{"op": "devices"}`). Returns the relay's answer
+  /// (`{op: "ack", id, …}`, or the `devices` frame); throws [LinkPairingException] with the relay's code
+  /// (`rate_limited`, `forbidden`, `unauthorized`, …) when it refuses, or without one when it can't be reached.
+  static Future<Map<String, Object?>> send(String frame, {required LinkCredentials from, http.Client? client, Duration? within}) =>
+      _call(from.relay, '/v1/rooms/${from.room}/send', 'POST', frame, bearer: from.bearer, client: client, within: within);
+
+  /// The room's devices with their names, platforms and who's online, over HTTPS (`{"op": "devices"}` through
+  /// [send]), for a device without a socket.
+  static Future<List<LinkPeer>> devices(LinkCredentials credentials, {http.Client? client, Duration? within}) async {
+    final answer = await send(jsonEncode({'v': 1, 'op': 'devices'}), from: credentials, client: client, within: within);
+    final raw = answer['devices'];
+    return [
+      for (final item in raw is List ? raw : const [])
+        if (asJsonMap(item) case final json?) ?LinkPeer.fromJson(json),
+    ];
+  }
+
+  /// [body] is a JSON object to encode, or a frame that's already JSON text.
   static Future<Map<String, Object?>> _call(
     String relay,
     String path,
     String method,
-    Map<String, Object?>? body, {
+    Object? body, {
     String? bearer,
     http.Client? client,
+    Duration? within,
   }) async {
     final uri = url(relay, path);
     final own = client == null;
     final httpClient = client ?? http.Client();
+    final timeout = within ?? LinkPairing.timeout;
     try {
       final request = http.Request(method, uri)..headers['content-type'] = 'application/json';
       if (bearer != null) request.headers['authorization'] = 'Bearer $bearer';
-      if (body != null) request.body = jsonEncode(body);
+      if (body != null) request.body = body is String ? body : jsonEncode(body);
       final response = await http.Response.fromStream(await httpClient.send(request).timeout(timeout)).timeout(timeout);
       final json = asJsonMap(tryJsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true))) ?? const {};
       if (response.statusCode < 200 || response.statusCode >= 300) {
