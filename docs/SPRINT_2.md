@@ -108,6 +108,38 @@ Port the event classification behind celebrations (`commandKind`: build/test det
 | W30 | **Performance budget**: target the Mac's 1–2% CPU when calm and 3–4% when roaming (today about 8%), and idle RAM under 120 MB | M |
 | W31 | **Native ARM64 build** when the Flutter version we move to supports it (today Mochi runs as x64 under emulation on ARM PCs) | S (an upgrade spike) |
 
+### Windows extras: crazier than the Mac (approved by the user 2026-11-07)
+Windows lets an app see and nudge much more of the desktop than macOS does, so Mochi gets to be wilder here. **Rules for every extra:**
+- Mischief is opt-in, behind one "Mischief" master switch plus a switch per extra.
+- Mochi never takes your keyboard or pointer, never closes or minimises anything, and never types into apps.
+- Everything it moves is put back.
+- It stays still during presentations, full-screen apps and games (W2), and respects quiet hours (W1).
+
+| # | Extra | How on Windows | Size |
+|---|---|---|---|
+| N1 | **Native stage**: a small C++ component that draws characters and effects anywhere on screen at native speed, controlled from Flutter over a method channel. Mochi and Patch can roam the whole desktop, several windows exist at once (also solves W26), and full-screen effects stay cheap. | `DirectComposition` + `Direct2D`, layered click-through windows, a per-character hit test | L |
+| X1 | **Title-bar walker**: Mochi walks along any window's title bar, jumps between windows, hangs on when you drag that window and drops off when you snap or minimise it | `EnumWindows`, `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)`, a `SetWinEventHook` move/size hook; extends W19 | L |
+| X2 | **Mischief mode**: nudges a window a few pixels, sits on its edge so it wobbles, tugs your terminal when Claude needs you; everything is restored afterwards | `SetWindowPos` on other apps' windows (same integrity level only), with undo | M |
+| X3 | **Peekaboo**: peeks out from behind windows, hides behind the one you're using, pops out when you come back | Z-order placement relative to the foreground window | M |
+| X4 | **Cursor buddy**: follows or chases your pointer, pounces beside it, sits on it while you're idle; never moves or hides the pointer | `GetCursorPos` polling only | S |
+| X5 | **Desktop icon play**: sits on desktop icons, nudges one, then puts it back | The desktop's `SysListView32` positions (LVM_GETITEMPOSITION / SETITEMPOSITION), saved and restored | M |
+| X6 | **Landmarks**: naps in the Recycle Bin, swings on the clock, plays by the Start button, perches on the widgets tile | UI Automation positions (as for the taskbar zones) | M |
+| X7 | **Reacts to what you do**: dances to music, goes quiet during calls, hides during games, perks up when you open your editor or terminal | Media session API (`GlobalSystemMediaTransportControlsSessionManager`), microphone in use (privacy registry consent store), foreground app via `GetForegroundWindow` (process name only, never contents) | M |
+| X8 | **Multi-monitor roaming**: walks from one screen to the next and follows you to the screen you're using | `EnumDisplayMonitors`, the foreground window's monitor | M |
+| X9 | **Sticky notes from Mochi**: little notes left on the desktop ("Claude finished the tests ✓", "stretch break?") that you can dismiss or pin | Small native-stage windows | S |
+| X10 | **Full-screen celebrations**: confetti for big wins (graduation, all tests green), fireworks for streaks, all drawn on the native stage | N1 | M |
+| X11 | **Holiday takeover**: snow settling on every window top, Diwali lights along title bars, pumpkins on the taskbar | N1 + X1's window geometry | M |
+| X12 | **Weather and time moods**: Mochi brings an umbrella when it rains (local weather, opt-in), yawns late at night, has morning coffee with Patch | A weather API with coarse location (opt-in), the local clock | S |
+
+### Ask Mochi on Windows (beyond W8/W9/W24)
+| # | Feature | How | Size |
+|---|---|---|---|
+| X13 | **Drop a file on Mochi** (or Patch) to ask about it: "what's in this PDF?", "summarise this log", "fix this file with Claude" | OLE drag-and-drop target on the pet window; the path goes to the Ask Mochi helper and the file is read only by Claude Code on this PC | M |
+| X14 | **Drop text or a link on Mochi** to ask about it or send it to a Claude session | Drag-and-drop text/URL formats | S |
+| X15 | **Ask about the clipboard**: "explain what I copied" from the pop-up or the shortcut, sent only when you press Send | The clipboard is read only on that action | S |
+| X16 | **Ask Mochi everywhere**: from the taskbar pop-up, the global shortcut (W4), the tray, a Start-menu jump list and the phones (already works) | Jump list through `ICustomDestinationList`; a pop-up text field | S |
+| X17 | **"What's on my screen?"** (opt-in, per request): sends a screenshot of the active window to Claude with your question, after a preview card you approve | `PrintWindow` of the foreground window only, shown before sending; never automatic | M |
+
 ---
 
 ## Android backlog (iPhone → Android)
@@ -134,6 +166,7 @@ Port the event classification behind celebrations (`commandKind`: build/test det
 3. **Weeks 3–4, Mochi's life:** G1, G2, then W11–W18 and A5.
 4. **Week 5, agent and voice:** W23, W24, W25, A4, A7.
 5. **Week 6, polish:** W7, W19–W22, W26–W31, A2.
+6. **Weeks 7–8, Windows extras:** first X4, X7, X13–X16 in Flutter (cheap and fun, measured on a real PC). Then N1 (the native stage), then X1, X3, X6, X8, X10, X11, then X2, X5, X9, X12, X17.
 
 Each item ships on its own: merged, tested, installed and screenshotted, so the user sees progress daily.
 
@@ -147,3 +180,6 @@ Each item ships on its own: merged, tested, installed and screenshotted, so the 
 | Flutter has one window per app | W26 |
 | ARM PCs run the x64 build | Fine for testing; W31 when Flutter supports native ARM64 |
 | Relay changes for Android Live Updates (A1) | Additive protocol change with relay tests, deployed like 1.2.x |
+| Mischief extras annoy the user or look like malware (X2, X5) | Opt-in, one master switch, undo for every move, never keyboard, pointer, closing or typing. Pause during presentations and full screen. Explain each extra in Settings. |
+| Full-screen effects cost too much in Flutter | The native stage N1 (hybrid: Flutter stays the app, C++ only draws) |
+| "What's on my screen?" (X17) is privacy-sensitive | Per request only, the active window only, a preview card before sending, never stored |
