@@ -372,8 +372,9 @@ class AboutPane extends StatelessWidget {
                 text:
                     '1. Settings › Claude Code › Remove Mochi’s Hooks (takes out only Mochi’s entries, after a backup).\n'
                     '2. Settings › Phones › Unpair This PC, if you paired a phone.\n'
-                    '3. Quit Mochi from the tray, then uninstall it in Windows Settings › Apps.\n'
-                    '4. If you like, delete ${desktop.paths.home}.',
+                    '3. Settings › General: switch off Start Mochi with Windows.\n'
+                    '4. Quit Mochi from the tray, then uninstall it in Windows Settings › Apps (or delete its folder).\n'
+                    '5. If you like, delete ${desktop.paths.home}.',
                 style: context.type.footnote.copyWith(color: context.palette.ink, height: 1.6),
               ),
             ).withPadding(rowPadding),
