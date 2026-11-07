@@ -20,6 +20,7 @@ export 'src/events/events.dart';
 export 'src/features/focus.dart';
 export 'src/features/games.dart';
 export 'src/features/moment.dart';
+export 'src/features/recap.dart';
 export 'src/features/speech.dart';
 export 'src/interactions/interaction_library.dart';
 export 'src/model/animations.dart';
