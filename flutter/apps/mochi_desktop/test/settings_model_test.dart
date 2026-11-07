@@ -16,7 +16,7 @@ import 'package:mochi_desktop/src/core/seasons.dart';
 import 'package:mochi_desktop/src/link/phone_sync.dart';
 import 'package:mochi_desktop/src/platform/startup.dart';
 
-import 'package:win32/win32.dart' hide Size, Point, Rect;
+import 'package:win32/win32.dart' show HKEY_CURRENT_USER, REG_BINARY, RegDeleteKey, RegSetKeyValue;
 
 import 'support/fakes.dart';
 
