@@ -104,7 +104,7 @@ Port the event classification behind celebrations (`commandKind`: build/test det
 | W26 | **Two windows at once** (the pet and the main window): Flutter 3.35 has one window per app. Use Flutter's multi-window support when it's stable, or a second native window or engine for the pet. | M |
 | W27 | **Desktop widget**: a "Mochi & Claude" card in the Windows Widgets board (Windows App SDK widget provider; needs a packaged app, so it waits for W29) | L |
 | W28 | **Developer pane**: event simulator and animation preview (the Mac's Developer settings) | M |
-| W29 | **Installer and updates**: MSIX or Inno Setup, Start menu entry, uninstall, auto-update, code signing (Store and Developer ID are still parked; see the Mochi Link plan, phase 7) | M |
+| W29 | **Installer and updates**: MSIX or Inno Setup, Start menu entry, uninstall, auto-update, code signing (Store and Developer ID are still parked; see the Mochi Link plan, phase 7). **Pulled forward (2026-11-07):** Mochi installs itself per user (`%LOCALAPPDATA%\Programs\Mochi`, a Start-menu shortcut with the AUMID `InsideEdge.Mochi`, a Settings › Apps entry whose uninstall runs `mochi_hook uninstall`) and updates itself from the user's own relay (relay 1.3.0, KV `UPDATES`), Ed25519-signed and SHA-256-checked; releases come from `scripts/release-windows.sh`. Still open: MSIX and code signing. | M |
 | W30 | **Performance budget**: target the Mac's 1–2% CPU when calm and 3–4% when roaming (today about 8%), and idle RAM under 120 MB | M |
 | W31 | **Native ARM64 build** when the Flutter version we move to supports it (today Mochi runs as x64 under emulation on ARM PCs) | S (an upgrade spike) |
 
