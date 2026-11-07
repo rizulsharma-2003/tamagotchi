@@ -306,6 +306,7 @@ class CatchGame {
   double _nextSpawnAt = 0.8;
   int _nextID = 1;
   bool _lastWasGolden = false;
+  bool _recorded = false;
 
   CatchPhase get phase => _phase;
 
@@ -532,8 +533,11 @@ class CatchGame {
   };
 
   /// Records the finished game and says how to celebrate: a new high score gets a jump, a toast and a fanfare; any
-  /// other ending a soft sound. Returns whether it was a new record (never for a score of 0).
+  /// other ending a soft sound. Returns whether it was a new record (never for a score of 0). A game is recorded once:
+  /// later calls change nothing and show nothing (the Mac only finishes a game that is still playing).
   (bool newRecord, FeatureMoment moment) finish(GameRecords records, {required String petName}) {
+    if (_recorded) return (false, const FeatureMoment());
+    _recorded = true;
     final newRecord = records.recordCatch(score: _score, bestCombo: _bestCombo) && _score > 0;
     if (!newRecord) return (false, const FeatureMoment(sound: SoundCue.sleep));
     return (

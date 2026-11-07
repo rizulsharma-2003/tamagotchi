@@ -163,6 +163,8 @@ void main() {
       expect(moment.sound, SoundCue.celebration);
       expect(moment.pet, PetAnimation.excitedJump);
       expect(moment.toast, const FeatureToast('New high score: 5!', 'Mochi caught 1 treats. Yum!'));
+      final again = good.finish(records, petName: 'Mochi');
+      expect([again.$1, again.$2.isEmpty, records.catchGamesPlayed], [false, true, 2], reason: 'a game is recorded once');
       expect(CatchGame.momentFor(const CatchCaught(TreatKind.golden, points: 5, combo: 1))?.sound, SoundCue.success);
       expect(CatchGame.momentFor(const CatchCaught(TreatKind.fish, points: 1, combo: 1))?.sound, SoundCue.pop);
       expect(CatchGame.momentFor(const CatchMissed(TreatKind.fish)), isNull);
