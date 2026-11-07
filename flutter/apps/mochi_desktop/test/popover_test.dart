@@ -56,6 +56,17 @@ void main() {
       );
   }
 
+  /// The test's view takes the window's size, as Windows would, and the transitions play out.
+  Future<void> follow(WidgetTester tester, [Duration settle = const Duration(milliseconds: 800)]) async {
+    await tester.pump();
+    final frame = window.current!;
+    tester.view.physicalSize = Size(frame.width.toDouble(), frame.height.toDouble());
+    // In frames, so the transitions' vsync ticker runs.
+    for (var ms = 0; ms < settle.inMilliseconds; ms += 16) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+  }
+
   /// The app on the taskbar, then a click on Mochi: the popover. The test's view takes each form's size.
   Future<DesktopAppState> open(
     WidgetTester tester, {
@@ -83,9 +94,7 @@ void main() {
     final state = tester.state<DesktopAppState>(find.byType(DesktopApp));
     expect(state.stroll.onTaskbar, isTrue);
     await tester.tap(find.byType(GestureDetector).first);
-    tester.view.physicalSize = SurfaceSizes.popover;
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await follow(tester);
     expect(state.surface, Surface.popover);
     // News once it's open (the pet's speech bubble needs a bigger window than the test's view has).
     if (then != null) {
@@ -206,9 +215,8 @@ void main() {
     await tester.pump();
     expect(settings.pauseReactions, isFalse);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pump();
-    tester.view.physicalSize = const Size(64, 40);
-    await tester.pump(const Duration(milliseconds: 300));
+    await follow(tester, const Duration(seconds: 1));
+    await follow(tester);
     expect(state.surface, Surface.pet);
     expect(shell.shown.last, Surface.pet);
   });
@@ -216,26 +224,24 @@ void main() {
   testWidgets('a click elsewhere closes it, and Mochi is back on the very spot it left; a click on Mochi opens it again', (tester) async {
     final state = await open(tester);
     final stroll = state.stroll;
-    final shown = shell.shows.last;
-    expect(shown.surface, Surface.popover);
+    expect(shell.shows.last.surface, Surface.popover);
     final reading = taskbar.reading!;
-    expect(shown.position!.dy + shown.size.height, lessThanOrEqualTo(reading.workArea.bottom.toDouble()), reason: 'above the taskbar');
-    expect(shown.position!.dx, greaterThanOrEqualTo(reading.workArea.left.toDouble()));
-    expect(shown.position!.dx + shown.size.width, lessThanOrEqualTo(reading.workArea.right.toDouble()), reason: 'inside the screen');
+    final panel = state.popoverGeometry!.panel;
+    expect(panel.bottom, lessThanOrEqualTo(reading.workArea.bottom.toDouble()), reason: 'above the taskbar');
+    expect(panel.left, greaterThanOrEqualTo(reading.workArea.left.toDouble()));
+    expect(panel.right, lessThanOrEqualTo(reading.workArea.right.toDouble()), reason: 'inside the screen');
     expect(stroll.placement.name, 'away', reason: 'Mochi is in the popover, not on the taskbar');
     final left = window.frames.where((frame) => frame.width == 64).last;
     // Time passes with the popover open; then a click somewhere else.
     await tester.pump(const Duration(seconds: 20));
     shell.controller.add(ShellAction.dismissPopover);
-    await tester.pump();
-    tester.view.physicalSize = const Size(64, 40);
-    await tester.pump(const Duration(milliseconds: 300));
+    await follow(tester, const Duration(seconds: 1));
+    await follow(tester);
     expect(state.surface, Surface.pet);
     expect(stroll.onTaskbar, isTrue);
     expect(window.frames.last, left, reason: 'the very spot it left');
     await tester.tap(find.byType(GestureDetector).first);
-    tester.view.physicalSize = SurfaceSizes.popover;
-    await tester.pump(const Duration(milliseconds: 300));
+    await follow(tester);
     expect(state.surface, Surface.popover);
   });
 
@@ -249,11 +255,9 @@ void main() {
     expect(tester.widget<AskBox>(find.byType(AskBox)).autofocus, isTrue, reason: 'the question box is ready');
     expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AskBox>(), isNotNull, reason: 'with the focus');
     state.closeMain();
-    tester.view.physicalSize = const Size(64, 40);
-    await tester.pump(const Duration(milliseconds: 300));
+    await follow(tester);
     await tester.tap(find.byType(GestureDetector).first);
-    tester.view.physicalSize = SurfaceSizes.popover;
-    await tester.pump(const Duration(milliseconds: 300));
+    await follow(tester);
     tester.view.physicalSize = SurfaceSizes.settings;
     await tester.tap(find.text('Settings'));
     await tester.pump(const Duration(milliseconds: 300));

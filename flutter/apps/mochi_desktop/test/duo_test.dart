@@ -232,7 +232,11 @@ void main() {
         expect(window.clickThrough.last, isFalse, reason: '$body');
       }
       final patch = bodies.last;
-      for (final point in [(frame.left + 1, frame.top + 1), (patch.right + 3, patch.bottom - 2), (patch.left + patch.width ~/ 2, frame.top + 1)]) {
+      for (final point in [
+        (frame.left + 1, frame.top + 1),
+        (patch.right + 3, patch.bottom - 2),
+        (patch.left + patch.width ~/ 2, frame.top + 1),
+      ]) {
         taskbar.pointer = point;
         await elapse(tester, 0.2);
         expect(window.clickThrough.last, isTrue, reason: '$point');
@@ -367,7 +371,9 @@ void main() {
 
     tearDown(() => t.dispose());
 
-    testWidgets('Patch is drawn beside Mochi and named in the bubble and the spoken label; a click on him opens the popover', (tester) async {
+    testWidgets('Patch is drawn beside Mochi and named in the bubble and the spoken label; a click on him opens the popover', (
+      tester,
+    ) async {
       t.desktop.settings.companionName = 'Byte';
       tester.view.physicalSize = SurfaceSizes.pet;
       tester.view.devicePixelRatio = 1;
@@ -409,13 +415,21 @@ void main() {
       final body = stroll.duo!.companionBody(stroll.box.height * (1 - SurfaceSizes.taskbarFeet));
       final box = tester.getRect(find.byType(MochiView));
       await tester.tapAt(box.topLeft + body.center);
-      // The window takes the popover's size (the fake shell leaves that to the test).
-      tester.view.physicalSize = SurfaceSizes.popover;
       await tester.pump();
+      // The window takes the popover's rect (the fake shell leaves its size to the test).
+      final window = shell.petWindow!.current!;
+      tester.view.physicalSize = Size(window.width.toDouble(), window.height.toDouble());
+      for (var ms = 0; ms < 800; ms += 16) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
       expect(state.surface, Surface.popover);
-      final shown = shell.shows.last;
-      expect(shown.surface, Surface.popover);
-      expect(shown.position!.dy + shown.size.height, lessThanOrEqualTo(taskbar.reading!.bounds.top.toDouble()), reason: 'never over the taskbar');
+      expect(shell.shows.last.surface, Surface.popover);
+      expect(
+        state.popoverGeometry!.panel.bottom,
+        lessThanOrEqualTo(taskbar.reading!.bounds.top.toDouble()),
+        reason: 'never over the taskbar',
+      );
+      expect(state.popoverGeometry!.home, stroll.home ?? state.popoverGeometry!.home, reason: "Patch's spot goes with it");
       await tester.pumpWidget(const SizedBox());
     });
   });

@@ -45,6 +45,7 @@ import '../../core/desktop_settings.dart';
 import '../../core/pet_cues.dart';
 import '../../platform/system.dart';
 import '../../platform/taskbar.dart';
+import '../popover/popover_stage.dart' show PopoverGeometry;
 import '../shell.dart';
 import 'companion_director.dart';
 import 'pet_director.dart';
@@ -288,21 +289,41 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     log?.call('show: ${surface.name}');
     _surface = surface;
     if (surface == Surface.pet) {
+      _popoverTimer?.cancel();
+      _popoverTimer = null;
       _start();
       return _enqueue(_place);
     }
     if (surface == Surface.popover) {
-      final frame = popoverFrame(SurfaceSizes.popover);
+      final geometry = popover ??= popoverGeometry(SurfaceSizes.popover);
       // Mochi comes back to this very spot when the popover closes.
       _resumeX = onTaskbar && stroller.isPlaced ? stroller.sample(_clock()).x : null;
+      final scale = _stage?.scale ?? 1;
       _stop();
       return _enqueue(() async {
-        _leaveTaskbar();
+        // Off the taskbar; the window lets every click through until the popover is all the way out.
+        _halt();
+        _nearPointer = false;
+        _lastHome = _home ?? _lastHome;
+        _home = null;
         _placement = PetPlacement.away;
-        await shell.show(Surface.popover, petPosition: frame.position, petSize: frame.size);
+        final window = shell.petWindow;
+        if (window != null) {
+          _clickThrough = true;
+          window.setClickThrough(true);
+          // Once, straight to its final rect: everything in it is drawn where it was on screen.
+          await window.setFrame(_physical(geometry.window, scale));
+        }
+        await shell.show(Surface.popover, petPosition: geometry.window.topLeft, petSize: geometry.window.size);
+        if (_surface != Surface.popover || _disposed) return;
+        _popoverOpen = false;
+        _popoverScale = scale;
+        _popoverTimer?.cancel();
+        _popoverTimer = Timer.periodic(nearPointerInterval, (_) => _popoverPointer());
       });
     }
     _resumeX = null;
+    popover = null;
     _stop();
     return _enqueue(() async {
       _leaveTaskbar();
@@ -323,6 +344,74 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     if (shown == _bubble) return;
     _bubble = shown;
     if (onTaskbar) unawaited(_enqueue(_resize));
+  }
+
+  /// The popover's geometry while it's up (the app works it out as it opens it).
+  PopoverGeometry? popover;
+  Timer? _popoverTimer;
+  bool _popoverOpen = false;
+  double _popoverScale = 1;
+
+  static PixelRect _physical(Rect rect, double scale) =>
+      PixelRect((rect.left * scale).round(), (rect.top * scale).round(), (rect.right * scale).round(), (rect.bottom * scale).round());
+
+  /// The popover's window and panel, and Mochi's spot (screen, logical pixels): the panel above the taskbar where
+  /// Mochi is ([popoverFrame]), and the window around it and the pet's own window, so Mochi can leap between them.
+  PopoverGeometry popoverGeometry(Size wanted) {
+    final frame = popoverFrame(wanted);
+    final stage = _stage;
+    final pet = _frame;
+    final scale = stage?.scale ?? 1;
+    final panel = _physical(frame.position & frame.size, scale);
+    Rect logical(PixelRect r) => Rect.fromLTRB(r.left / scale, r.top / scale, r.right / scale, r.bottom / scale);
+    if (!onTaskbar || stage == null || pet == null || !stroller.isPlaced) {
+      final rect = logical(panel);
+      return PopoverGeometry(window: rect, panel: rect, petWindow: rect);
+    }
+    final window = PixelRect(
+      math.min(panel.left, pet.left),
+      math.min(panel.top, pet.top),
+      math.max(panel.right, pet.right),
+      math.max(panel.bottom, pet.bottom),
+    );
+    final sample = stroller.sample(_clock());
+    return PopoverGeometry(
+      window: logical(window),
+      panel: logical(panel),
+      petWindow: logical(pet),
+      mochi: Offset(sample.x, stage.boxBottom / scale - box.height * SurfaceSizes.taskbarFeet),
+      mochiScale: unit,
+      facing: sample.facing,
+      home: _home,
+    );
+  }
+
+  /// The popover is all the way out: clicks reach it, and pass through the rest of the window to the taskbar.
+  void popoverOpened() => _popoverOpen = true;
+
+  /// The popover is going: every click passes through until Mochi is back.
+  void popoverClosing() {
+    _popoverOpen = false;
+    _setClickThrough(true);
+  }
+
+  /// Mochi has landed: the window goes back to the pet's own rect (where the pet draws Mochi just as it was drawn).
+  Future<void> returnFromPopover() async {
+    final geometry = popover;
+    final window = shell.petWindow;
+    _popoverTimer?.cancel();
+    _popoverTimer = null;
+    if (geometry == null || window == null || geometry.mochi == null) return;
+    await window.setFrame(_physical(geometry.petWindow, _popoverScale));
+  }
+
+  void _popoverPointer() {
+    final geometry = popover;
+    if (geometry == null || _surface != Surface.popover) return;
+    if (!_popoverOpen) return _setClickThrough(true);
+    final cursor = taskbar.cursor();
+    final panel = _physical(geometry.panel, _popoverScale);
+    _setClickThrough(!(cursor != null && panel.contains(cursor.$1, cursor.$2)));
   }
 
   /// Where the popover goes (logical pixels): above the taskbar, centred on Mochi where it can be, and inside the work
@@ -796,6 +885,8 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
 
   void _stop() {
     _halt();
+    _popoverTimer?.cancel();
+    _popoverTimer = null;
     _summonTimer?.cancel();
     _summonTimer = null;
     _pointerTimer?.cancel();

@@ -26,6 +26,7 @@ class RoomView extends StatefulWidget {
     required this.library,
     required this.lastActivity,
     this.layout = SceneLayout.phone,
+    this.hidePet = false,
   });
 
   final MochiDesktop desktop;
@@ -39,6 +40,9 @@ class RoomView extends StatefulWidget {
 
   /// The room's proportions: the phone's (Mochi's window) or the Mac popover's.
   final SceneLayout Function(Size size) layout;
+
+  /// Mochi is somewhere else for now (leaping in or out of the popover): the room without it.
+  final bool hidePet;
 
   @override
   State<RoomView> createState() => _RoomViewState();
@@ -159,6 +163,7 @@ class _RoomViewState extends State<RoomView> {
       deskAccessory: settings.deskAccessory,
       season: settings.holidayOn(now),
       reducedMotion: calm,
+      petAway: widget.hidePet,
     );
     final dark = Theme.of(context).brightness == Brightness.dark;
     return LayoutBuilder(
@@ -219,4 +224,3 @@ class _RoomViewState extends State<RoomView> {
     );
   }
 }
-

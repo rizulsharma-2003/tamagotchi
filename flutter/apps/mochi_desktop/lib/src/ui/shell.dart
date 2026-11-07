@@ -225,8 +225,9 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
         await windowManager.setResizable(false);
         await windowManager.setHasShadow(false);
         await windowManager.setMinimumSize(SurfaceSizes.petMinimum);
-        await windowManager.setSize(petSize);
-        if (petPosition != null) await windowManager.setPosition(petPosition);
+        // On Windows the stroll has already put the window there, exactly, in one move (so nothing in it jumps);
+        // elsewhere, one move and resize here.
+        if (_petWindow == null && petPosition != null) await windowManager.setBounds(petPosition & petSize);
         await windowManager.show();
         await windowManager.focus();
       case Surface.main:

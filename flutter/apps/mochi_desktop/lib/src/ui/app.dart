@@ -14,6 +14,7 @@ import '../platform/taskbar.dart';
 import 'pet/companion_director.dart';
 import 'pet/pet_surface.dart';
 import 'pet/taskbar_stroll.dart';
+import 'popover/popover_stage.dart';
 import 'popover/popover_view.dart';
 import 'screens/home_screen.dart';
 import 'screens/pairing_screen.dart';
@@ -261,16 +262,40 @@ class DesktopAppState extends State<DesktopApp> {
   void openPopover() {
     if (_surface != Surface.pet) return;
     _popoverOpenedAt = _clock();
+    // Where it goes and what it comes out of, worked out before Mochi leaves the taskbar.
+    _popover = _stroll.popover = _stroll.popoverGeometry(SurfaceSizes.popover);
+    _popoverClosing = false;
     _show(Surface.popover);
   }
+
+  /// The popover's geometry while it's up, and whether it's on its way out.
+  PopoverGeometry? _popover;
+  bool _popoverClosing = false;
+
+  /// The popover's stage (for tests).
+  bool get popoverClosing => _popoverClosing;
+  PopoverGeometry? get popoverGeometry => _popover;
 
   /// When the popover opened (the stroll's clock), and how long a lost focus doesn't count as a click elsewhere.
   double? _popoverOpenedAt;
   static const double popoverSettle = 0.6;
 
-  /// Back to the taskbar (or nothing, if the desktop pet was switched off in the popover).
+  /// Back to the taskbar (or nothing, if the desktop pet was switched off in the popover): the popover genies back into
+  /// Mochi's spot as Mochi leaps home (popover_stage.dart), and then the window is the pet's again.
   void closePopover() {
-    if (_surface == Surface.popover) _show(desktop.settings.showPet ? Surface.pet : Surface.hidden);
+    if (_surface != Surface.popover || _popoverClosing) return;
+    _stroll.popoverClosing();
+    setState(() => _popoverClosing = true);
+  }
+
+  /// Mochi leaps back to its spot on the taskbar when the popover closes (if it's going back there).
+  bool get _leapBack => _popover?.mochi != null && desktop.settings.showPet && desktop.settings.roamTaskbar;
+
+  Future<void> _popoverClosed() async {
+    if (_surface != Surface.popover) return;
+    if (_leapBack) await _stroll.returnFromPopover();
+    if (!mounted || _surface != Surface.popover) return;
+    _show(desktop.settings.showPet ? Surface.pet : Surface.hidden);
   }
 
   /// "Ask Mochi" in the popover: Mochi's window with the question box ready.
@@ -282,6 +307,10 @@ class DesktopAppState extends State<DesktopApp> {
   bool _askFirst = false;
 
   void _show(Surface surface) {
+    if (surface != Surface.popover) {
+      _popover = null;
+      _popoverClosing = false;
+    }
     setState(() => _surface = surface);
     unawaited(_stroll.show(surface));
   }
@@ -349,16 +378,27 @@ class DesktopAppState extends State<DesktopApp> {
           onOpenPopover: openPopover,
           companion: _companion,
         ),
-        Surface.popover => PopoverView(
+        Surface.popover => PopoverStage(
+          geometry: _popover ?? _stroll.popoverGeometry(SurfaceSizes.popover),
+          closing: _popoverClosing,
+          leapBack: _leapBack,
           desktop: desktop,
           companion: _companion,
           library: _library,
-          lastActivity: () => _lastActivity,
-          onClose: closePopover,
-          onOpenMain: () => open(MainPage.home),
-          onAsk: openAsk,
-          onSettings: () => open(MainPage.settings),
-          onSetUpClaude: () => open(MainPage.settings, pane: SettingsTab.claude),
+          onOpened: _stroll.popoverOpened,
+          onClosed: () => unawaited(_popoverClosed()),
+          panel: (hidePet) => PopoverView(
+            desktop: desktop,
+            companion: _companion,
+            library: _library,
+            lastActivity: () => _lastActivity,
+            hidePet: hidePet,
+            onClose: closePopover,
+            onOpenMain: () => open(MainPage.home),
+            onAsk: openAsk,
+            onSettings: () => open(MainPage.settings),
+            onSetUpClaude: () => open(MainPage.settings, pane: SettingsTab.claude),
+          ),
         ),
         Surface.main => _MainSurface(state: this),
         Surface.hidden => const SizedBox.shrink(),

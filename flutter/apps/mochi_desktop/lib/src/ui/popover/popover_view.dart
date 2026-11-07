@@ -38,6 +38,7 @@ class PopoverView extends StatelessWidget {
     required this.onAsk,
     required this.onSettings,
     required this.onSetUpClaude,
+    this.hidePet = false,
   });
 
   final MochiDesktop desktop;
@@ -53,6 +54,16 @@ class PopoverView extends StatelessWidget {
 
   /// Settings › Claude Code (connecting it).
   final VoidCallback onSetUpClaude;
+
+  /// Mochi is leaping in or out: the room without it.
+  final bool hidePet;
+
+  /// Where Mochi stands in the room (from the panel's top-left) and how big it's drawn there, for a panel [width] wide.
+  static ({Offset feet, double scale}) petInRoom(double width) {
+    final layout = SceneLayout.popover(width - 2, sceneHeight);
+    // The panel's 1-pixel outline is outside the room.
+    return (feet: Offset(1 + layout.petHome, 1 + layout.ground), scale: layout.scale);
+  }
 
   /// The scene's height (the Mac popover's 178 points, a little shorter to leave room for the switches).
   static const double sceneHeight = 168;
@@ -82,7 +93,7 @@ class PopoverView extends StatelessWidget {
                   children: [
                     SizedBox(
                       height: sceneHeight,
-                      child: _Scene(desktop: desktop, companion: companion, library: library, lastActivity: lastActivity),
+                      child: _Scene(desktop: desktop, companion: companion, library: library, lastActivity: lastActivity, hidePet: hidePet),
                     ),
                     Divider(height: 1, color: p.stroke),
                     Expanded(
@@ -124,12 +135,13 @@ class PopoverView extends StatelessWidget {
 // MARK: - Scene
 
 class _Scene extends StatelessWidget {
-  const _Scene({required this.desktop, required this.companion, required this.library, required this.lastActivity});
+  const _Scene({required this.desktop, required this.companion, required this.library, required this.lastActivity, this.hidePet = false});
 
   final MochiDesktop desktop;
   final CompanionDirector companion;
   final PoseLibrary? library;
   final DateTime Function() lastActivity;
+  final bool hidePet;
 
   @override
   Widget build(BuildContext context) => Stack(
@@ -142,6 +154,7 @@ class _Scene extends StatelessWidget {
           lastActivity: lastActivity,
           // The Mac popover's room.
           layout: (size) => SceneLayout.popover(size.width, size.height),
+          hidePet: hidePet,
         ),
       ),
       if (desktop.settings.pauseReactions)
