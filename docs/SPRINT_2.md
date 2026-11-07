@@ -8,6 +8,13 @@
 
 ---
 
+## Progress
+| Date | Done |
+|---|---|
+| 2026-11-07 | **W29** install and signed auto-update (Windows 0.2.0, 0.2.1 on the user's PC) · **A6** Updates history · **A8** notification actions (Android) |
+| 2026-11-08 | **W1** Windows toasts · **W2** the PC's rhythm · **W3** notify only when away · **W4** global shortcuts · **W10** summaries parity (Windows 0.2.2) |
+| Parked | Multi-host rooms (docs/MULTI_HOST_PLAN.md), by the user's decision |
+
 ## Where Sprint 1 left us
 
 | | Done |
