@@ -27,6 +27,8 @@ class MochiView extends StatefulWidget {
     this.feet = 0.06,
     this.stroll,
     this.detail = RenderDetail.standard,
+    this.color = PetColor.cream,
+    this.accessory,
   });
 
   final SessionStore sessions;
@@ -53,6 +55,12 @@ class MochiView extends StatefulWidget {
   /// The drawing's detail: [RenderDetail.tiny] at taskbar size (bolder lines, small hops, no shadow), as in the Mac's
   /// menu bar.
   final RenderDetail detail;
+
+  /// The coat (Settings › Characters).
+  final PetColor color;
+
+  /// What Mochi wears: your choice, or the holiday's costume (DesktopSettings.wornByPet).
+  final Accessory? accessory;
 
   @override
   State<MochiView> createState() => _MochiViewState();
@@ -178,6 +186,8 @@ class _MochiViewState extends State<MochiView> {
             feet: widget.feet,
             stroll: widget.stroll,
             detail: widget.detail,
+            color: widget.color,
+            accessory: widget.accessory,
           ),
           size: Size.infinite,
         ),
@@ -197,6 +207,8 @@ class _MochiPainter extends CustomPainter {
     required this.feet,
     required this.stroll,
     required this.detail,
+    required this.color,
+    required this.accessory,
   }) : super(repaint: clock);
 
   final PetDirector director;
@@ -208,6 +220,8 @@ class _MochiPainter extends CustomPainter {
   final double feet;
   final StrollSample? Function()? stroll;
   final RenderDetail detail;
+  final PetColor color;
+  final Accessory? accessory;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -218,7 +232,8 @@ class _MochiPainter extends CustomPainter {
       GContext(canvas),
       Offset(size.width / 2, size.height - size.height * feet),
       scale,
-      PetPalette(PetColor.cream),
+      PetPalette(color),
+      accessory: accessory,
       dark: dark,
       detail: detail,
     );
@@ -233,5 +248,7 @@ class _MochiPainter extends CustomPainter {
       old.fill != fill ||
       old.feet != feet ||
       old.stroll != stroll ||
-      old.detail != detail;
+      old.detail != detail ||
+      old.color != color ||
+      old.accessory != accessory;
 }

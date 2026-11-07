@@ -29,10 +29,13 @@ enum PetMood {
   concerned;
 
   /// What a screen reader says, and the tooltip.
-  String get description => switch (this) {
-    napping => 'Mochi is napping',
-    relaxed => 'Mochi is relaxing',
-    watching => 'Mochi is watching Claude work',
+  String get description => describe('Mochi');
+
+  /// [description] with the pet's own name.
+  String describe(String name) => switch (this) {
+    napping => '$name is napping',
+    relaxed => '$name is relaxing',
+    watching => '$name is watching Claude work',
     needsYou => 'Claude needs you',
     happy => 'Claude finished',
     concerned => 'Claude hit a snag',

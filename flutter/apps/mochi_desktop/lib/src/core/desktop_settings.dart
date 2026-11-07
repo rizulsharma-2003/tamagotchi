@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:mochi_art/mochi_art.dart' show Accessory, AccessorySlot, OfficeTheme, PetColor, SeasonalEvent;
+import 'package:mochi_art/mochi_art.dart' show Accessory, AccessorySlot, OfficeTheme, PetColor, SeasonDecor, SeasonalEvent, Wearer;
 
 import 'seasons.dart';
 
@@ -235,6 +235,13 @@ class DesktopSettings extends ChangeNotifier {
 
   /// The holiday on [date] (null: none, or holidays are off).
   SeasonalEvent? holidayOn(DateTime date) => SeasonCalendar.event(date, seasonal, mochiBirthday: _adoptedAt);
+
+  /// What the pet wears on [date]: your choice, else the holiday's costume (a witch hat at Halloween, a flower crown
+  /// for Diwali…), as on the Mac.
+  Accessory? wornByPet(DateTime date) => _petAccessory ?? SeasonDecor.costume(holidayOn(date), Wearer.pet);
+
+  /// What the companion wears on [date].
+  Accessory? wornByCompanion(DateTime date) => _companionAccessory ?? SeasonDecor.costume(holidayOn(date), Wearer.companion);
 
   /// Mochi stops reacting to Claude's moments (no celebration, worry or wave); the sessions keep updating.
   bool get pauseReactions => _pauseReactions;

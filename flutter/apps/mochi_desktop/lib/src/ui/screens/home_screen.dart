@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mochi_art/mochi_art.dart' show SeasonalEvent;
 import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_link/mochi_link.dart' show LinkStatus;
 import 'package:mochi_ui/mochi_ui.dart';
@@ -29,7 +30,7 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([desktop.sessions, desktop.hooks, desktop.link, desktop.bridgeProblem]),
+    listenable: Listenable.merge([desktop.sessions, desktop.hooks, desktop.link, desktop.bridgeProblem, desktop.settings]),
     builder: (context, _) {
       final sessions = desktop.sessions;
       final live = sessions.all.where((session) => session.isLive || session.phase == SessionPhase.ended).take(8).toList();
@@ -81,7 +82,19 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final mood = PetMood.of(desktop.sessions, now: desktop.sessions.now, lastActivity: lastActivity());
+    final settings = desktop.settings;
+    final now = desktop.sessions.now;
+    final holiday = settings.holidayOn(now);
+    String greeting(SeasonalEvent event) => switch (event) {
+      SeasonalEvent.halloween => 'Happy Halloween',
+      SeasonalEvent.diwali => 'Happy Diwali',
+      SeasonalEvent.christmas => 'Merry Christmas',
+      SeasonalEvent.newYear => 'Happy New Year',
+      SeasonalEvent.valentines => "Happy Valentine's Day",
+      SeasonalEvent.userBirthday => 'Happy birthday!',
+      SeasonalEvent.mochiBirthday => "${settings.petName}'s birthday",
+    };
+    final mood = PetMood.of(desktop.sessions, now: now, lastActivity: lastActivity());
     final link = desktop.link;
     final phones = link.devices.where((peer) => peer.role == 'pocket').toList();
     final online = phones.where((peer) => peer.online).length;
@@ -111,20 +124,29 @@ class _Header extends StatelessWidget {
           SizedBox(
             width: 92,
             height: 92,
-            child: MochiView(sessions: desktop.sessions, cues: desktop.cues, library: library, lastActivity: lastActivity),
+            child: MochiView(
+              sessions: desktop.sessions,
+              cues: desktop.cues,
+              library: library,
+              lastActivity: lastActivity,
+              color: settings.petColor,
+              accessory: settings.wornByPet(now),
+            ),
           ),
           const SizedBox(width: Space.m),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Mochi', style: context.type.title3),
-                Text(mood.description, style: context.type.footnote),
+                Text(settings.petName, style: context.type.title3),
+                Text(mood.describe(settings.petName), style: context.type.footnote),
                 const SizedBox(height: Space.s),
                 Wrap(
                   spacing: Space.s,
                   runSpacing: Space.s,
                   children: [
+                    if (holiday != null)
+                      StatusPill(text: greeting(holiday), icon: Icons.celebration_rounded, tint: p.pet),
                     StatusPill(text: claudeText, icon: Icons.auto_awesome_rounded, tint: mood == PetMood.needsYou ? p.warning : p.indigo),
                     Semantics(
                       button: true,

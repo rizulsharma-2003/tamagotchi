@@ -130,6 +130,7 @@ class _PetSurfaceState extends State<PetSurface> {
       });
     }
     final onTaskbar = widget.stroll.onTaskbar;
+    final name = widget.desktop.settings.petName;
     // Mochi's box at the bottom of the window: taskbar-sized in the taskbar (the Mac's menu-bar Mochi), the bubble above.
     final stage = onTaskbar ? widget.stroll.box.height : SurfaceSizes.petStage;
     final p = context.palette;
@@ -153,7 +154,7 @@ class _PetSurfaceState extends State<PetSurface> {
         child: Semantics(
           container: true,
           button: true,
-          label: 'Mochi. ${_mood.description}.${bubble != null && bubble != _mood.description ? ' $bubble.' : ''}',
+          label: '$name. ${_mood.describe(name)}.${bubble != null && bubble != _mood.describe(name) ? ' $bubble.' : ''}',
           hint: 'Press Enter to open Mochi, Space to pet',
           excludeSemantics: true,
           child: Stack(
@@ -165,7 +166,7 @@ class _PetSurfaceState extends State<PetSurface> {
                 height: stage,
                 child: Tooltip(
                   // No room for a tooltip in the taskbar's little window (the spoken label says the same).
-                  message: onTaskbar ? '' : _mood.description,
+                  message: onTaskbar ? '' : _mood.describe(name),
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => widget.desktop.interact('pet'),
@@ -193,6 +194,8 @@ class _PetSurfaceState extends State<PetSurface> {
                           feet: onTaskbar ? SurfaceSizes.taskbarFeet : SurfaceSizes.standingFeet,
                           stroll: onTaskbar ? widget.stroll.sample : null,
                           detail: onTaskbar ? RenderDetail.tiny : RenderDetail.standard,
+                          color: widget.desktop.settings.petColor,
+                          accessory: widget.desktop.settings.wornByPet(widget.desktop.sessions.now),
                         ),
                       ),
                     ),
