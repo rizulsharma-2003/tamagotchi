@@ -15,6 +15,8 @@
 ///   "your PC", "realme RMX3242 · Android"), as the Swift apps do.
 ///
 /// - [RelayLink.register]: push addresses for the relay's push gateway (an FCM token on Android).
+/// - [LinkPairing.send], [LinkPairing.devices]: one frame (or the device list) over HTTPS, for a device with no socket
+///   open, like a phone answering a notification while its app is closed.
 ///
 /// Not here yet (TODO, as the Swift side gets them): `agentNews` and per-device `done.<device>` keys, and key
 /// rotation when a device is removed (4.2).

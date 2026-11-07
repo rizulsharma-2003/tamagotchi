@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:mochi_link/mochi_link.dart';
 
 import '../model/pocket_model.dart';
+import '../model/updates_history.dart';
 import '../services/link_opener.dart';
 import '../theme.dart';
 import '../voice/updates_reader.dart';
@@ -9,9 +9,10 @@ import '../widgets/agent_card.dart';
 import '../widgets/clay.dart';
 import 'home_screen.dart' show spokenTimeFor;
 
-/// "Waiting for you" opened up (iOS/MochiPocket/UpdatesView.swift): everything that's waiting, then what you've
-/// marked done from the same card. Pull down to ask your Mac to check again. Each update is its own small clay card,
-/// in a lazily built list. "Read aloud" reads what's waiting; leaving the screen stops it, as on the iPhone.
+/// "Waiting for you" opened up (iOS/MochiPocket/UpdatesView.swift): everything that's waiting, then the week's earlier
+/// updates by day ("Earlier today", "Yesterday", "Tuesday, 4 Nov"): what came in and when, and what you or your
+/// computer marked done, where and when. Pull down to ask your computer to check again. Each update is its own small
+/// clay card, in a lazily built list. "Read aloud" reads what's waiting; leaving the screen stops it, as on the iPhone.
 class UpdatesScreen extends StatefulWidget {
   const UpdatesScreen({super.key, required this.model, required this.opener, required this.reader, required this.checkNow});
 
@@ -87,7 +88,7 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
     final p = context.palette;
     final agent = model.agent;
     final waiting = model.waiting;
-    final done = (agent?.items ?? const <AgentNote>[]).where((note) => model.isDone(note.id)).toList();
+    final days = model.historyDays;
     final headline = agent?.headline;
     final looked = agent?.lookedAt;
     Widget card(Widget child, {Key? key}) => Padding(
@@ -158,20 +159,75 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
             style: context.type.footnote,
           ),
         ),
-      if (done.isNotEmpty) ...[
+      for (final group in days) ...[
         const SizedBox(height: Space.l),
-        const SectionTitle(title: 'Done'),
+        _DayTitle(title: dayTitle(context, group.day)),
         const SizedBox(height: Space.s),
-        for (final note in done)
+        for (final entry in group.entries)
           card(
-            key: ValueKey('done-${note.id}'),
-            UpdateRow(note: note, opener: opener, done: true, onNotDone: () => model.markNotDone(note.id)),
+            key: ValueKey('history-${entry.id}'),
+            UpdateRow(
+              note: entry.note,
+              opener: opener,
+              done: model.isDone(entry.id),
+              doneButton: false,
+              onDone: () => model.markDone([entry.id]),
+              onNotDone: () => model.markNotDone(entry.id),
+              caption: _caption(context, entry),
+            ),
           ),
+      ],
+      if (days.isNotEmpty)
         Padding(
           padding: const EdgeInsets.fromLTRB(Space.xs, Space.xs, Space.xs, 0),
-          child: Text('Press and hold one to put it back.', style: context.type.footnote),
+          child: Text('Press and hold an update to mark it done or not done. Updates stay here for a week.', style: context.type.footnote),
         ),
-      ],
     ];
   }
+
+  /// "Done on your Mac · 3:12 PM", "Done here · Yesterday, 9:05 AM"; for one that isn't done, when it came in.
+  String _caption(BuildContext context, HistoryEntry entry) {
+    final at = model.doneAt(entry.id);
+    if (at == null) return 'Came in at ${clockTime(context, entry.firstSeen)}';
+    final where = model.doneWhere(entry.id);
+    final when = _sameDay(at, entry.firstSeen) ? clockTime(context, at) : '${_dayWord(context, at)}, ${clockTime(context, at)}';
+    return '${where == null ? 'Done' : 'Done $where'} · $when';
+  }
+
+  static bool _sameDay(double a, double b) {
+    final x = timeOf(a), y = timeOf(b);
+    return x.year == y.year && x.month == y.month && x.day == y.day;
+  }
+
+  static String _dayWord(BuildContext context, double seconds) {
+    final title = dayTitle(context, timeOf(seconds));
+    return title == 'Earlier today' ? 'Today' : title;
+  }
+}
+
+/// A day's heading in the history: smaller and quieter than "Waiting for you", as on the iPhone.
+class _DayTitle extends StatelessWidget {
+  const _DayTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(Space.xs, Space.xs, Space.xs, 0),
+    child: Semantics(
+      header: true,
+      child: Text(title, style: context.type.headline.copyWith(color: context.palette.inkSecondary)),
+    ),
+  );
+}
+
+/// The history's day headings (the iPhone's): "Earlier today", "Yesterday", else "Tuesday, 4 Nov".
+String dayTitle(BuildContext context, DateTime day, {DateTime? now}) {
+  final today = now ?? DateTime.now();
+  final start = DateTime(day.year, day.month, day.day);
+  if (start == DateTime(today.year, today.month, today.day)) return 'Earlier today';
+  if (start == DateTime(today.year, today.month, today.day - 1)) return 'Yesterday';
+  const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${weekdays[start.weekday - 1]}, ${start.day} ${months[start.month - 1]}';
 }

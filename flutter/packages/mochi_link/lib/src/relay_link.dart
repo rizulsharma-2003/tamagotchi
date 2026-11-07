@@ -45,6 +45,12 @@ class LinkPeer {
   /// Seconds: when it last connected, disconnected or sent something (for an offline host, "asleep since").
   final double? lastSeen;
 
+  /// One entry of the relay's `devices` or `presence` list (`id` or `device`); null without an id.
+  static LinkPeer? fromJson(Map<String, Object?> json) {
+    final device = jsonString(json['id']) ?? jsonString(json['device']);
+    return device == null ? null : LinkPeer(device: device)._merged(json);
+  }
+
   LinkPeer _merged(Map<String, Object?> j) => LinkPeer(
     device: device,
     role: jsonString(j['role']) ?? role,

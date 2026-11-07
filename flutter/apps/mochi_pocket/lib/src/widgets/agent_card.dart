@@ -181,15 +181,30 @@ class AgentCard extends StatelessWidget {
 
 /// One update (iOS `UpdateRow`): who or what, the subject, Mochi's one-line gist, and where tapping it goes. With
 /// [onDone], a circle marks it done (it turns green, then the row leaves). Meetings with a video link get Join; a long
-/// press opens the rest (open in the browser, mark done, copy).
+/// press opens the rest (open in the browser, mark done or not done, copy).
 class UpdateRow extends StatefulWidget {
-  const UpdateRow({super.key, required this.note, required this.opener, this.onDone, this.done = false, this.onNotDone});
+  const UpdateRow({
+    super.key,
+    required this.note,
+    required this.opener,
+    this.onDone,
+    this.done = false,
+    this.onNotDone,
+    this.doneButton = true,
+    this.caption,
+  });
 
   final AgentNote note;
   final LinkOpener opener;
   final VoidCallback? onDone;
   final VoidCallback? onNotDone;
   final bool done;
+
+  /// The circle that marks it done. Off in the history, where marking is in the long-press menu (the iPhone's swipe).
+  final bool doneButton;
+
+  /// A line under the gist: when it came in, or where and when it was marked done (the history).
+  final String? caption;
 
   @override
   State<UpdateRow> createState() => _UpdateRowState();
@@ -320,58 +335,90 @@ class _UpdateRowState extends State<UpdateRow> {
               onTap: note.link == null ? null : _open,
               onLongPress: _menu,
               borderRadius: BorderRadius.circular(Radii.tile),
-              child: Opacity(
-                opacity: widget.done ? 0.6 : 1,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: Space.s),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      IconTile(icon: done ? Icons.check_rounded : _icon, tint: done ? p.success : _tint(p)),
-                      const SizedBox(width: Space.m),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+              // Done ones fade (as on the iPhone), except the line that says where and when: that stays readable.
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: Space.s),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Opacity(
+                      opacity: widget.done ? 0.6 : 1,
+                      child: IconTile(icon: done ? Icons.check_rounded : _icon, tint: done ? p.success : _tint(p)),
+                    ),
+                    const SizedBox(width: Space.m),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Opacity(
+                            opacity: widget.done ? 0.6 : 1,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (note.vip == true && !done) ...[
-                                  Icon(Icons.star_rounded, size: 15, color: p.vip, semanticLabel: 'VIP'),
-                                  const SizedBox(width: 3),
-                                ],
-                                Flexible(
-                                  child: Text(
-                                    note.title,
+                                Row(
+                                  children: [
+                                    if (note.vip == true && !done) ...[
+                                      Icon(Icons.star_rounded, size: 15, color: p.vip, semanticLabel: 'VIP'),
+                                      const SizedBox(width: 3),
+                                    ],
+                                    Flexible(
+                                      child: Text(
+                                        note.title,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: context.type.subheadline.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          decoration: widget.done ? TextDecoration.lineThrough : null,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (subject != null)
+                                  Text(
+                                    subject,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: context.type.subheadline.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      decoration: widget.done ? TextDecoration.lineThrough : null,
-                                    ),
+                                    style: context.type.footnote.copyWith(color: p.ink, fontWeight: FontWeight.w500),
                                   ),
-                                ),
+                                Text(note.detail, maxLines: 3, overflow: TextOverflow.ellipsis, style: context.type.footnote),
+                                if (note.due != null && note.source != AgentSource.gmail && !widget.done)
+                                  Text(
+                                    note.source == AgentSource.calendar
+                                        ? '${note.due! < DateTime.now().millisecondsSinceEpoch / 1000 ? 'Started' : 'Starts'} '
+                                              '${relativeTime(note.due!)}'
+                                        : 'Due ${relativeTime(note.due!)}',
+                                    style: context.type.caption.copyWith(fontWeight: FontWeight.w600),
+                                  ),
                               ],
                             ),
-                            if (subject != null)
-                              Text(
-                                subject,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: context.type.footnote.copyWith(color: p.ink, fontWeight: FontWeight.w500),
+                          ),
+                          if (widget.caption != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 3),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (widget.done) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 1),
+                                      child: ExcludeSemantics(child: Icon(Icons.check_circle_rounded, size: 14, color: p.success)),
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Flexible(
+                                    child: Text(
+                                      widget.caption!,
+                                      style: context.type.caption.copyWith(color: p.inkSecondary, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            Text(note.detail, maxLines: 3, overflow: TextOverflow.ellipsis, style: context.type.footnote),
-                            if (note.due != null && note.source != AgentSource.gmail)
-                              Text(
-                                note.source == AgentSource.calendar
-                                    ? 'Starts ${relativeTime(note.due!)}'
-                                    : 'Due ${relativeTime(note.due!)}',
-                                style: context.type.caption.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                          ],
-                        ),
+                            ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -391,7 +438,7 @@ class _UpdateRowState extends State<UpdateRow> {
               label: Text('Join', semanticsLabel: 'Join ${note.title}'),
             ),
           ),
-        if (widget.onDone != null && !widget.done)
+        if (widget.onDone != null && !widget.done && widget.doneButton)
           Padding(
             padding: const EdgeInsets.only(left: Space.s),
             child: IconButton(

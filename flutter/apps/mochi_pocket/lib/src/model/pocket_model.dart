@@ -6,10 +6,13 @@ import 'package:mochi_link/mochi_link.dart';
 import '../services/alert_notifier.dart';
 import '../services/credential_store.dart';
 import '../services/local_file.dart';
+import '../services/notify/action_outbox.dart';
+import '../services/notify/notification_plan.dart';
 import '../services/push/push_messages.dart';
 import '../services/push/push_service.dart';
 import '../services/push/shown_alerts.dart';
 import 'done_marks.dart';
+import 'updates_history.dart';
 
 enum ExchangeState { sending, working, done, failed }
 
@@ -55,7 +58,8 @@ typedef LinkJoiner = Future<LinkCredentials> Function(PairingCode code, String d
 typedef LinkLeaver = Future<void> Function(LinkCredentials credentials);
 
 /// Mochi for Android's state: pairing (Swift `PocketLink`), what the Mac shares and what you send it (`MacLink`,
-/// `PhoneWorld`'s look and interactions), and your done marks (`UpdatesStore`), all over one [RelayLink].
+/// `PhoneWorld`'s look and interactions), and your done marks and the week of updates (`UpdatesStore`), all over one
+/// [RelayLink].
 class PocketModel extends ChangeNotifier {
   PocketModel({
     required CredentialStore credentialStore,
@@ -67,6 +71,8 @@ class PocketModel extends ChangeNotifier {
     PushService? push,
     ShownAlerts? shown,
     LocalDocument? hostDocument,
+    LocalDocument? historyDocument,
+    LocalDocument? outboxDocument,
     this.deviceName = 'Android phone',
     DateTime Function()? clock,
   }) : _push = push,
@@ -74,6 +80,8 @@ class PocketModel extends ChangeNotifier {
        _store = credentialStore,
        _doneDocument = doneDocument,
        _hostDocument = hostDocument ?? MemoryDocument(),
+       _historyDocument = historyDocument ?? MemoryDocument(),
+       _outboxDocument = outboxDocument ?? MemoryDocument(),
        _notifier = notifier,
        _connect = connect,
        _join = join ?? _relayJoin,
@@ -90,6 +98,12 @@ class PocketModel extends ChangeNotifier {
   /// The platform of the computer last seen in this phone's room (`{"room", "platform"}`), so its name doesn't
   /// change while the relay's device list loads.
   final LocalDocument _hostDocument;
+
+  /// The week of "Waiting for you" (`updates.json`).
+  final LocalDocument _historyDocument;
+
+  /// What notification buttons pressed while the app was closed left for it.
+  final LocalDocument _outboxDocument;
   final AlertNotifier _notifier;
   final LinkConnector _connect;
   final LinkJoiner _join;
@@ -128,6 +142,8 @@ class PocketModel extends ChangeNotifier {
   final List<Exchange> _exchanges = [];
   final Set<String> _seenInteractions = {};
   DoneMarks _done = DoneMarks();
+  UpdatesHistory _history = UpdatesHistory();
+  final Completer<void> _loaded = Completer();
   DateTime? _lastAlertAt;
   PushStatus _pushStatus = PushStatus.off;
   String? _pushProblem;
@@ -205,8 +221,32 @@ class PocketModel extends ChangeNotifier {
 
   bool isDone(String id) => _done.isDone(id);
 
+  /// When [id] was marked done (Unix time), if it is.
+  double? doneAt(String id) => _done.doneAt(id);
+
+  /// Where [id] was marked done, for the history: "here", "on your Mac", "on iPhone"; null when not known.
+  String? doneWhere(String id) {
+    final by = _done.doneBy(id);
+    if (by == null) return null;
+    if (by == DoneMarks.here || by == _credentials?.device) return 'here';
+    if (by == DoneMarks.computer) return 'on ${host.yours}';
+    final peer = _peers.where((peer) => peer.device == by).firstOrNull;
+    if (peer == null) return 'on your other phone';
+    final name = peer.name?.trim();
+    return 'on ${name == null || name.isEmpty ? LinkPeerNames.label(peer) : name}';
+  }
+
   /// The agent's items you haven't marked done.
   List<AgentNote> get waiting => (_agent?.items ?? const <AgentNote>[]).where((note) => !_done.isDone(note.id)).toList();
+
+  /// Every update of the last week on this phone, newest first.
+  UpdatesHistory get history => _history;
+
+  /// The earlier updates by day, leaving out what's waiting now (the Updates screen, under "Waiting for you").
+  List<HistoryDay> get historyDays => _history.days(excluding: {for (final note in waiting) note.id});
+
+  /// Completes once [load] has read the saved pairing.
+  Future<void> get loaded => _loaded.future;
 
   double get _now => _clock().millisecondsSinceEpoch / 1000;
 
@@ -222,15 +262,18 @@ class PocketModel extends ChangeNotifier {
       _log('the saved pairing could not be read (${error.runtimeType})');
     }
     _done = DoneMarks.fromJson(await _doneDocument.read())..prune(now: _now);
+    _history = UpdatesHistory.fromJson(await _readSafely(_historyDocument))..prune(now: _now);
     _knownHostPlatform = await _savedHostPlatform(saved?.room);
     _log('loaded ${saved == null ? 'no pairing' : 'the pairing'} in ${watch.elapsedMilliseconds} ms');
     if (saved != null && saved.roomKey != null) {
       _use(saved);
       _phase = PairingPhase.paired;
       unawaited(_startPush());
+      await _takeOutbox();
     } else {
       _phase = PairingPhase.unpaired;
     }
+    if (!_loaded.isCompleted) _loaded.complete();
     notifyListeners();
   }
 
@@ -300,6 +343,7 @@ class PocketModel extends ChangeNotifier {
     _credentials = null;
     _clearRoom();
     _done = DoneMarks();
+    _history = UpdatesHistory();
     _knownHostPlatform = null;
     _phase = PairingPhase.unpaired;
     _problem = null;
@@ -308,6 +352,8 @@ class PocketModel extends ChangeNotifier {
       await _store.delete();
       await _doneDocument.delete();
       await _hostDocument.delete();
+      await _historyDocument.delete();
+      await _outboxDocument.delete();
     } on Object catch (error) {
       _log('unpairing could not clear everything (${error.runtimeType})');
     }
@@ -373,7 +419,14 @@ class PocketModel extends ChangeNotifier {
 
   /// A push that arrived while the app is open (the background isolate handles the rest).
   Future<void> _pushed(Map<String, Object?> data) async {
-    final outcome = await PushMessages.handle(data, credentials: () async => _credentials, notifier: _notifier, shown: _shown);
+    final outcome = await PushMessages.handle(
+      data,
+      credentials: () async => _credentials,
+      notifier: _notifier,
+      shown: _shown,
+      isDone: _done.isDone,
+      record: (notes) async => _record(notes),
+    );
     if (outcome == PushOutcome.shown || outcome == PushOutcome.fallback) _lastAlertAt = _clock();
     _log('push while open: ${outcome.name}');
   }
@@ -427,8 +480,19 @@ class PocketModel extends ChangeNotifier {
     _seenInteractions.clear();
   }
 
-  /// Back in the foreground: reconnect right away if the socket went while the app was away.
-  void resume() => _link?.reconnectNow();
+  /// Back in the foreground: reconnect right away if the socket went while the app was away, and take in what the
+  /// background handlers wrote meanwhile (news cards for the history, notification buttons).
+  void resume() {
+    _link?.reconnectNow();
+    unawaited(_catchUp());
+  }
+
+  Future<void> _catchUp() async {
+    if (!paired) return;
+    final saved = UpdatesHistory.fromJson(await _readSafely(_historyDocument));
+    if (_history.merge(saved, now: _now)) notifyListeners();
+    await _takeOutbox();
+  }
 
   void _presenceChanged(LinkPresence presence) {
     _status = presence.status;
@@ -470,13 +534,10 @@ class PocketModel extends ChangeNotifier {
     final sessions = PhoneSessions.fromValue(link.value(LinkKey.sessions));
     if (sessions != null) _sessions = sessions;
     final agent = AgentPending.fromValue(link.value(LinkKey.agent));
-    if (agent != null) _agent = agent;
-    var doneChanged = false;
-    for (final key in [LinkKey.macDone, LinkKey.phoneDone]) {
-      final list = AgentDoneList.fromValue(link.value(key));
-      if (list != null && _done.takeIn(list, now: _now)) doneChanged = true;
+    if (agent != null) {
+      _agent = agent;
+      if (agent.enabled) _record(agent.items);
     }
-    if (doneChanged) unawaited(_saveDone());
     final request = ApprovalRequest.fromValue(link.value(LinkKey.approval));
     if (request != null && !_answered.contains(request.id) && _now - request.at < 120) {
       _approval = request;
@@ -488,6 +549,17 @@ class PocketModel extends ChangeNotifier {
 
   void _received(LinkIncoming message) {
     switch (message.key) {
+      // Done marks from the computer and the other phones, each kept with where it was made (for the history).
+      case LinkKey.macDone || LinkKey.phoneDone:
+        final list = AgentDoneList.fromValue(message.value);
+        if (list == null) return;
+        final from = message.key == LinkKey.macDone
+            ? DoneMarks.computer
+            : (message.from == _credentials?.device ? DoneMarks.here : message.from);
+        if (_done.takeIn(list, now: _now, from: from)) {
+          unawaited(_saveDone());
+          notifyListeners();
+        }
       case LinkKey.reply:
         final reply = LinkReply.fromValue(message.value);
         final exchange = reply == null ? null : _exchanges.where((exchange) => exchange.id == reply.id).firstOrNull;
@@ -546,7 +618,115 @@ class PocketModel extends ChangeNotifier {
   Future<void> _alerted(LinkAlert alert) async {
     if (!await _shown.claim(alert.id)) return;
     _lastAlertAt = _clock();
-    await _notifier.show(alert);
+    await _notifier.show(
+      alert,
+      plan: NotificationPlan.forAlert(alert, room: _credentials?.room, isDone: _done.isDone),
+    );
+    final card = AgentPending.fromJson(alert.userInfo['pending']);
+    if (card != null && card.enabled) _record(card.items);
+  }
+
+  // MARK: The week of updates
+
+  /// A card's items join the history (new ones) or bring their latest words (known ones).
+  void _record(List<AgentNote> notes) {
+    if (_history.record(notes, now: _now)) unawaited(_saveHistory());
+  }
+
+  /// Read, merged and written back: the push handler may have added to the file while the app ran.
+  Future<void> _saveHistory() async {
+    try {
+      _history.merge(UpdatesHistory.fromJson(await _historyDocument.read()), now: _now);
+      await _historyDocument.write(_history.toJson());
+    } on Object catch (error) {
+      _log('the updates history could not be saved (${error.runtimeType})');
+    }
+  }
+
+  // MARK: Notification buttons
+
+  /// What buttons pressed while the app was closed left: replies the relay took (so Recently shows them and the
+  /// computer's answer lands), replies it couldn't take (sent now, if they're under ten minutes old), and done marks.
+  Future<void> _takeOutbox() async {
+    NotificationOutbox? outbox;
+    try {
+      outbox = await NotificationOutbox.take(_outboxDocument);
+    } on Object catch (error) {
+      _log('the notification outbox could not be read (${error.runtimeType})');
+    }
+    if (outbox == null) return;
+    if (outbox.doneChanged) {
+      final saved = DoneMarks.fromJson(await _readSafely(_doneDocument));
+      saved.done.forEach((id, at) => _done.done.putIfAbsent(id, () => at));
+      saved.takenIn.forEach((id, at) => _done.takenIn.putIfAbsent(id, () => at));
+      saved.by.forEach((id, by) => _done.by.putIfAbsent(id, () => by));
+    }
+    for (final command in outbox.sent) {
+      _addExchange(command);
+    }
+    for (final command in outbox.queued) {
+      if (_now - command.at < NotificationOutbox.replyLifetime) {
+        queueReply(command);
+      } else {
+        _addExchange(command)
+          ..state = ExchangeState.failed
+          ..reply = 'Not sent: there was no connection when you replied from the notification. Send it again.';
+      }
+    }
+    if (outbox.shareDone || outbox.doneChanged) {
+      _shareDone();
+    } else {
+      notifyListeners();
+    }
+  }
+
+  /// A reply from a notification that the relay already has: Recently shows it, and the computer's answer finds it.
+  void addSentReply(LinkCommand command) {
+    _addExchange(command);
+    _cue(PetCue.sending);
+    notifyListeners();
+  }
+
+  /// A reply from a notification that couldn't go straight away: it waits in the link's outbox like a typed one.
+  void queueReply(LinkCommand command) {
+    _addExchange(command);
+    _link?.set(command.toValue(), LinkKey.command);
+    notifyListeners();
+  }
+
+  Exchange _addExchange(LinkCommand command) {
+    final known = _exchanges.where((exchange) => exchange.id == command.id).firstOrNull;
+    if (known != null) return known;
+    final exchange = Exchange(
+      id: command.id,
+      text: command.text,
+      project: command.project,
+      sentAt: DateTime.fromMillisecondsSinceEpoch((command.at * 1000).round()),
+    );
+    _exchanges.add(exchange);
+    if (_exchanges.length > 6) _exchanges.removeRange(0, _exchanges.length - 6);
+    return exchange;
+  }
+
+  /// Marks [ids] done here (from a notification) without sending: returns the list this phone shares, for the
+  /// caller to deliver.
+  AgentDoneList markDoneHere(List<String> ids) {
+    if (_done.mark(ids, now: _now)) {
+      unawaited(_saveDone());
+      notifyListeners();
+    }
+    return _done.shared(now: _now);
+  }
+
+  /// Shares this phone's done list through the link (now, or when it reconnects).
+  void shareDone() => _shareDone();
+
+  static Future<Map<String, Object?>?> _readSafely(LocalDocument document) async {
+    try {
+      return await document.read();
+    } on Object {
+      return null;
+    }
   }
 
   // MARK: Things you do

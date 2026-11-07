@@ -45,6 +45,11 @@
                 <data android:scheme="mochi" android:host="pair"/>
             </intent-filter>
         </activity>
+        <!-- Reply and Mark done in a notification: flutter_local_notifications' receiver starts a background isolate
+             (mochiNotificationAction) that sends them, even with Mochi closed. Only the app's own notifications reach it. -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"/>
         <!-- MainActivity hands pairing links to the app itself; Flutter's own deep linking would treat them as routes. -->
         <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
         <!-- Don't delete the meta-data below.

@@ -11,7 +11,17 @@ import 'link_crypto.dart';
 /// `{"title", "subtitle"?, "body", "userInfo": {…}}`. The relay pushes it to iPhones (whose notification extension
 /// opens it) and also delivers it on the socket, which is how the Android app gets it while it runs.
 class LinkAlert {
-  const LinkAlert({required this.id, required this.from, this.title, this.subtitle, this.body, this.userInfo = const {}, this.at});
+  const LinkAlert({
+    required this.id,
+    required this.from,
+    this.title,
+    this.subtitle,
+    this.body,
+    this.userInfo = const {},
+    this.at,
+    this.category,
+    this.threadId,
+  });
 
   /// The key on the wire. Not a [LinkKey]: alerts aren't state or a stored value, and the apps never `set` them.
   static const String key = 'alert';
@@ -30,12 +40,26 @@ class LinkAlert {
   /// The sender's clock, seconds.
   final double? at;
 
+  /// The notification's kind from the sender's push hint, in the clear (`claude-turn`, `mochi-agent`,
+  /// `mochi-meeting`, `mochi-draft`): which actions it gets. FCM pushes carry it as `data.category`.
+  final String? category;
+
+  /// Notifications with the same thread belong together (a Claude session's id, `mochi-agent`).
+  final String? threadId;
+
   /// The sealed inner JSON.
   Map<String, Object?> toJson() => {'title': ?title, 'subtitle': ?subtitle, 'body': ?body, 'userInfo': userInfo};
 
-  /// Opens an `alert` envelope as the relay delivers it (with `from`). Null when it isn't a sealed alert or doesn't
-  /// open with [roomKey] for [room] (another room, a changed field, a forged sender).
-  static LinkAlert? open(Map<String, Object?> envelope, {required String room, required List<int> roomKey}) {
+  /// Opens an `alert` envelope as the relay delivers it (with `from`, and the sender's `push` hint on the socket).
+  /// Null when it isn't a sealed alert or doesn't open with [roomKey] for [room] (another room, a changed field, a
+  /// forged sender). [category] and [threadId] stand in for a hint the envelope doesn't carry (an FCM push's data).
+  static LinkAlert? open(
+    Map<String, Object?> envelope, {
+    required String room,
+    required List<int> roomKey,
+    String? category,
+    String? threadId,
+  }) {
     final id = jsonString(envelope['id']), from = jsonString(envelope['from']);
     final nonce = jsonString(envelope['nonce']), box = jsonString(envelope['box']);
     if (envelope['key'] != key || id == null || from == null || nonce == null || box == null) return null;
@@ -46,6 +70,7 @@ class LinkAlert {
     );
     final inner = plain == null ? null : asJsonMap(tryJsonDecode(utf8.decode(plain, allowMalformed: true)));
     if (inner == null) return null;
+    final hint = asJsonMap(envelope['push']);
     return LinkAlert(
       id: id,
       from: from,
@@ -54,6 +79,8 @@ class LinkAlert {
       body: jsonString(inner['body']),
       userInfo: asJsonMap(inner['userInfo']) ?? const {},
       at: jsonDouble(envelope['at']),
+      category: jsonString(hint?['category']) ?? category,
+      threadId: jsonString(hint?['threadId']) ?? threadId,
     );
   }
 

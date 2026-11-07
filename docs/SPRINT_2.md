@@ -151,9 +151,9 @@ Windows lets an app see and nudge much more of the desktop than macOS does, so M
 | A3 | **Hold to talk**: press and hold Mochi, Mochi listens, and the request runs on the computer (`TalkModel`, `PhoneListener`) | Android on-device `SpeechRecognizer` (offline when available) | M |
 | A4 | **"Hey Google" instead of Siri**: "What's waiting on Mochi?" and similar phrases (`MochiIntents`) | App Actions / Shortcuts (capabilities.xml), a Quick Settings tile and app shortcuts. Read the answer in Mochi's voice. | M |
 | A5 | **Full pet simulation in the room**: the iPhone runs `CompanionWorld`; Android plays recorded poses | Use G1 `mochi_world` | M (after G1) |
-| A6 | **Updates history**: a week of history grouped by day, like the iPhone (today: waiting and done only) | S |
+| A6 | **Updates history**: a week of history grouped by day, like the iPhone (today: waiting and done only). **Built (2026-11-07; not yet checked on the Realme):** every card's items kept a week (`updates.json`, also from the push handler), shown by day under Waiting for you with when each came in and where and when it was marked done. | S |
 | A7 | **Mochi Cloud on the phone**: "Check now" through Mochi Cloud when the computer is off, and **reply drafts** | Read the agent state from the room; trigger the cloud check like the iPhone | M |
-| A8 | **Notification actions**: Reply to a session from the notification, Join, Mark done, Approve/Decline. Match the iPhone's categories (`PhoneNotifications`). | Notification actions with RemoteInput | M |
+| A8 | **Notification actions**: Reply to a session from the notification, Join, Mark done, Approve/Decline. Match the iPhone's categories (`PhoneNotifications`). **Built (2026-11-07; checked against the live relay, not yet on the Realme):** Reply (RemoteInput), Join, Open in Gmail and Mark done; Reply and Mark done work with the app closed (a background isolate sends them over HTTPS, or they wait for the app). No Approve/Decline: the iPhone has no approval notification. | Notification actions with RemoteInput | M |
 | A9 | **Mochi's voice upgrade**: a licence-clean neural voice (Kokoro with a non-GPL phonemiser) | Spike: research only | S |
 | A10 | **Play Store release**: listing, privacy form, signing (parked with phase 7 until the user unparks it) | M |
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:mochi_link/mochi_link.dart';
 
 import '../alert_notifier.dart';
+import '../notify/notification_plan.dart';
 import 'shown_alerts.dart';
 
 /// What happened to one push.
@@ -39,14 +40,19 @@ abstract final class PushMessages {
   ///
   /// - Not an alert, no pairing, or another room's: ignored.
   /// - Already shown: a duplicate, nothing shown.
-  /// - Opens with the room key: shown (and recorded, so a second copy is dropped).
+  /// - Opens with the room key: shown with its buttons (and recorded, so a second copy is dropped). A card that rides
+  ///   along (Mochi's news) goes to [record], for the Updates history.
   /// - For this phone but can't be opened (a damaged message, unreadable credentials): "Mochi" / "Mochi has news",
   ///   under the alert's own notification id, so the real text replaces it if it arrives over the socket later.
+  ///
+  /// [isDone] keeps Mark done off items already done.
   static Future<PushOutcome> handle(
     Map<String, Object?> data, {
     required Future<LinkCredentials?> Function() credentials,
     required AlertNotifier notifier,
     required ShownAlerts shown,
+    bool Function(String id)? isDone,
+    Future<void> Function(List<AgentNote> notes)? record,
   }) async {
     final sealed = sealedAlert(data);
     if (sealed == null) return PushOutcome.ignored;
@@ -63,13 +69,30 @@ abstract final class PushMessages {
     if (saved == null || key == null) return PushOutcome.ignored;
     final room = sealed['room'];
     if (room != null && room != saved.room) return PushOutcome.ignored;
-    final alert = LinkAlert.open(sealed, room: saved.room, roomKey: key);
+    final alert = LinkAlert.open(
+      sealed,
+      room: saved.room,
+      roomKey: key,
+      category: data['category'] is String ? data['category']! as String : null,
+      threadId: data['threadId'] is String ? data['threadId']! as String : null,
+    );
     if (alert == null) {
       await notifier.show(fallback(id));
       return PushOutcome.fallback;
     }
     if (!await shown.claim(alert.id)) return PushOutcome.duplicate;
-    await notifier.show(alert);
+    await notifier.show(
+      alert,
+      plan: NotificationPlan.forAlert(alert, room: saved.room, isDone: isDone),
+    );
+    final card = AgentPending.fromJson(alert.userInfo['pending']);
+    if (card != null && card.enabled && record != null) {
+      try {
+        await record(card.items);
+      } on Object {
+        // The history is a nicety: the notification is what matters.
+      }
+    }
     return PushOutcome.shown;
   }
 
