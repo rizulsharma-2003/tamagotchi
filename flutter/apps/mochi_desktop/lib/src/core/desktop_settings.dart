@@ -114,6 +114,8 @@ class DesktopSettings extends ChangeNotifier {
   int _companionLingerMinutes = 10;
   int _companionSleepAfterMinutes = 6;
   bool _companionOnTaskbar = true;
+  bool _autoUpdate = true;
+  bool _installDeclined = false;
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -156,6 +158,8 @@ class DesktopSettings extends ChangeNotifier {
     _companionLingerMinutes = _minutes(json['companionLingerMinutes'], 10, 0, maxLingerMinutes);
     _companionSleepAfterMinutes = _minutes(json['companionSleepAfterMinutes'], 6, 1, maxSleepAfterMinutes);
     _companionOnTaskbar = flag('companionOnTaskbar', true);
+    _autoUpdate = flag('autoUpdate', true);
+    _installDeclined = flag('installDeclined', false);
   }
 
   static int _minutes(Object? value, int fallback, int min, int max) => value is int ? value.clamp(min, max) : fallback;
@@ -297,6 +301,15 @@ class DesktopSettings extends ChangeNotifier {
   /// taskbar" on).
   bool get companionOnTaskbar => _companionOnTaskbar;
   set companionOnTaskbar(bool value) => _set(() => _companionOnTaskbar = value);
+  /// Settings › About › Download updates automatically: Mochi downloads and verifies a new version in the background
+  /// (it's installed only when you restart Mochi, or at its next launch).
+  bool get autoUpdate => _autoUpdate;
+  set autoUpdate(bool value) => _set(() => _autoUpdate = value);
+
+  /// "Not now" on the offer to install Mochi: it runs from where it is and doesn't ask again at launch (Settings ›
+  /// About still offers it).
+  bool get installDeclined => _installDeclined;
+  set installDeclined(bool value) => _set(() => _installDeclined = value);
 
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
@@ -349,6 +362,8 @@ class DesktopSettings extends ChangeNotifier {
     'companionLingerMinutes': _companionLingerMinutes,
     'companionSleepAfterMinutes': _companionSleepAfterMinutes,
     'companionOnTaskbar': _companionOnTaskbar,
+    'autoUpdate': _autoUpdate,
+    'installDeclined': _installDeclined,
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
 

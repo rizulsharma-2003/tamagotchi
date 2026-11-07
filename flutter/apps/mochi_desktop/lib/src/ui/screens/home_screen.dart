@@ -24,6 +24,7 @@ class HomeScreen extends StatefulWidget {
     required this.onPair,
     required this.onSettings,
     this.askFirst = false,
+    this.onInstall,
   });
 
   final MochiDesktop desktop;
@@ -37,6 +38,9 @@ class HomeScreen extends StatefulWidget {
   final DateTime Function() lastActivity;
   final VoidCallback onPair;
   final VoidCallback onSettings;
+
+  /// "Install Mochi" (null: no offer).
+  final VoidCallback? onInstall;
 
   /// The room's height: the phone's room card, a little shorter for the window.
   static const double roomHeight = 250;
@@ -73,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([desktop.sessions, desktop.hooks, desktop.link, desktop.bridgeProblem, desktop.settings, companion]),
+    listenable: Listenable.merge([desktop.sessions, desktop.hooks, desktop.link, desktop.bridgeProblem, desktop.settings, desktop.installer, companion]),
     builder: (context, _) {
       final sessions = desktop.sessions;
       final live = sessions.all.where((session) => session.isLive || session.phase == SessionPhase.ended).take(8).toList();
@@ -83,6 +87,11 @@ class _HomeScreenState extends State<HomeScreen> {
           controller: _scroll,
           padding: const EdgeInsets.fromLTRB(Space.l, Space.xs, Space.l, Space.xl),
           children: [
+            // First thing on a first run from Downloads: the room is tall, so the offer goes above it.
+            if (widget.onInstall != null && InstallCard.offered(desktop)) ...[
+              InstallCard(desktop: desktop, onInstall: widget.onInstall!),
+              const SizedBox(height: Space.m),
+            ],
             _Header(desktop: desktop, companion: companion, library: widget.library, lastActivity: widget.lastActivity, onPair: widget.onPair),
             if (desktop.bridgeProblem.value != null) ...[
               const SizedBox(height: Space.m),
@@ -208,6 +217,64 @@ class _Header extends StatelessWidget {
           style: context.type.footnote.copyWith(fontWeight: FontWeight.w500),
         ),
       ],
+    );
+  }
+}
+
+/// Mochi started from somewhere other than its install folder (Downloads, a build folder): install it, so it can
+/// keep itself up to date, or carry on from here with updates off.
+class InstallCard extends StatelessWidget {
+  const InstallCard({super.key, required this.desktop, required this.onInstall});
+
+  final MochiDesktop desktop;
+  final VoidCallback onInstall;
+
+  /// Offered on Windows when this copy isn't the installed one and you haven't said "Not now".
+  static bool offered(MochiDesktop desktop) =>
+      desktop.installer.supported && !desktop.installer.installed && !desktop.settings.installDeclined;
+
+  @override
+  Widget build(BuildContext context) {
+    final installer = desktop.installer;
+    final p = context.palette;
+    return ClayCard(
+      outline: p.tint.withValues(alpha: 0.5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconTile(icon: Icons.download_for_offline_outlined, tint: p.tint),
+              const SizedBox(width: Space.m),
+              Expanded(child: Text('Install Mochi', style: context.type.headline)),
+            ],
+          ),
+          const SizedBox(height: Space.s),
+          Text(
+            'Mochi is running from ${installer.runningFrom}. Install it for you (no admin rights needed) and it gets a '
+            'Start-menu entry and keeps itself up to date. Your settings come along.',
+            style: context.type.subheadline,
+          ),
+          if (installer.problem != null) ...[
+            const SizedBox(height: Space.s),
+            NoteLabel(text: installer.problem!, icon: Icons.error_outline_rounded, tint: p.danger, textColor: p.danger),
+          ],
+          const SizedBox(height: Space.m),
+          Wrap(
+            spacing: Space.s,
+            runSpacing: Space.s,
+            children: [
+              FilledButton(onPressed: installer.busy ? null : onInstall, child: Text(installer.busy ? 'Installing…' : 'Install Mochi')),
+              TextButton(
+                onPressed: installer.busy ? null : () => desktop.settings.installDeclined = true,
+                child: const Text('Not Now'),
+              ),
+            ],
+          ),
+          const SizedBox(height: Space.xs),
+          Text('Not now: Mochi runs from here, without updates.', style: context.type.footnote),
+        ],
+      ),
     );
   }
 }

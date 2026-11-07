@@ -94,6 +94,14 @@ class HookSetup extends ChangeNotifier {
     }
   }
 
+  /// After an update, the hooks must run the helper that came with this version, not the one copied before: when
+  /// Claude Code is connected and the copy differs, it's replaced (safely, even while a hook runs it). Says what it did.
+  String refreshInstalledHelper() {
+    final source = bundledHelper;
+    if (source == null || source == paths.installedHelper) return 'no bundled helper';
+    return UpdateCli.refreshInstalledHelper(source: source, target: paths.installedHelper);
+  }
+
   void _installHelper() {
     final source = bundledHelper;
     final target = File(paths.installedHelper);

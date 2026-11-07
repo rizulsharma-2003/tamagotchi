@@ -11,6 +11,7 @@ import 'package:mochi_ui/mochi_ui.dart';
 import '../../core/pet_cues.dart';
 import '../../core/sessions.dart' show Attention;
 import '../../desktop.dart';
+import '../../update/updater.dart';
 import '../shell.dart';
 import 'companion_director.dart';
 import 'mochi_view.dart';
@@ -87,6 +88,11 @@ class _PetSurfaceState extends State<PetSurface> {
         _say(project == null ? 'Claude finished!' : 'Claude finished in $project!', const Duration(seconds: 8));
       case PetCue.snag:
         _say('Claude hit a snag', const Duration(seconds: 8));
+      case PetCue.updateReady:
+        _say('A new Mochi is ready: restart to update', const Duration(seconds: 12));
+      case PetCue.updated:
+        final version = widget.desktop.updater.updatedTo;
+        _say(version == null ? 'Mochi is up to date!' : 'Mochi updated to $version!', const Duration(seconds: 8));
       default:
         break;
     }
@@ -115,6 +121,10 @@ class _PetSurfaceState extends State<PetSurface> {
       context: context,
       position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
       items: [
+        if (widget.desktop.updater.phase == UpdatePhase.ready) ...[
+          const PopupMenuItem(value: ShellAction.restartToUpdate, child: Text('Restart to Update')),
+          const PopupMenuDivider(),
+        ],
         const PopupMenuItem(value: ShellAction.showMain, child: Text('Show Mochi')),
         const PopupMenuItem(value: ShellAction.pair, child: Text('Pair a Phone…')),
         const PopupMenuItem(value: ShellAction.settings, child: Text('Settings')),

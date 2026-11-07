@@ -23,9 +23,17 @@ class SettingsHost {
     this.patch,
     this.library,
     this.clock,
+    this.onInstall,
+    this.onRestartToUpdate,
   });
 
   final MochiDesktop desktop;
+
+  /// "Install Mochi": the app copies itself into place and hands over to the installed copy.
+  final VoidCallback? onInstall;
+
+  /// "Restart to Update": the helper installs the waiting update and starts Mochi again.
+  final VoidCallback? onRestartToUpdate;
   final SettingsNavigation navigation;
 
   /// Opens the pairing page (with a fresh code).

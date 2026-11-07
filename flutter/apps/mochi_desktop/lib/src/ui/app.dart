@@ -13,6 +13,7 @@ import '../core/pet_cues.dart';
 import '../desktop.dart';
 import '../platform/taskbar.dart';
 import 'pet/companion_director.dart';
+import '../update/updater.dart';
 import 'pet/pet_surface.dart';
 import 'pet/taskbar_stroll.dart';
 import 'popover/frame_meter.dart';
@@ -155,7 +156,9 @@ class DesktopAppState extends State<DesktopApp> {
     _subscriptions.add(desktop.cues.listen(_noteActivity));
     desktop.sessions.addListener(_sessionsChanged);
     desktop.settings.addListener(_settingsChanged);
+    desktop.updater.addListener(_updatesChanged);
     unawaited(widget.shell.setRoaming(_trayRoaming));
+    _updatesChanged();
     if (_page == MainPage.settings) widget.shell.mainSize = settingsSize();
     unawaited(_stroll.show(_surface));
   }
@@ -175,6 +178,33 @@ class DesktopAppState extends State<DesktopApp> {
   void _sessionsChanged() {
     final last = desktop.sessions.lastEventAt;
     if (last != null && last.isAfter(_lastActivity)) _lastActivity = last;
+  }
+
+  bool _trayUpdate = false;
+
+  /// "Restart to Update" in the tray while a verified update waits.
+  void _updatesChanged() {
+    final ready = desktop.updater.phase == UpdatePhase.ready;
+    if (ready == _trayUpdate) return;
+    _trayUpdate = ready;
+    unawaited(widget.shell.setUpdateReady(ready));
+  }
+
+  /// "Install Mochi": copies this copy into the install folder, then the installed copy takes over (this one quits).
+  Future<void> installMochi() async {
+    final installer = desktop.installer;
+    if (!await installer.install()) return;
+    if (await installer.relaunchInstalled() != null) return;
+    await _quit();
+  }
+
+  /// "Restart to Update": the helper installs the waiting update once Mochi has quit, then starts it again.
+  Future<void> restartToUpdate() async {
+    if (await desktop.updater.restartToUpdate() != null) {
+      open(MainPage.settings, pane: SettingsTab.about);
+      return;
+    }
+    await _quit();
   }
 
   /// "Mochi on the desktop" switched while the main window is closed; "Roam along the taskbar" ticks in the tray.
@@ -218,6 +248,8 @@ class DesktopAppState extends State<DesktopApp> {
         // it opened closes it.
         final opened = _popoverOpenedAt;
         if (_surface == Surface.popover && (opened == null || _clock() - opened > popoverSettle)) closePopover();
+      case ShellAction.restartToUpdate:
+        unawaited(restartToUpdate());
       case ShellAction.quit:
         unawaited(_quit());
     }
@@ -397,6 +429,7 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.sessions.removeListener(_sessionsChanged);
     desktop.settings.removeListener(_settingsChanged);
     _warmUpTimer?.cancel();
+    desktop.updater.removeListener(_updatesChanged);
     _stroll.dispose();
     _companion.dispose();
     _meter?.dispose();
@@ -570,6 +603,7 @@ class _MainSurface extends StatelessWidget {
                 lastActivity: () => state._lastActivity,
                 onPair: () => state.open(MainPage.pairing),
                 onSettings: () => state.open(MainPage.settings, pane: SettingsTab.claude),
+                onInstall: () => unawaited(state.installMochi()),
               ),
               MainPage.pairing => PairingScreen(
                 link: desktop.link,
@@ -585,6 +619,8 @@ class _MainSurface extends StatelessWidget {
                   stroll: state.stroll,
                   patch: state.companion,
                   library: state._library,
+                  onInstall: () => unawaited(state.installMochi()),
+                  onRestartToUpdate: () => unawaited(state.restartToUpdate()),
                 ),
               ),
             },

@@ -3,8 +3,8 @@ description: >-
   Claude Code hooks for Mochi's desktop app (docs/MOCHI_LINK_PLAN.md 5.4, `mochi_desktop`): the Dart twin of
   Sources/TamagotchiWire (the sanitized wire event, the hook payload sanitizer, the tool and command classifiers, the
   spool) and of ClaudeHookInstaller (Mochi's hooks merged into Claude Code's settings.json and taken out again), plus
-  the local bridge between the `mochi_hook` helper and the app. Pure Dart: the helper is built with
-  `dart compile exe bin/mochi_hook.dart`.
+  the local bridge between the `mochi_hook` helper and the app, and the helper's update and uninstall commands for
+  Mochi for Windows. Pure Dart: the helper is built with `dart compile exe bin/mochi_hook.dart`.
 publish_to: none
 version: 0.1.0
 resolution: workspace
@@ -15,6 +15,9 @@ environment:
 dependencies:
   # SHA-256 for event ids and project keys; already pinned by mochi_link (2.9.0: 2025-11).
   cryptography: 2.9.0
+  # Win32 calls for installing updates and uninstalling (wait for Mochi to quit, the registry) through dart:ffi
+  # (2.2.0: 2026-02-11; already in the workspace).
+  ffi: 2.2.0
 
 dev_dependencies:
   test: ^1.26.2

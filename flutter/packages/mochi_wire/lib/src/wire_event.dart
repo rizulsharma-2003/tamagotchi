@@ -297,7 +297,7 @@ class WireEvent {
 
 /// The helper's name and version (Swift `HelperInfo`).
 abstract final class HelperInfo {
-  static const String version = '1.1.0';
+  static const String version = '1.2.0';
 
   /// The helper's file name without `.exe`. Together with [hookSubcommand] it marks a hook entry as Mochi's, so
   /// removing them never touches anything else (and never the Mac app's `mactamagotchi-hook` entries).

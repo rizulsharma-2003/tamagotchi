@@ -19,9 +19,20 @@ import 'link/phone_sync.dart';
 import 'platform/credential_vault.dart';
 import 'platform/startup.dart';
 import 'platform/system.dart';
+import 'platform/win32_install.dart';
+import 'update/self_install.dart';
+import 'update/update_feed.dart';
+import 'update/update_keys.dart';
+import 'update/update_manifest.dart';
+import 'update/update_signing.dart';
+import 'update/updater.dart';
 
-/// This app's version, shown on the other devices and in Settings.
+/// This app's version, shown on the other devices and in Settings (pubspec.yaml's `version`, before the `+`;
+/// scripts/release-windows.sh sets both).
 const String appVersion = '0.1.0';
+
+/// The build number (pubspec.yaml's `version`, after the `+`): it decides which copy is newer when updating.
+const int appBuild = 1;
 
 /// Everything Mochi for Windows does, wired together: hook events from the bridge into the sessions, the sessions into
 /// Mochi's moods and the phones, phone commands into Ask Mochi. The windows and the tray only show it.
@@ -40,9 +51,13 @@ class MochiDesktop {
     String? Function()? locateClaude,
     BridgeServer? bridge,
     DateTime Function()? clock,
+    Updater? updater,
+    SelfInstaller? installer,
   }) : _claude = claude,
        _locateClaude = locateClaude,
        startup = startup ?? const UnsupportedStartup(),
+       updater = updater ?? Updater.unsupported(),
+       installer = installer ?? SelfInstaller.unsupported(),
        _bridge = bridge ?? BridgeServer(paths) {
     ask = AskMochi(
       sessions: sessions,
@@ -88,6 +103,51 @@ class MochiDesktop {
     }
 
     final name = computerName();
+    final startup = systemStartup();
+    final link = LinkHost(
+      vault: demoMode ? MemoryVault() : platformVault(paths),
+      api: demoMode ? const DemoLinkApi() : const RelayLinkApi(),
+      connect: (credentials) => RelayLink(
+        credentials,
+        platform: Platform.isWindows ? 'windows' : Platform.operatingSystem,
+        app: appVersion,
+        connect: demoMode ? (url, headers) => DemoSocket(credentials.device) : null,
+        // Connection events only: the client never logs values or secrets.
+        onLog: kDebugMode ? (message) => debugPrint('Mochi Link: $message') : null,
+      ),
+      hostName: name,
+      platform: Platform.isWindows ? 'windows' : Platform.operatingSystem,
+      phonesHintFile: demoMode ? null : paths.join(paths.linkDirectory, 'phones'),
+      log: kDebugMode ? (message) => debugPrint('Mochi: $message') : null,
+    );
+    // Installing and updating itself: Mochi for Windows only (not the macOS development build or the demo).
+    final layout = InstallLayout.resolve();
+    final windows = Platform.isWindows && !demoMode;
+    final installer = windows
+        ? SelfInstaller(
+            layout: layout,
+            executable: Platform.resolvedExecutable,
+            version: appVersion,
+            system: Win32InstallSystem(),
+            startup: startup,
+            startupFor: (exe) => RunKeyStartup(registry: Win32StartupRegistry(), executable: exe),
+          )
+        : SelfInstaller.unsupported();
+    final updater = windows
+        ? Updater(
+            files: UpdateFiles(paths),
+            layout: layout,
+            installed: installer.installed,
+            currentVersion: appVersion,
+            currentBuild: appBuild,
+            // `MOCHI_UPDATE_CHANNEL=windows-test` tries a release on the relay's test feed first.
+            feed: RelayUpdateFeed(credentials: link.ensureRoom, platform: environment['MOCHI_UPDATE_CHANNEL'] ?? 'windows'),
+            publicKey: UpdateSigning.base64UrlDecode(windowsUpdatePublicKey),
+            autoDownload: () => settings.autoUpdate,
+            windowsVersion: windowsVersion(Platform.operatingSystemVersion),
+            helper: HookSetup.findBundledHelper,
+          )
+        : Updater.unsupported();
     return MochiDesktop(
       paths: paths,
       settings: settings,
@@ -99,30 +159,18 @@ class MochiDesktop {
         bundledHelper: HookSetup.findBundledHelper(),
         managedSettingsFile: ClaudeHookInstaller.defaultManagedSettingsFile(),
       ),
-      link: LinkHost(
-        vault: demoMode ? MemoryVault() : platformVault(paths),
-        api: demoMode ? const DemoLinkApi() : const RelayLinkApi(),
-        connect: (credentials) => RelayLink(
-          credentials,
-          platform: Platform.isWindows ? 'windows' : Platform.operatingSystem,
-          app: appVersion,
-          connect: demoMode ? (url, headers) => DemoSocket(credentials.device) : null,
-          // Connection events only: the client never logs values or secrets.
-          onLog: kDebugMode ? (message) => debugPrint('Mochi Link: $message') : null,
-        ),
-        hostName: name,
-        platform: Platform.isWindows ? 'windows' : Platform.operatingSystem,
-        log: kDebugMode ? (message) => debugPrint('Mochi: $message') : null,
-      ),
+      link: link,
       motion: SystemMotion(),
       claude: claude,
       opener: const SystemUrlOpener(),
       folders: const SystemFolderOpener(),
-      startup: systemStartup(),
+      startup: startup,
       locateClaude: () {
         claude();
         return executable;
       },
+      updater: updater,
+      installer: installer,
     );
   }
 
@@ -143,6 +191,12 @@ class MochiDesktop {
 
   /// "Start Mochi with Windows" (Settings › General).
   final StartupItem startup;
+
+  /// Mochi's updates (Settings › About, the tray's "Restart to Update").
+  final Updater updater;
+
+  /// "Install Mochi": this copy into the install folder, so it can update itself.
+  final SelfInstaller installer;
   final ClaudeRunner? Function() _claude;
   final String? Function()? _locateClaude;
   final BridgeServer _bridge;
@@ -181,7 +235,27 @@ class MochiDesktop {
     await link.start();
     phone.start();
     _prune = Timer.periodic(const Duration(minutes: 1), (_) => sessions.prune());
+    _startUpdates();
   }
+
+  /// The installed copy keeps its Settings › Apps entry and the hooks' helper in step with this version, and checks
+  /// for updates. Mochi says when one is ready, and after it was updated.
+  void _startUpdates() {
+    if (installer.installed) {
+      installer.refreshAtLaunch();
+      if (hooks.helperInstalled) hooks.refreshInstalledHelper();
+    }
+    updater.onReady = (_) => cue(PetCue.updateReady);
+    updater.start();
+    // A moment later, so the pet is there to say it.
+    if (updater.updatedTo != null) {
+      _greeting = Timer(const Duration(seconds: 4), () => cue(PetCue.updated));
+    } else if (updater.phase == UpdatePhase.ready) {
+      _greeting = Timer(const Duration(seconds: 4), () => cue(PetCue.updateReady));
+    }
+  }
+
+  Timer? _greeting;
 
   /// What the helper kept while Mochi wasn't running: it updates the sessions (late), without reactions.
   void _drainSpool() {
@@ -239,8 +313,15 @@ class MochiDesktop {
     return result == null ? null : TurnSummarizer.parse(result);
   }
 
+  bool _disposed = false;
+
+  /// Everything stops (Quit, or the helper taking over for an update). Only once.
   Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
     _prune?.cancel();
+    _greeting?.cancel();
+    updater.stop();
     phone.stop();
     for (final subscription in _subscriptions) {
       await subscription.cancel();

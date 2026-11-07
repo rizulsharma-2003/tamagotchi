@@ -7,6 +7,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_desktop/src/core/pet_cues.dart';
+import 'package:mochi_desktop/src/link/link_host.dart';
+import 'package:mochi_desktop/src/platform/credential_vault.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_wire/mochi_wire.dart';
 
@@ -118,6 +120,104 @@ void main() {
       await t.desktop.link.showCode();
       expect(t.api.roomsMade, 1);
       expect(t.desktop.link.code, isNotNull);
+    });
+  });
+
+  group('A room before any phone (for updates)', () {
+    test('ensureRoom makes the room quietly, once, however many ask at the same time', () async {
+      t = TestDesktop.make();
+      final link = t.desktop.link;
+      await link.start();
+      final rooms = await Future.wait([link.ensureRoom(), link.ensureRoom(), link.ensureRoom()]);
+      expect(rooms, everyElement(hostCredentials));
+      expect(t.api.roomsMade, 1);
+      expect(t.vault.saved, hostCredentials);
+      expect(link.hasRoom, isTrue);
+      expect(link.paired, isFalse, reason: 'a room with no phone in it is not a pairing');
+      expect(link.problem, isNull, reason: 'nothing is shown');
+      expect(link.code, isNull);
+      expect(await link.ensureRoom(), hostCredentials);
+      expect(t.api.roomsMade, 1, reason: 'the room is kept');
+    });
+
+    test('offline: no room, no problem shown, and the next call tries again', () async {
+      t = TestDesktop.make();
+      t.api.failCreate = const LinkPairingException("Couldn't reach the relay.");
+      expect(await t.desktop.link.ensureRoom(), isNull);
+      expect(t.desktop.link.problem, isNull);
+      t.api.failCreate = null;
+      expect(await t.desktop.link.ensureRoom(), hostCredentials);
+    });
+
+    test('pairing a phone later invites into the same room, and the first phone makes it paired', () async {
+      t = TestDesktop.make();
+      final link = t.desktop.link;
+      await link.start();
+      await link.ensureRoom();
+      await settle();
+      t.socket.sync(devices: [device('dev_pc', 'host')]);
+      await settle();
+      expect(link.paired, isFalse);
+      expect(t.socket.values(LinkKey.look), isEmpty, reason: 'nothing is published to an empty room');
+
+      await link.showCode();
+      expect(t.api.roomsMade, 1);
+      expect(t.api.invites, 1);
+      t.desktop.phone.start();
+      t.socket.deliver({
+        'v': 1,
+        'op': 'devices',
+        'devices': [device('dev_pc', 'host'), device('dev_phone', 'pocket', name: 'Pixel 8')],
+      });
+      await settle();
+      expect(link.paired, isTrue);
+      expect(link.code, isNull, reason: 'the phone used the code');
+      expect(t.socket.values(LinkKey.look), isNotEmpty, reason: 'the first phone gets everything at once');
+    });
+
+    test('a room the relay ended is made again', () async {
+      t = TestDesktop.make(saved: hostCredentials);
+      await t.desktop.link.start();
+      await settle();
+      t.socket.drop(4004);
+      await settle();
+      expect(t.desktop.link.status, LinkStatus.removed);
+      expect(await t.desktop.link.ensureRoom(), hostCredentials);
+      expect(t.api.roomsMade, 1);
+    });
+
+    test('whether phones are in the room is remembered for the next launch (before the relay answers)', () async {
+      final folder = Directory.systemTemp.createTempSync('mochi_link_hint');
+      addTearDown(() => folder.deleteSync(recursive: true));
+      final hint = '${folder.path}/phones';
+      LinkHost host(MemoryVault vault) => LinkHost(
+        vault: vault,
+        api: FakeLinkApi(),
+        connect: (credentials) => RelayLink(
+          credentials,
+          platform: 'windows',
+          app: 'test',
+          connect: (url, headers) => FakeSocket(url, headers),
+          backoff: (_) => const Duration(milliseconds: 1),
+        ),
+        hostName: 'TEST-PC',
+        phonesHintFile: hint,
+      );
+      t = TestDesktop.make();
+      final first = host(MemoryVault());
+      await first.ensureRoom();
+      expect(File(hint).readAsStringSync(), '0');
+      final next = host(MemoryVault(hostCredentials));
+      await next.start();
+      expect(next.paired, isFalse, reason: 'no phone had joined');
+      File(hint).writeAsStringSync('1');
+      final later = host(MemoryVault(hostCredentials));
+      await later.start();
+      expect(later.paired, isTrue);
+      await later.unpair();
+      expect(File(hint).existsSync(), isFalse);
+      first.dispose();
+      next.dispose();
     });
   });
 

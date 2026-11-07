@@ -36,6 +36,8 @@ enum ShellAction {
 
   /// The popover lost the focus (a click somewhere else): it closes, as a flyout does.
   dismissPopover,
+  /// A verified update is waiting: install it now (Mochi quits and starts again).
+  restartToUpdate,
   quit,
 }
 
@@ -57,6 +59,9 @@ abstract interface class DesktopShell {
 
   /// Ticks (or unticks) "Roam along the taskbar" in the tray menu.
   Future<void> setRoaming(bool roaming);
+
+  /// Shows (or hides) "Restart to Update" at the top of the tray menu.
+  Future<void> setUpdateReady(bool ready);
 
   /// Shows the tray's menu at the pointer (right-clicking Mochi in the taskbar, whose window is too small for its own).
   Future<void> popUpMenu();
@@ -117,6 +122,7 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   Surface _surface = Surface.hidden;
   PetWindow? _petWindow;
   bool _roaming = true;
+  bool _updateReady = false;
 
   @override
   Size mainSize = SurfaceSizes.main;
@@ -165,11 +171,12 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
     trayManager.addListener(this);
     await trayManager.setIcon(Platform.isWindows ? 'assets/tray/tray_icon.ico' : 'assets/tray/tray_icon.png');
     if (!Platform.isLinux) await trayManager.setToolTip('Mochi');
-    await trayManager.setContextMenu(Menu(items: trayItems(roaming: _roaming)));
+    await trayManager.setContextMenu(Menu(items: trayItems(roaming: _roaming, updateReady: _updateReady)));
   }
 
   /// The tray menu.
-  static List<MenuItem> trayItems({required bool roaming}) => [
+  static List<MenuItem> trayItems({required bool roaming, bool updateReady = false}) => [
+    if (updateReady) ...[MenuItem(key: ShellAction.restartToUpdate.name, label: 'Restart to Update'), MenuItem.separator()],
     MenuItem(key: ShellAction.showMain.name, label: 'Show Mochi'),
     MenuItem(key: ShellAction.pair.name, label: 'Pair a Phone…'),
     MenuItem(key: ShellAction.settings.name, label: 'Settings'),
@@ -184,7 +191,15 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   Future<void> setRoaming(bool roaming) async {
     if (roaming == _roaming) return;
     _roaming = roaming;
-    await trayManager.setContextMenu(Menu(items: trayItems(roaming: roaming)));
+    await trayManager.setContextMenu(Menu(items: trayItems(roaming: roaming, updateReady: _updateReady)));
+  }
+
+  @override
+  Future<void> setUpdateReady(bool ready) async {
+    if (ready == _updateReady) return;
+    _updateReady = ready;
+    await trayManager.setContextMenu(Menu(items: trayItems(roaming: _roaming, updateReady: ready)));
+    if (!Platform.isLinux) await trayManager.setToolTip(ready ? 'Mochi: an update is ready' : 'Mochi');
   }
 
   @override
