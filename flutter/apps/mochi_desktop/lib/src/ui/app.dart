@@ -154,6 +154,11 @@ class DesktopAppState extends State<DesktopApp> {
 
   /// What Mochi is doing, for the perf meter.
   String perfState() {
+    final state = _perfState();
+    return desktop.rhythm.unseen ? 'screen off: $state' : state;
+  }
+
+  String _perfState() {
     switch (_surface) {
       case Surface.hidden:
         return 'hidden';
