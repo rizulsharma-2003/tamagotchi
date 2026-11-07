@@ -117,7 +117,6 @@ class MochiWidgetProvider : AppWidgetProvider() {
                 left -= more * row
             }
             val footer = left >= 14f * scale + 4f
-            android.util.Log.d("MochiWidgetDebug", "size ${width}x$height waiting=$waitingRows sessions=$sessionRows left=$left footer=$footer")
 
             val title = if (stale) view.restTitle else view.title
             var text = if (stale) view.restText else view.text

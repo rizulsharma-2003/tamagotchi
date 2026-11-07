@@ -71,6 +71,13 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /**
+     * Mochi's links (`mochi://pair`, `mochi://<place>`) are handled here and in the app, never as Flutter routes:
+     * Flutter's own deep linking would push a second home screen for each one. (Flutter reads this from the activity,
+     * so the manifest's meta-data says the same on the activity.)
+     */
+    override fun shouldHandleDeeplinking(): Boolean = false
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

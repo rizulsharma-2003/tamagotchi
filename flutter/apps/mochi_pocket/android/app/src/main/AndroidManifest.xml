@@ -35,6 +35,9 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- MainActivity hands Mochi's links (pairing, the widget's places) to the app itself; Flutter's own deep
+                 linking would treat them as routes. Flutter reads this here, on the activity. -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -64,8 +67,6 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/mochi_widget_info"/>
         </receiver>
-        <!-- MainActivity hands pairing links to the app itself; Flutter's own deep linking would treat them as routes. -->
-        <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
