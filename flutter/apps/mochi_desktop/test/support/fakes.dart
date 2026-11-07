@@ -19,6 +19,7 @@ import 'package:mochi_desktop/src/core/toasts.dart';
 import 'package:mochi_desktop/src/desktop.dart';
 import 'package:mochi_desktop/src/link/link_host.dart';
 import 'package:mochi_desktop/src/platform/credential_vault.dart';
+import 'package:mochi_desktop/src/platform/displays.dart';
 import 'package:mochi_desktop/src/platform/startup.dart';
 import 'package:mochi_desktop/src/platform/system.dart';
 import 'package:mochi_desktop/src/platform/taskbar.dart';
@@ -123,6 +124,17 @@ class FakeLinkApi implements LinkApi {
   final List<LinkCredentials> deleted = [];
   Object? failCreate;
 
+  /// The roles invitations were for, the devices that joined (role, platform, name) and the ones removed.
+  final List<String?> inviteRoles = [];
+  final List<({String role, String platform, String name})> joins = [];
+  final List<String> removed = [];
+
+  /// The room's devices as the relay lists them over HTTPS (null: it can't be reached).
+  List<LinkPeer>? listed;
+
+  /// Joining fails with this (once), as the relay can (`room_full`).
+  LinkPairingException? failJoin;
+
   @override
   Future<LinkCredentials> createRoom({required String relay, required String platform, required String name}) async {
     final failure = failCreate;
@@ -132,13 +144,43 @@ class FakeLinkApi implements LinkApi {
   }
 
   @override
-  Future<PairingCode> invite(LinkCredentials credentials, {required String hostName}) async {
+  Future<PairingCode> invite(LinkCredentials credentials, {required String hostName, String? role}) async {
     invites++;
+    inviteRoles.add(role);
     return PairingCode(relay: credentials.relay, room: credentials.room, invite: 'invite-$invites', key: credentials.key, name: hostName);
   }
 
   @override
   Future<void> deleteRoom(LinkCredentials credentials) async => deleted.add(credentials);
+
+  @override
+  Future<LinkCredentials> join(PairingCode code, {required String role, required String platform, required String name}) async {
+    final failure = failJoin;
+    if (failure != null) {
+      failJoin = null;
+      throw failure;
+    }
+    joins.add((role: role, platform: platform, name: name));
+    return LinkCredentials(
+      relay: code.relay,
+      room: code.room,
+      device: 'dev_cloud_${joins.length + 1}',
+      secret: 'cloud-secret-${joins.length + 1}',
+      key: code.key,
+      role: role,
+      peerName: code.name,
+    );
+  }
+
+  @override
+  Future<void> remove(String device, {required LinkCredentials from}) async => removed.add(device);
+
+  @override
+  Future<List<LinkPeer>> devices(LinkCredentials credentials) async {
+    final list = listed;
+    if (list == null) throw const LinkPairingException("Couldn't reach the relay.");
+    return list;
+  }
 }
 
 /// `claude`, answering with [output] (and recording what it was asked).
@@ -168,8 +210,15 @@ class FakeShell implements DesktopShell {
 
   final List<Surface> shown = [];
   final List<({Surface surface, Offset? position, Size size})> shows = [];
+
+  /// Each show's always-on-top and exact frame (the desktop pet).
+  final List<({bool onTop, PixelRect? frame})> forms = [];
   final StreamController<ShellAction> controller = StreamController.broadcast();
-  final List<bool> trayRoaming = [];
+  /// Where Mochi lives, each time the tray's ticks changed.
+  final List<DesktopStyle> trayStyles = [];
+
+  /// The tray icon each time it changed (null: the app's own) and what it said.
+  final List<({String? path, String tooltip})> trayIcons = [];
 
   /// "Restart to Update" in the tray, each time it was shown or hidden.
   final List<bool> trayUpdate = [];
@@ -193,14 +242,19 @@ class FakeShell implements DesktopShell {
   final List<Size> mainShows = [];
 
   @override
-  Future<void> show(Surface surface, {Offset? petPosition, Size petSize = SurfaceSizes.pet}) async {
+  Future<void> show(Surface surface, {Offset? petPosition, Size petSize = SurfaceSizes.pet, bool onTop = true, PixelRect? petFrame}) async {
     shown.add(surface);
     shows.add((surface: surface, position: petPosition, size: petSize));
+    forms.add((onTop: onTop, frame: petFrame));
+    if (petFrame != null) await petWindow?.setFrame(petFrame);
     if (surface == Surface.main) mainShows.add(mainSize);
   }
 
   @override
-  Future<void> setRoaming(bool roaming) async => trayRoaming.add(roaming);
+  Future<void> setStyle(DesktopStyle style) async => trayStyles.add(style);
+
+  @override
+  Future<void> setTrayIcon({String? path, required String tooltip}) async => trayIcons.add((path: path, tooltip: tooltip));
 
   @override
   Future<void> setUpdateReady(bool ready) async => trayUpdate.add(ready);
@@ -390,6 +444,12 @@ class FakeTaskbar implements TaskbarInfo {
     measures++;
     return measured;
   }
+
+  /// What [fingerprint] says (null: can't tell, so the stroll measures each time it checks).
+  Object? print;
+
+  @override
+  Object? fingerprint() => print;
 
   @override
   bool fullscreenBusy() => busy;
@@ -692,4 +752,29 @@ WireEvent hook(
     ..notificationType = notificationType
     ..summary = summary
     ..file = file;
+}
+
+/// The PC's displays, as the test sets them (none: the pet is placed through window_manager, as on the macOS build).
+class FakeDisplays implements Displays {
+  FakeDisplays([List<DisplayArea>? displays]) : displays = displays ?? [main1080];
+
+  List<DisplayArea> displays;
+
+  /// A 1920×1080 main display at 100% with a 48-pixel taskbar, and a 2560×1440 one at 150% to its right.
+  static const DisplayArea main1080 = DisplayArea(
+    key: r'\\.\DISPLAY1 1920x1080',
+    monitor: PixelRect(0, 0, 1920, 1080),
+    workArea: PixelRect(0, 0, 1920, 1032),
+    scale: 1,
+    primary: true,
+  );
+  static const DisplayArea side1440 = DisplayArea(
+    key: r'\\.\DISPLAY2 2560x1440',
+    monitor: PixelRect(1920, 0, 4480, 1440),
+    workArea: PixelRect(1920, 0, 4480, 1440),
+    scale: 1.5,
+  );
+
+  @override
+  List<DisplayArea> list() => List.of(displays);
 }

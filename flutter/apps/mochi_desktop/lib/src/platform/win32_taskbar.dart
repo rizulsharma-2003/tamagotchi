@@ -3,8 +3,10 @@
 //
 // - Where the taskbar is: SHAppBarMessage(ABM_GETTASKBARPOS) for its edge and rect, ABM_GETSTATE for auto-hide.
 // - What's on it: UI Automation on `Shell_TrayWnd` (every element's bounding rectangle: the widgets tile, Start,
-//   search, the app buttons, the tray), on a worker thread; for the estimate when that fails, the tray's
-//   `TrayNotifyWnd` child window and Explorer's `TaskbarAl` (alignment) and `TaskbarDa` (widgets) settings.
+//   search, the app buttons, the tray, fetched in one cross-process call with a cache request), on a worker thread;
+//   for the estimate when that fails, the tray's `TrayNotifyWnd` child window and Explorer's `TaskbarAl` (alignment)
+//   and `TaskbarDa` (widgets) settings. Whether it's worth measuring again: the top-level app windows (EnumWindows:
+//   the ones with a taskbar button, and their titles' lengths, never the titles) and the tray's rectangle.
 // - The main screen: MonitorFromPoint(0, 0, MONITOR_DEFAULTTOPRIMARY), GetMonitorInfo (its rect and work area) and
 //   GetDpiForMonitor (its display scale).
 // - Full-screen apps and presentations: SHQueryUserNotificationState.
@@ -138,6 +140,42 @@ class Win32TaskbarInfo implements TaskbarInfo {
     }
   }
 
+  /// The app windows with a taskbar button (visible, not owned or with WS_EX_APPWINDOW, not tool windows, not cloaked),
+  /// with their titles' lengths (a button with a label is as wide as its title), and the tray's rectangle.
+  @override
+  Object? fingerprint() {
+    _windows.clear();
+    try {
+      EnumWindows(_enumWindows, 0);
+      final tray = _tray == 0 ? null : _windowRect(_findWindow('TrayNotifyWnd', _tray));
+      return Object.hashAll([..._windows, tray]);
+    } on Object {
+      return null;
+    } finally {
+      _windows.clear();
+    }
+  }
+
+  static final List<int> _windows = [];
+  static final Pointer<NativeFunction<WNDENUMPROC>> _enumWindows = Pointer.fromFunction<WNDENUMPROC>(_visit, 0);
+
+  static int _visit(int hwnd, int _) {
+    if (IsWindowVisible(hwnd) == 0) return 1;
+    final style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+    if (style & WS_EX_TOOLWINDOW != 0) return 1;
+    if (GetWindow(hwnd, GW_OWNER) != 0 && style & WS_EX_APPWINDOW == 0) return 1;
+    final cloaked = calloc<Int32>();
+    try {
+      if (DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, cloaked, sizeOf<Int32>()) == S_OK && cloaked.value != 0) return 1;
+    } finally {
+      calloc.free(cloaked);
+    }
+    _windows
+      ..add(hwnd)
+      ..add(GetWindowTextLength(hwnd));
+    return 1;
+  }
+
   @override
   bool fullscreenBusy() {
     final state = calloc<Int32>();
@@ -186,9 +224,15 @@ class Win32TaskbarInfo implements TaskbarInfo {
     }
   }
 
+  /// The taskbar is light (Settings › Personalization › Colors: "Choose your default Windows mode" light).
+  static bool lightTheme() => _dword(r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize', 'SystemUsesLightTheme') == 1;
+
   /// A DWORD under HKCU\…\Explorer\Advanced (null if it isn't set: Windows 11's defaults, centred with widgets).
-  static int? _explorerSetting(String value) {
-    final key = r'Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'.toNativeUtf16();
+  static int? _explorerSetting(String value) => _dword(r'Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced', value);
+
+  /// A DWORD under HKCU\[path] (null if it isn't set).
+  static int? _dword(String path, String value) {
+    final key = path.toNativeUtf16();
     final name = value.toNativeUtf16();
     final data = calloc<Uint32>();
     final size = calloc<Uint32>()..value = sizeOf<Uint32>();
@@ -204,8 +248,10 @@ class Win32TaskbarInfo implements TaskbarInfo {
   }
 }
 
-/// Every UI Automation element under the taskbar window [tray], as screen rectangles (runs in a worker isolate: the
-/// walk is a few hundred cross-process calls into Explorer). COM objects are released here, not left to finalizers.
+/// Every UI Automation element under the taskbar window [tray], as screen rectangles (runs in a worker isolate). One
+/// cross-process call fetches every element with its rectangle (FindAllBuildCache with a cache request for the
+/// bounding rectangle, elements not kept live), instead of a call into Explorer for each. COM objects are released
+/// here, not left to finalizers.
 List<PixelRect>? _automationRects(int tray) {
   final initialized = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   final held = <Pointer<COMObject>>[];
@@ -231,7 +277,17 @@ List<PixelRect>? _automationRects(int tray) {
     if (FAILED(automation.createTrueCondition(condition.cast()))) return null;
     final found = out();
     final element = IUIAutomationElement(root)..detach();
-    if (FAILED(element.findAll(TreeScope_Descendants, condition.ref.lpVtbl.cast(), found.cast())) || found.ref.isNull) {
+    final request = out();
+    if (FAILED(automation.createCacheRequest(request.cast())) || request.ref.isNull) return null;
+    final cache = IUIAutomationCacheRequest(request)..detach();
+    if (FAILED(cache.addProperty(UIA_BoundingRectanglePropertyId))) return null;
+    // IUIAutomationCacheRequest::put_AutomationElementMode (vtable slot 11): AutomationElementMode_None, only the cache.
+    (request.ref.vtable + 11).cast<Pointer<NativeFunction<Int32 Function(Pointer, Int32)>>>().value.asFunction<int Function(Pointer, int)>()(
+      request.ref.lpVtbl,
+      0,
+    );
+    if (FAILED(element.findAllBuildCache(TreeScope_Descendants, condition.ref.lpVtbl.cast(), request.ref.lpVtbl.cast(), found.cast())) ||
+        found.ref.isNull) {
       return null;
     }
     final array = IUIAutomationElementArray(found)..detach();
@@ -242,8 +298,8 @@ List<PixelRect>? _automationRects(int tray) {
         final item = calloc<COMObject>();
         try {
           if (FAILED(array.getElement(i, item.cast())) || item.ref.isNull) continue;
-          // IUIAutomationElement::get_CurrentBoundingRectangle (vtable slot 43), into memory this function owns.
-          final hr = (item.ref.vtable + 43)
+          // IUIAutomationElement::get_CachedBoundingRectangle (vtable slot 75), into memory this function owns.
+          final hr = (item.ref.vtable + 75)
               .cast<Pointer<NativeFunction<Int32 Function(Pointer, Pointer<RECT>)>>>()
               .value
               .asFunction<int Function(Pointer, Pointer<RECT>)>()(item.ref.lpVtbl, rect);

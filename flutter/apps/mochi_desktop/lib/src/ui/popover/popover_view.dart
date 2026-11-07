@@ -675,9 +675,10 @@ class _Switches extends StatelessWidget {
         icons: (Icons.pets_rounded, Icons.pets_outlined),
         onChanged: (value) => settings.showPet = value,
       ),
+      // On the taskbar (roaming it or playing in its spot, as last chosen), or off it as the classic tray icon.
       _SwitchChip(
-        title: 'Roam',
-        label: 'Roam along the taskbar',
+        title: 'Taskbar',
+        label: 'Mochi on the taskbar',
         on: settings.roamTaskbar,
         icons: (Icons.directions_walk_rounded, Icons.directions_walk_outlined),
         onChanged: settings.showPet ? (value) => settings.roamTaskbar = value : null,

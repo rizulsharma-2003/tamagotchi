@@ -1,5 +1,5 @@
 // Settings › Your pet: General, Characters, Desktop Pet and Fun (the Mac's GeneralSettings, CharacterSettings,
-// DesktopSettings and FunSettings). What the Mac has and Windows doesn't yet is listed, tagged, at the end of each.
+// DesktopSettings and FunSettings; Desktop Pet also has the Mac's menu-bar style, General › Menu bar, for the taskbar). What the Mac has and Windows doesn't yet is listed, tagged, at the end of each.
 
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart';
@@ -454,34 +454,53 @@ class DesktopPetPane extends StatelessWidget {
 
   final SettingsHost host;
 
+  /// What each style does (the Mac's help under its menu-bar style picker).
+  static String styleHelp(DesktopStyle style, {required String pet, required String patch, required String shortcut}) => switch (style) {
+    DesktopStyle.roam =>
+      '$pet strolls in the taskbar’s empty stretches, naps there, and stops to face you when Claude needs you. It never '
+          'walks over a button, and clicks always go through to the taskbar except on $pet. While Claude works or waits '
+          'for you, $pet stays beside $patch.',
+    DesktopStyle.spot =>
+      '$pet stays in one spot on the taskbar and plays there, in full colour: it sits, looks around, potters and naps '
+          'without wandering off. Drag it along the taskbar to move its spot.',
+    DesktopStyle.icon =>
+      'The original icon, in the notification area: $pet blinks, a light pulses while Claude works and it hops when a turn '
+          'completes. $pet stays off the taskbar; the desktop pet (if it shows) stands wherever you leave it.',
+  };
+
   @override
   Widget build(BuildContext context) {
     final settings = host.desktop.settings;
     final pet = host.pet;
     final block = host.stroll?.block;
-    final roamNote = settings.roamTaskbar && block != null && block != RoamBlock.turnedOff ? block.note : null;
+    final style = settings.petStyle;
+    final roamNote = style.onTaskbar && block != null && block != RoamBlock.turnedOff ? block.note : null;
     final patch = host.patch;
     final name = host.companion;
     final never = settings.companionVisibility == CompanionVisibility.never;
+    final shortcut = settings.shortcut(MochiShortcut.pet)?.label;
     // Patch is around and should be on the taskbar, but there's no stretch roomy enough for both right now.
     final noRoom = patch != null &&
         patch.visible &&
         settings.companionOnTaskbar &&
-        settings.roamTaskbar &&
+        style.onTaskbar &&
         (host.stroll?.onTaskbar ?? false) &&
+        (!settings.companionOnlyMoments || (host.stroll?.interesting ?? true)) &&
         host.stroll?.home == null;
+    final hide = shortcut == null ? 'the tray icon’s menu' : '$shortcut or the tray icon’s menu';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SettingsGroup(
-          footer: settings.shortcut(MochiShortcut.pet) == null
+          footer: shortcut == null
               ? 'Show $pet again any time from the tray icon’s menu.'
-              : 'Show or hide $pet any time with ${settings.shortcut(MochiShortcut.pet)!.label}, the tray icon’s menu, or '
-                    'right-click › Hide the desktop pet.',
+              : 'Show or hide $pet any time with $shortcut, the tray icon’s menu, or right-click › Hide the desktop pet.',
           children: [
             ToggleRow(
               title: 'Show the desktop pet',
-              subtitle: '$pet stays on your desktop, above your windows, while Mochi’s window is closed.',
+              subtitle: style.onTaskbar
+                  ? '$pet lives on your taskbar, or stands on your desktop where you leave it, while Mochi’s window is closed.'
+                  : '$pet stands on your desktop where you leave it, while Mochi’s window is closed.',
               value: settings.showPet,
               onChanged: (value) => settings.showPet = value,
             ),
@@ -496,42 +515,105 @@ class DesktopPetPane extends StatelessWidget {
         SettingsGroup(
           title: 'Taskbar',
           children: [
-            ToggleRow(
-              title: 'Roam along the taskbar',
-              subtitle:
-                  '$pet strolls in the taskbar’s empty stretches, naps there, and stops to face you when Claude needs '
-                  'you. Drag $pet off the taskbar to leave it somewhere else.',
-              value: settings.roamTaskbar,
-              onChanged: settings.showPet ? (value) => settings.roamTaskbar = value : null,
+            ChoiceRow<DesktopStyle>(
+              label: 'Style',
+              selected: style,
+              onSelected: (value) => settings.petStyle = value,
+              choices: const [
+                (DesktopStyle.roam, 'Roams the taskbar', Icons.directions_walk_rounded),
+                (DesktopStyle.spot, 'Plays in its spot', Icons.place_outlined),
+                (DesktopStyle.icon, 'Classic tray icon', Icons.pets_outlined),
+              ],
             ),
+            TextRow(styleHelp(style, pet: pet, patch: name, shortcut: hide), secondary: true),
+            if (style == DesktopStyle.spot)
+              ChoiceRow<PetSize>(
+                label: 'Room to play',
+                selected: settings.spotRoom,
+                onSelected: (value) => settings.spotRoom = value,
+                choices: const [
+                  (PetSize.small, 'Small', Icons.crop_square_rounded),
+                  (PetSize.medium, 'Medium', Icons.crop_3_2_rounded),
+                  (PetSize.large, 'Large', Icons.crop_16_9_rounded),
+                ],
+              ),
+            if (style == DesktopStyle.spot && settings.spotX != null)
+              ActionsRow(
+                children: [OutlinedButton(onPressed: () => settings.spotX = null, child: const Text('Move Its Spot Back Beside the Tray'))],
+              ),
+            if (style == DesktopStyle.icon)
+              ChoiceRow<TrayAnimation>(
+                label: 'Icon animation',
+                selected: settings.trayAnimation,
+                onSelected: (value) => settings.trayAnimation = value,
+                choices: const [
+                  (TrayAnimation.off, 'Static', Icons.stop_circle_outlined),
+                  (TrayAnimation.subtle, 'Subtle', Icons.blur_on_rounded),
+                  (TrayAnimation.full, 'Expressive', Icons.auto_awesome_rounded),
+                ],
+              ),
             if (roamNote != null) NoteRow(text: roamNote),
-            ToggleRow(
-              title: '$name on the taskbar',
-              subtitle:
-                  'While $name is around, he keeps a little desk in an empty stretch beside $pet: he types while Claude '
-                  'works, waves when Claude needs you and celebrates with $pet when it’s done, and now and then they '
-                  'play or nap together.',
-              value: settings.companionOnTaskbar,
-              onChanged: settings.showPet && settings.roamTaskbar && !never ? (value) => settings.companionOnTaskbar = value : null,
-            ),
+            if (style.onTaskbar) ...[
+              ToggleRow(
+                title: '$name on the taskbar',
+                subtitle:
+                    'While $name is around, he keeps a little desk in an empty stretch beside $pet: he types while Claude '
+                    'works, waves when Claude needs you and celebrates with $pet when it’s done, and now and then they '
+                    'play or nap together.',
+                value: settings.companionOnTaskbar,
+                onChanged: settings.showPet && !never ? (value) => settings.companionOnTaskbar = value : null,
+              ),
+              ToggleRow(
+                title: 'Only for interesting moments',
+                subtitle:
+                    '$name comes out for arrivals, Claude waiting for you, errors and celebrations, then leaves again so '
+                    '$pet stays compact while you work.',
+                value: settings.companionOnlyMoments,
+                onChanged: settings.showPet && settings.companionOnTaskbar && !never ? (value) => settings.companionOnlyMoments = value : null,
+              ),
+            ],
             if (never)
               NoteRow(text: '$name is set never to show, in Characters.')
-            else if (!settings.roamTaskbar && settings.companionOnTaskbar)
-              NoteRow(text: '$name joins $pet on the taskbar while $pet roams it.')
             else if (noRoom)
               NoteRow(text: 'There’s no stretch of the taskbar roomy enough for both right now, so $name waits in $pet’s room.'),
             if (never) ActionsRow(children: [PaneLink(host: host, tab: SettingsTab.characters, label: 'Show $name')]),
           ],
         ),
         SettingsGroup(
-          title: 'Position',
-          footer: 'With roaming off, $pet stays wherever you drop it.',
+          title: 'On the desktop',
+          footer:
+              '$pet stands on your desktop when it lives in the tray, when you drag it off the taskbar, or when the taskbar '
+              'can’t hold it. It remembers where you left it on each display.',
           children: [
+            ChoiceRow<PetSize>(
+              label: 'Size',
+              selected: settings.petSize,
+              onSelected: (value) => settings.petSize = value,
+              choices: const [
+                (PetSize.small, 'Small', Icons.photo_size_select_small_rounded),
+                (PetSize.medium, 'Medium', Icons.photo_size_select_large_rounded),
+                (PetSize.large, 'Large', Icons.photo_size_select_actual_outlined),
+              ],
+            ),
+            ToggleRow(
+              title: 'Always on top',
+              subtitle: settings.petOnTop ? '$pet stays above your windows.' : '$pet stays on the desktop, behind the windows you use.',
+              value: settings.petOnTop,
+              onChanged: (value) => settings.petOnTop = value,
+            ),
+            ToggleRow(
+              title: 'Let clicks pass through $pet',
+              subtitle: settings.petClickThrough
+                  ? 'Clicks go to whatever is underneath, so $pet can’t be dragged or petted. Hide it with $hide.'
+                  : 'Drag $pet to move it, click to pet it, right-click for options.',
+              value: settings.petClickThrough,
+              onChanged: (value) => settings.petClickThrough = value,
+            ),
             ActionsRow(
               children: [
                 OutlinedButton(
-                  onPressed: settings.petPosition == null ? null : () => settings.petPosition = null,
-                  child: const Text('Move Back to the Bottom Left'),
+                  onPressed: settings.petPosition == null && settings.petPlaces.isEmpty ? null : settings.resetPetPosition,
+                  child: const Text('Reset Position'),
                 ),
               ],
             ),
@@ -542,7 +624,8 @@ class DesktopPetPane extends StatelessWidget {
           children: [
             TextRow(
               'Click $pet to pet it, double-click (or press Enter) to open Mochi, and right-click (or Shift+F10) for the '
-              'menu. On the taskbar, clicks go through to the taskbar everywhere but on $pet.',
+              'menu. On the taskbar a click opens Mochi’s popover, and clicks go through to the taskbar everywhere but on '
+              '$pet.',
               secondary: true,
             ),
             NoteRow(
@@ -551,13 +634,6 @@ class DesktopPetPane extends StatelessWidget {
                   ? 'Animation effects are off on this PC, so $pet moves more calmly and stays put on the taskbar.'
                   : '$pet moves more calmly when you turn animation effects off in Windows’ Accessibility settings.',
             ),
-          ],
-        ),
-        SettingsGroup(
-          title: 'From the Mac',
-          children: [
-            SoonRow(title: 'Size', detail: 'Small, medium or large. On Windows $pet takes the taskbar’s size, or a standard size on the desktop.'),
-            SoonRow(title: 'Let clicks pass through $pet', detail: 'Off the taskbar, $pet always catches clicks so you can pet and drag it.'),
           ],
         ),
       ],

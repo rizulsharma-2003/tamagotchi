@@ -13,9 +13,19 @@ import '../platform/credential_vault.dart';
 abstract interface class LinkApi {
   Future<LinkCredentials> createRoom({required String relay, required String platform, required String name});
 
-  Future<PairingCode> invite(LinkCredentials credentials, {required String hostName});
+  /// An invitation into the room, for one [role] if given (`pocket`, `cloud`).
+  Future<PairingCode> invite(LinkCredentials credentials, {required String hostName, String? role});
 
   Future<void> deleteRoom(LinkCredentials credentials);
+
+  /// Joins the room with [code] as a new device (Mochi Cloud joins this way: the host joins for it).
+  Future<LinkCredentials> join(PairingCode code, {required String role, required String platform, required String name});
+
+  /// Removes [device] from the room (a host may remove any device).
+  Future<void> remove(String device, {required LinkCredentials from});
+
+  /// The room's devices, over HTTPS.
+  Future<List<LinkPeer>> devices(LinkCredentials credentials);
 }
 
 /// The real relay (mochi_link's [LinkPairing]).
@@ -27,11 +37,41 @@ class RelayLinkApi implements LinkApi {
       LinkPairing.createRoom(relay: relay, platform: platform, name: name);
 
   @override
-  Future<PairingCode> invite(LinkCredentials credentials, {required String hostName}) =>
-      LinkPairing.invite(credentials, hostName: hostName);
+  Future<PairingCode> invite(LinkCredentials credentials, {required String hostName, String? role}) =>
+      LinkPairing.invite(credentials, hostName: hostName, role: role);
 
   @override
   Future<void> deleteRoom(LinkCredentials credentials) => LinkPairing.deleteRoom(credentials);
+
+  @override
+  Future<LinkCredentials> join(PairingCode code, {required String role, required String platform, required String name}) =>
+      LinkPairing.join(code, role: role, platform: platform, name: name);
+
+  @override
+  Future<void> remove(String device, {required LinkCredentials from}) => LinkPairing.remove(device, from: from);
+
+  @override
+  Future<List<LinkPeer>> devices(LinkCredentials credentials) => LinkPairing.devices(credentials);
+}
+
+/// Mochi Cloud's place in this PC's room (docs/SPRINT_2.md W5, the Mac's AgentController.copyCloudLinkSettings): the
+/// new cloud device's credentials, and the cloud devices it replaced (removed from the room).
+class CloudJoin {
+  const CloudJoin({required this.credentials, required this.replaced});
+
+  final LinkCredentials credentials;
+  final List<String> replaced;
+
+  /// What Mochi Cloud's environment needs (the Mac's `AgentCloud.linkEnvironmentBlock`): the relay, the room, its
+  /// device and secret, the room key, and the time zone its briefings go by. It holds a key to the link.
+  String environment({required String timeZone}) => [
+    'MOCHI_LINK_RELAY=${credentials.relay}',
+    'MOCHI_LINK_ROOM=${credentials.room}',
+    'MOCHI_LINK_DEVICE=${credentials.device}',
+    'MOCHI_LINK_SECRET=${credentials.secret}',
+    'MOCHI_LINK_KEY=${credentials.key}',
+    'MOCHI_TIMEZONE=$timeZone',
+  ].join('\n');
 }
 
 typedef LinkConnector = RelayLink Function(LinkCredentials credentials);
@@ -242,6 +282,59 @@ class LinkHost extends ChangeNotifier {
 
   /// Asks the relay for the room's device list (the pairing screen).
   void requestDevices() => _link?.requestDevices();
+
+  /// Mochi Cloud's devices in the room, as far as this PC knows.
+  List<LinkPeer> get clouds => devices.where((peer) => peer.role == 'cloud').toList();
+
+  /// Mochi Cloud joins this PC's room as its `cloud` device, as the Mac's Copy Cloud Settings does (an invitation for
+  /// the cloud role, joined as "Mochi Cloud"), and replaces the one it had: the old cloud devices are removed from the
+  /// room once the new one is in (first, if the room is full), so there's only ever one. Throws
+  /// [LinkPairingException] when there's no room with a phone in it yet, or the relay says no.
+  Future<CloudJoin> joinCloud() async {
+    final host = _credentials;
+    if (host == null || !paired) {
+      throw const LinkPairingException('Pair a phone with this PC first (Settings › Phones): Mochi Cloud joins the same link.');
+    }
+    List<LinkPeer> listed;
+    try {
+      listed = await _api.devices(host);
+    } on Object {
+      // Not over HTTPS: what the socket said last.
+      listed = devices;
+    }
+    final old = [for (final peer in listed) if (peer.role == 'cloud' && peer.device != host.device) peer.device];
+    final removed = <String>[];
+    Future<LinkCredentials> join() async {
+      final code = await _api.invite(host, hostName: hostName, role: 'cloud');
+      return _api.join(code, role: 'cloud', platform: 'cloud', name: 'Mochi Cloud');
+    }
+
+    LinkCredentials cloud;
+    try {
+      cloud = await join();
+    } on LinkPairingException catch (error) {
+      // Eight devices at most: the old Mochi Cloud makes room for the new one.
+      if (error.code != 'room_full' || old.isEmpty) rethrow;
+      for (final device in old) {
+        await _api.remove(device, from: host);
+        removed.add(device);
+      }
+      cloud = await join();
+    }
+    for (final device in old) {
+      if (removed.contains(device) || device == cloud.device) continue;
+      try {
+        await _api.remove(device, from: host);
+        removed.add(device);
+      } on LinkPairingException catch (error) {
+        // Already gone.
+        if (error.status != 404) rethrow;
+      }
+    }
+    _say('Mochi Cloud joined${removed.isEmpty ? '' : ', replacing ${removed.length}'}');
+    requestDevices();
+    return CloudJoin(credentials: cloud, replaced: removed);
+  }
 
   /// Reconnects now (after the PC wakes up, or the network comes back).
   void reconnectNow() => _link?.reconnectNow();

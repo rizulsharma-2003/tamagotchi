@@ -119,7 +119,7 @@ void main() {
         expect(find.bySemanticsLabel(RegExp('^Pet Mochi')), findsOneWidget);
         expect(find.bySemanticsLabel(RegExp('^Play with Mochi')), findsOneWidget);
         expect(find.bySemanticsLabel(RegExp('^Give Mochi a treat')), findsOneWidget);
-        for (final label in ['Pause reactions', 'Show the desktop pet', 'Roam along the taskbar', 'Patch on the taskbar']) {
+        for (final label in ['Pause reactions', 'Show the desktop pet', 'Mochi on the taskbar', 'Patch on the taskbar']) {
           expect(find.bySemanticsLabel(RegExp('^$label')), findsOneWidget, reason: label);
         }
         expect(find.textContaining('Friendship'), findsNothing, reason: 'no friendship on Windows yet: no hearts');
@@ -183,15 +183,15 @@ void main() {
     expect(find.bySemanticsLabel('paused'), findsOneWidget, reason: 'the scene says so, as on the Mac');
     await flip('Patch on the taskbar');
     expect((settings.companionOnTaskbar, t.document.json!['companionOnTaskbar']), (false, false));
-    await flip('Roam along the taskbar');
+    await flip('Mochi on the taskbar');
     expect((settings.roamTaskbar, t.document.json!['roamTaskbar']), (false, false));
     await flip('Patch on the taskbar');
-    expect(settings.companionOnTaskbar, isFalse, reason: 'off while Mochi doesn’t roam');
-    await flip('Roam along the taskbar');
+    expect(settings.companionOnTaskbar, isFalse, reason: 'off while Mochi is off the taskbar');
+    await flip('Mochi on the taskbar');
     await flip('Show the desktop pet');
     expect((settings.showPet, t.document.json!['showPet']), (false, false));
     expect(tester.state<DesktopAppState>(find.byType(DesktopApp)).surface, Surface.popover, reason: 'still open');
-    final toggled = tester.getSemantics(find.bySemanticsLabel(RegExp('^Roam along the taskbar'))).getSemanticsData().flagsCollection;
+    final toggled = tester.getSemantics(find.bySemanticsLabel(RegExp('^Mochi on the taskbar'))).getSemanticsData().flagsCollection;
     expect((toggled.hasToggledState, toggled.isToggled), (true, true));
     settings.companionVisibility = CompanionVisibility.never;
     await tester.pump();

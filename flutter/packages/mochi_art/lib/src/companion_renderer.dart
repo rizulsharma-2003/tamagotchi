@@ -67,6 +67,25 @@ abstract final class CompanionRenderer {
     }
   }
 
+  /// What of [time] shows in [draw] (the screen's blinking cursor, the mascot's legs and spinner), for the same
+  /// arguments: two times with the same key draw the same picture of the same pose, so a picture can be reused.
+  static String timeKey(
+    CompanionPose pose,
+    double time, {
+    double scale = 1,
+    double speed = 0,
+    Accessory? accessory,
+    bool reduced = false,
+    bool workstation = true,
+  }) {
+    final options = MascotOptions(accessory: accessory, laptopOnLeft: workstation, reduced: reduced, speed: speed / (pixel * scale));
+    final cursor = workstation && pose.laptop.visible && pose.laptop.screen == LaptopScreen.idle ? cursorShown(time) : true;
+    return '${cursor ? 1 : 0};${PixelMascot.timeKey(pose, time, options)}';
+  }
+
+  /// The idle screen's cursor blinks: shown for 0.6 s, hidden for 0.6 s.
+  static bool cursorShown(double time) => (time / 0.6).floor() % 2 == 0;
+
   /// How high the mascot's feet are above the floor at local x: on the desk at home, hopping
   /// down past its right end (the only way it leaves) and back up on the way home.
   static double support(double x) {
@@ -184,7 +203,7 @@ abstract final class CompanionRenderer {
         if (waiting) {
           question(content, Offset(rect.center.dx + 1, rect.center.dy + 0.5), 7, color);
         }
-        if ((time / 0.6).floor() % 2 == 0) {
+        if (cursorShown(time)) {
           content.fill(Shapes.rect(Rect.fromLTWH(rect.left + 5.6, rect.top + 2, 2, 2.8)), color.fade(0.8));
         }
       case LaptopScreen.off:

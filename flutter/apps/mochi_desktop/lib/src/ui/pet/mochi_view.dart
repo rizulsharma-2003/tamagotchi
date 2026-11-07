@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../../core/pet_cues.dart';
 import '../../core/session_store.dart';
 import 'companion_director.dart';
 import 'pet_director.dart';
+import 'pose_sprites.dart';
 import 'stroller.dart';
 import 'taskbar_stroll.dart' show DuoLayout;
 
@@ -18,7 +20,9 @@ import 'taskbar_stroll.dart' show DuoLayout;
 /// to [cues]. With animations off (Windows' Animation effects, macOS' Reduce Motion), Mochi keeps living, calmer.
 ///
 /// It's drawn only as often as what it's doing needs ([frameRate], as the Mac's menu-bar stage does): smooth while
-/// it walks or plays a moment, a calm 12 frames a second otherwise, 6 asleep.
+/// it walks or plays a moment, a calm 12 frames a second otherwise, 6 asleep, and not at all while nobody can see the
+/// screen (the display off, the PC locked or asleep: [PcRhythm.unseen]). Each pose is drawn once into a picture and
+/// reused after that ([PoseSprites]).
 ///
 /// On the taskbar with Patch ([duo]), the view is Patch's and Mochi's stage: Patch at his desk (with the laptop and
 /// the desk thing) and Mochi wherever its stroll has it, or both playing a moment together; and Claude's finishes get
@@ -45,6 +49,8 @@ class MochiView extends StatefulWidget {
     this.burst = false,
     this.rhythm,
     this.badge,
+    this.sprites = true,
+    this.time,
   });
 
   final SessionStore sessions;
@@ -98,17 +104,36 @@ class MochiView extends StatefulWidget {
   /// The dot beside Mochi while something waits for you (the Mac's menu-bar badge), by how much it matters.
   final AttentionLevel? badge;
 
+  /// Each pose is drawn once into a picture and reused ([PoseSprites]); false draws the art every frame.
+  final bool sprites;
+
+  /// The animations' clock (seconds; tests): a stopwatch from when the view first showed otherwise.
+  final double Function()? time;
+
+  /// Animations are played on a grid (seconds) when [sprites] are on, so their poses repeat exactly as a loop comes
+  /// round: the recordings' own frames (15 a second) when Mochi is drawn at most that often, and halfway between them
+  /// too when it walks or plays a moment (24–25 frames a second).
+  static double quantum(double fps) => fps > 15 ? 1 / 30 : 1 / 15;
+
   @override
-  State<MochiView> createState() => _MochiViewState();
+  State<MochiView> createState() => MochiViewState();
 
   /// Frames a second for Mochi doing this: 25 while it walks (the window moves as often), 24 for a moment (a pet, a
-  /// finished turn, a stretch), 12 for a calm loop (a blink still shows), 6 asleep; at most 10 with animations off.
-  static double frameRate({required PetMood mood, StrollSample? roam, bool oneShot = false, bool calm = false, double companion = 0}) {
-    final rate = math.max(_petRate(mood: mood, roam: roam, oneShot: oneShot), companion);
+  /// finished turn, a stretch), 12 for a calm loop (8 at the taskbar's size, [small]: its breathing moves less than a
+  /// pixel there, and no blink is ever skipped), 6 asleep; at most 10 with animations off.
+  static double frameRate({
+    required PetMood mood,
+    StrollSample? roam,
+    bool oneShot = false,
+    bool calm = false,
+    double companion = 0,
+    bool small = false,
+  }) {
+    final rate = math.max(_petRate(mood: mood, roam: roam, oneShot: oneShot, small: small), companion);
     return calm ? math.min(rate, 10) : rate;
   }
 
-  static double _petRate({required PetMood mood, StrollSample? roam, bool oneShot = false}) {
+  static double _petRate({required PetMood mood, StrollSample? roam, bool oneShot = false, bool small = false}) {
     final double rate;
     if (roam?.travelling ?? false) {
       rate = 25;
@@ -116,14 +141,15 @@ class MochiView extends StatefulWidget {
       rate = 24;
     } else {
       final loop = roam?.animation ?? mood.loop;
-      rate = loop == PetAnimation.sleep || loop == PetAnimation.curl ? 6 : 12;
+      rate = loop == PetAnimation.sleep || loop == PetAnimation.curl ? 6 : (small ? 8 : 12);
     }
     return rate;
   }
 }
 
-class _MochiViewState extends State<MochiView> {
+class MochiViewState extends State<MochiView> {
   final ValueNotifier<double> _clock = ValueNotifier(0);
+  final PoseSprites _sprites = PoseSprites();
   final Stopwatch _watch = Stopwatch()..start();
   final PetDirector _director = PetDirector();
   StreamSubscription<PetCue>? _cues;
@@ -132,7 +158,11 @@ class _MochiViewState extends State<MochiView> {
   double _fps = 0;
   bool _calm = false;
 
-  double get _time => _watch.elapsedMicroseconds / 1e6;
+  double get _time => widget.time?.call() ?? _watch.elapsedMicroseconds / 1e6;
+
+  /// Frames a second now (0: not drawing), and the pictures kept (tests).
+  double get fps => _frames == null ? 0 : _fps;
+  PoseSprites get sprites => _sprites;
 
   @override
   void initState() {
@@ -140,9 +170,9 @@ class _MochiViewState extends State<MochiView> {
     _frame();
     _cues = widget.cues.listen(_cue);
     widget.sessions.addListener(_follow);
-    widget.rhythm?.addListener(_follow);
+    widget.rhythm?.addListener(_rhythmChanged);
     // The mood also changes with time alone (a finish fades, a nap begins).
-    _moodTimer = Timer.periodic(const Duration(seconds: 5), (_) => _follow());
+    _watchMood();
     widget.companion?.addListener(_frame);
     _follow();
   }
@@ -155,8 +185,8 @@ class _MochiViewState extends State<MochiView> {
       widget.sessions.addListener(_follow);
     }
     if (old.rhythm != widget.rhythm) {
-      old.rhythm?.removeListener(_follow);
-      widget.rhythm?.addListener(_follow);
+      old.rhythm?.removeListener(_rhythmChanged);
+      widget.rhythm?.addListener(_rhythmChanged);
     }
     if (old.cues != widget.cues) {
       unawaited(_cues?.cancel());
@@ -177,8 +207,35 @@ class _MochiViewState extends State<MochiView> {
     return widget.burst && companion.burstAt(t) != null ? 24 : 0;
   }
 
-  /// One frame: Mochi's clock moves on (so it's repainted), and the frame rate follows what it's doing.
+  /// The PC rested or woke, or the screen went out of sight or came back.
+  void _rhythmChanged() {
+    _follow();
+    _watchMood();
+    if (mounted) _frame();
+  }
+
+  /// The mood is looked at again every 5 seconds, while the screen can be seen.
+  void _watchMood() {
+    if (widget.rhythm?.unseen ?? false) {
+      _moodTimer?.cancel();
+      _moodTimer = null;
+    } else {
+      _moodTimer ??= Timer.periodic(const Duration(seconds: 5), (_) => _follow());
+    }
+  }
+
+  /// Any of the view's timers is running (tests).
+  bool get ticking => _frames != null || _moodTimer != null;
+
+  /// One frame: Mochi's clock moves on (so it's repainted), and the frame rate follows what it's doing. Nothing while
+  /// nobody can see the screen: the last frame stays, and drawing carries on when it's back.
   void _frame() {
+    if (widget.rhythm?.unseen ?? false) {
+      _frames?.cancel();
+      _frames = null;
+      _fps = 0;
+      return;
+    }
     final time = _time;
     _clock.value = time;
     final fps = MochiView.frameRate(
@@ -187,6 +244,7 @@ class _MochiViewState extends State<MochiView> {
       oneShot: _director.playing(widget.library, time),
       calm: _calm,
       companion: _companionRate(),
+      small: widget.detail == RenderDetail.tiny,
     );
     if (fps == _fps) return;
     _fps = fps;
@@ -215,12 +273,13 @@ class _MochiViewState extends State<MochiView> {
   @override
   void dispose() {
     widget.sessions.removeListener(_follow);
-    widget.rhythm?.removeListener(_follow);
+    widget.rhythm?.removeListener(_rhythmChanged);
     widget.companion?.removeListener(_frame);
     unawaited(_cues?.cancel());
     _moodTimer?.cancel();
     _frames?.cancel();
     _clock.dispose();
+    _sprites.dispose();
     super.dispose();
   }
 
@@ -258,12 +317,27 @@ class _MochiViewState extends State<MochiView> {
             deskAccessory: widget.deskAccessory,
             burst: widget.burst,
             badge: widget.badge,
+            sprites: widget.sprites ? _sprites : null,
+            ratio: MediaQuery.devicePixelRatioOf(context),
+            window: MediaQuery.sizeOf(context),
+            quantum: () => MochiView.quantum(_fps),
           ),
           size: Size.infinite,
         ),
       ),
     );
   }
+}
+
+/// How far Mochi's art reaches from its feet, and Patch's (with his desk and laptop) from the desk's spot, in art
+/// units: measured over the recorded frames, both ways round, with everything they can wear or hold (with a margin;
+/// test/performance_test.dart checks every pose fits). A picture of a pose holds that much (of what can be seen).
+abstract final class ArtReach {
+  static const Rect pet = Rect.fromLTRB(-92, -125, 92, 30);
+  static const Rect patch = Rect.fromLTRB(-72, -150, 76, 20);
+
+  /// A pose of Mochi's that stays within [pet]: everything but the toys it bats far away (a ball, a butterfly).
+  static bool fits(PetPose pose) => pose.effects.every((effect) => effect.x.abs() <= 1.2);
 }
 
 class _MochiPainter extends CustomPainter {
@@ -286,9 +360,28 @@ class _MochiPainter extends CustomPainter {
     required this.deskAccessory,
     required this.burst,
     required this.badge,
+    this.sprites,
+    this.ratio = 1,
+    this.window,
+    this.quantum,
   }) : super(repaint: clock);
 
   final AttentionLevel? badge;
+
+  /// The pictures of poses already drawn (null: the art is drawn every frame).
+  final PoseSprites? sprites;
+
+  /// The display's scale (physical pixels per logical pixel), for the pictures.
+  final double ratio;
+
+  /// The window (logical pixels): the view sits at its bottom, so only that much above it can be seen. Null: the
+  /// view is all there is.
+  final Size? window;
+
+  /// The animations' grid right now (seconds), with [sprites].
+  final double Function()? quantum;
+
+
 
   /// The Mac's badge colours: grey for a note, orange when Claude needs you, red for an API error.
   static Color badgeColor(AttentionLevel level) => switch (level) {
@@ -325,17 +418,54 @@ class _MochiPainter extends CustomPainter {
   final Accessory? deskAccessory;
   final bool burst;
 
+  /// Everything the pictures depend on besides the pose: the display's scale, the art's scale, the coat, what's worn,
+  /// light or dark, the detail level, the room's style.
+  String _context(double scale, double k) =>
+      '$ratio|$scale|$k|${color.name}|${accessory?.name}|$dark|${detail.name}|${PetRenderer.stage.name}|${theme.name}|'
+      '${companionAccessory?.name}|${deskAccessory?.name}|$calm';
+
+  /// Mochi in [pose] with its feet at [at]: its picture if there are pictures (and it isn't fading or throwing
+  /// something far), else the art. [across]: the picture may be cut at the window's sides (Mochi stays put in it).
+  void _pet(Canvas canvas, Size size, PetPose pose, Offset at, double scale, {required bool across}) {
+    final sprites = this.sprites;
+    if (sprites == null || pose.opacity != 1 || !ArtReach.fits(pose)) {
+      PetRenderer.draw(pose, GContext(canvas), at, scale, PetPalette(color), accessory: accessory, dark: dark, detail: detail);
+      return;
+    }
+    sprites.draw(
+      canvas,
+      'pet ${jsonEncode(pose.toJson())}',
+      at: at,
+      bounds: _bounds(ArtReach.pet, scale, size, at, across: across),
+      ratio: ratio,
+      moving: !across,
+      paint: (c) => PetRenderer.draw(pose, GContext(c), Offset.zero, scale, PetPalette(color), accessory: accessory, dark: dark, detail: detail),
+    );
+  }
+
+
+  /// [reach] (art units) at [scale] around [at], cut to what can be seen of the window: above the view, as much as the
+  /// window shows; at the sides, the view's own edges when [across] (otherwise all of the reach, as the origin moves).
+  Rect _bounds(Rect reach, double scale, Size size, Offset at, {required bool across}) {
+    final above = math.max(0.0, (window?.height ?? size.height) - size.height);
+    var bounds = Rect.fromLTRB(reach.left * scale, reach.top * scale, reach.right * scale, reach.bottom * scale);
+    final seen = Rect.fromLTRB(across ? 0 : double.negativeInfinity, -above, across ? size.width : double.infinity, size.height).shift(-at);
+    bounds = bounds.intersect(seen);
+    return bounds.isEmpty ? Rect.zero : bounds;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
-    final g = GContext(canvas);
     final baseline = size.height - size.height * feet;
     final layout = duo?.call();
     final patch = companion;
-    if (layout != null && patch != null) return _paintDuo(g, size, baseline, layout, patch);
-    final roam = stroll?.call();
-    final pose = director.pose(library, clock.value, calm: calm, roam: roam);
     final scale = size.height * fill / 66;
-    PetRenderer.draw(pose, g, Offset(size.width / 2, baseline), scale, PetPalette(color), accessory: accessory, dark: dark, detail: detail);
+    sprites?.use(_context(scale, layout?.home.unit ?? 0));
+    if (layout != null && patch != null) return _paintDuo(canvas, size, baseline, layout, patch);
+    final roam = stroll?.call();
+    final pose = director.pose(library, clock.value, calm: calm, roam: roam, quantum: sprites == null ? null : quantum?.call());
+    _pet(canvas, size, pose, Offset(size.width / 2, baseline), scale, across: true);
+    final g = GContext(canvas);
     _paintBadge(canvas, Offset(size.width / 2, baseline), PetRenderer.bodyHeight * scale);
     final elapsed = burst ? patch?.burstAt(patch.time) : null;
     if (elapsed != null) {
@@ -352,18 +482,22 @@ class _MochiPainter extends CustomPainter {
   }
 
   /// Patch at his desk and Mochi beside him (or wherever it's pottering), or both in a moment together.
-  void _paintDuo(GContext g, Size size, double baseline, DuoLayout layout, CompanionDirector patch) {
+  void _paintDuo(Canvas canvas, Size size, double baseline, DuoLayout layout, CompanionDirector patch) {
+    final g = GContext(canvas);
     final home = layout.home;
     final k = home.unit;
-    final t = patch.time;
+    final sprites = this.sprites;
+    final quantum = sprites == null ? null : this.quantum?.call();
+    final t = PetDirector.quantize(patch.time, quantum);
     final scene = patch.scene(t);
     final art = 100 + (calm ? t * 0.5 : t);
     if (patch.visible) {
       final pose = scene?.companion ?? patch.pose(library, t, calm: calm);
-      CompanionRenderer.draw(
+      final desk = Offset(layout.local(home.deskX), baseline);
+      void draw(Canvas c, Offset at) => CompanionRenderer.draw(
         pose,
-        g,
-        Offset(layout.local(home.deskX), baseline),
+        GContext(c),
+        at,
         k,
         offsetX: pose.x * home.span,
         accessory: companionAccessory,
@@ -372,6 +506,20 @@ class _MochiPainter extends CustomPainter {
         reduced: calm,
         deskFront: (desk) => ThemeRenderer.deskFront(theme, desk, dark: dark, accessory: deskAccessory),
       );
+      // At his desk he's a picture too; stepping away from it (a moment together), he's drawn.
+      if (sprites == null || pose.x != 0) {
+        draw(canvas, desk);
+      } else {
+        final time = CompanionRenderer.timeKey(pose, art, scale: k, accessory: companionAccessory, reduced: calm);
+        sprites.draw(
+          canvas,
+          'patch $time ${jsonEncode(pose.toJson())}',
+          at: desk,
+          bounds: _bounds(ArtReach.patch, k, size, desk, across: true),
+          ratio: ratio,
+          paint: (c) => draw(c, Offset.zero),
+        );
+      }
     }
     final PetPose pet;
     final double x;
@@ -383,11 +531,11 @@ class _MochiPainter extends CustomPainter {
       pet.x = 0;
     } else {
       final roam = stroll?.call();
-      pet = director.pose(library, clock.value, calm: calm, roam: roam);
+      pet = director.pose(library, clock.value, calm: calm, roam: roam, quantum: quantum);
       x = roam?.x ?? home.petHome;
     }
-    PetRenderer.draw(pet, g, Offset(layout.local(x), baseline), k, PetPalette(color), accessory: accessory, dark: dark, detail: detail);
-    _paintBadge(g.canvas, Offset(layout.local(x), baseline), PetRenderer.bodyHeight * k);
+    _pet(canvas, size, pet, Offset(layout.local(x), baseline), k, across: false);
+    _paintBadge(canvas, Offset(layout.local(x), baseline), PetRenderer.bodyHeight * k);
     for (final prop in scene?.props ?? const <SceneProp>[]) {
       final point = Offset(layout.local(home.petHome + prop.x * home.span), baseline - prop.y * PetRenderer.bodyHeight * k);
       EffectRenderer.drawProp(prop, g, point, k, dark);
@@ -425,5 +573,8 @@ class _MochiPainter extends CustomPainter {
       old.companionAccessory != companionAccessory ||
       old.deskAccessory != deskAccessory ||
       old.burst != burst ||
-      old.badge != badge;
+      old.badge != badge ||
+      old.sprites != sprites ||
+      old.ratio != ratio ||
+      old.window != window;
 }

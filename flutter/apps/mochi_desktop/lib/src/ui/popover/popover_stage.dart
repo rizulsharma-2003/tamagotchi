@@ -160,6 +160,7 @@ class PopoverStageState extends State<PopoverStage> with SingleTickerProviderSta
   Timer? _pump;
 
   void _pumping(bool on) {
+    if (on != (_pump != null)) widget.meter?.log('1 ms pump: ${on ? 'on' : 'off'}');
     _pump?.cancel();
     _pump = on && Platform.isWindows ? Timer.periodic(const Duration(milliseconds: 1), (_) {}) : null;
   }

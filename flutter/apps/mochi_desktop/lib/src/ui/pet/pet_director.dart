@@ -176,32 +176,68 @@ class PetDirector {
 
   /// Mochi's pose at [time]: calmer (slower, smaller) when [calm]. On the taskbar, [roam] says what Mochi is doing
   /// there (walking, sitting, napping…) and which way it faces; a one-shot (a pet, a finished turn) still plays over it.
-  PetPose pose(PoseLibrary? library, double time, {bool calm = false, StrollSample? roam}) {
-    final pose = _pose(library, time, calm: calm, roam: roam);
+  ///
+  /// With a [quantum] (seconds), each animation is played at the nearest multiple of it: the poses then repeat
+  /// exactly as a loop comes round, so the taskbar pet can reuse its pictures of them (pose_sprites.dart).
+  ///
+  /// A loop drawn less often than it was recorded never skips a blink: a recorded frame with the eyes shut since the
+  /// last one drawn shows, rather than the nearest one.
+  PetPose pose(PoseLibrary? library, double time, {bool calm = false, StrollSample? roam, double? quantum}) {
+    final pose = _pose(library, time, calm: calm, roam: roam, quantum: quantum);
     return roam == null ? pose : _strolling(pose, roam);
   }
 
-  PetPose _pose(PoseLibrary? library, double time, {required bool calm, StrollSample? roam}) {
-    if (library == null) return roam == null ? PetPose() : _bob(PetPose(), roam);
+  /// The loop time the last frame was drawn at.
+  double? _lastLoop;
+
+  /// The eyes are shut (a blink, a happy squint): a moment a frame shouldn't skip.
+  static bool _shut(PetPose pose) => pose.eyes != PetEyes.open || pose.eyeOpenness < 0.5;
+
+  /// A loop's pose at [time] on the [quantum]'s grid, or a frame with the eyes shut since the last one drawn.
+  PetPose _loop(PoseTrack<PetPose> track, double time, {required bool calm, double? quantum}) {
+    final since = _lastLoop;
+    _lastLoop = time;
+    final at = quantize(time, quantum);
+    final pose = track.calmed(at, calm: calm);
+    if (quantum == null || since == null || since > time || _shut(pose) || at - since <= quantum) return pose;
+    // The grid's frames since the last drawn one (a few at most: the loops are drawn 6 to 12 times a second).
+    for (var g = quantize(since, quantum) + quantum, n = 0; g < at - quantum / 2 && n < 4; g += quantum, n++) {
+      final skipped = track.calmed(g, calm: calm);
+      if (_shut(skipped)) return skipped;
+    }
+    return pose;
+  }
+
+  /// [seconds] on the [quantum]'s grid.
+  static double quantize(double seconds, double? quantum) =>
+      quantum == null || !seconds.isFinite ? seconds : (seconds / quantum).roundToDouble() * quantum;
+
+  PetPose _pose(PoseLibrary? library, double time, {required bool calm, StrollSample? roam, double? quantum}) {
+    double q(double seconds) => quantize(seconds, quantum);
+    if (library == null) return roam == null ? PetPose() : _bob(PetPose(), roam, quantum);
     final current = shot;
     if (current != null) {
       final track = library.petTrack(current.animation, current.variant);
-      if (track != null && time - current.start < track.length) return track.calmed(time - current.start, calm: calm, oneShot: true);
+      if (track != null && time - current.start < track.length) return track.calmed(q(time - current.start), calm: calm, oneShot: true);
       shot = null;
     }
     if (roam != null) {
       final track = library.petTrack(roam.animation);
-      if (track != null) return track.calmed(roam.animationTime, calm: calm, oneShot: roam.oneShot);
+      if (track != null) {
+        // A hold on the taskbar (sitting, resting, watching) plays on the clock: blinks are kept.
+        if (!roam.oneShot && !roam.travelling) return _loop(track, roam.animationTime, calm: calm, quantum: quantum);
+        return track.calmed(q(roam.animationTime), calm: calm, oneShot: roam.oneShot);
+      }
       // No recorded walk: a gentle bob on the idle loop.
       final idle = library.petTrack(PetAnimation.idle);
-      return _bob(idle == null ? PetPose() : idle.calmed(time, calm: calm), roam);
+      return _bob(idle == null ? PetPose() : idle.calmed(q(time), calm: calm), roam, quantum);
     }
     final loop = library.petTrack(mood.loop);
-    return loop == null ? PetPose() : loop.calmed(time, calm: calm);
+    return loop == null ? PetPose() : _loop(loop, time, calm: calm, quantum: quantum);
   }
 
-  static PetPose _bob(PetPose pose, StrollSample roam) {
-    if (roam.travelling) pose.y += 0.05 * math.sin(math.pi * 2 * roam.animationTime).abs();
+  static PetPose _bob(PetPose pose, StrollSample roam, double? quantum) {
+    if (roam.travelling) pose.y += 0.05 * math.sin(math.pi * 2 * quantize(roam.animationTime, quantum)).abs();
     return pose;
   }
 

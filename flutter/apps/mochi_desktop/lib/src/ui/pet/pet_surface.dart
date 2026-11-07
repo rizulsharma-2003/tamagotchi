@@ -8,6 +8,7 @@ import 'package:mochi_art/mochi_art.dart' show RenderDetail;
 import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 
+import '../../core/desktop_settings.dart' show DesktopStyle;
 import '../../core/hotkeys.dart' show MochiShortcut;
 import '../../core/notifications.dart' show NotificationCategory;
 import '../../core/pet_cues.dart';
@@ -159,17 +160,22 @@ class _PetSurfaceState extends State<PetSurface> {
         const PopupMenuItem(value: ShellAction.pair, child: Text('Pair a Phone…')),
         const PopupMenuItem(value: ShellAction.settings, child: Text('Settings')),
         const PopupMenuDivider(),
-        CheckedPopupMenuItem(
-          value: ShellAction.toggleRoaming,
-          checked: widget.desktop.settings.roamTaskbar,
-          child: const Text('Roam along the taskbar'),
-        ),
+        // Where Mochi lives (the tray menu has the same), and the desktop pet's own (the Mac's "Always on Top").
+        for (final (action, style) in const [
+          (ShellAction.roamTaskbar, DesktopStyle.roam),
+          (ShellAction.playInSpot, DesktopStyle.spot),
+          (ShellAction.trayIcon, DesktopStyle.icon),
+        ])
+          CheckedPopupMenuItem(value: action, checked: widget.desktop.settings.petStyle == style, child: Text(style.title)),
+        const PopupMenuDivider(),
+        CheckedPopupMenuItem(value: 'top', checked: widget.desktop.settings.petOnTop, child: const Text('Always on top')),
         const PopupMenuItem(value: 'hide', child: Text('Hide the desktop pet')),
         const PopupMenuItem(value: ShellAction.quit, child: Text('Quit Mochi')),
       ],
     );
     if (action is ShellAction) widget.onAction(action);
     if (action == 'hide') widget.onHide();
+    if (action == 'top') widget.desktop.settings.petOnTop = !widget.desktop.settings.petOnTop;
   }
 
   /// What the bubble says while Claude needs you: Claude's question, or Patch asking for your OK when it's a
@@ -220,7 +226,7 @@ class _PetSurfaceState extends State<PetSurface> {
     // With Patch beside Mochi, the spoken label says what he's up to too.
     final patchText = duo != null && companion != null ? ' ${companion.describe(settings.companionName)}.' : '';
     // Mochi's box at the bottom of the window: taskbar-sized in the taskbar (the Mac's menu-bar Mochi), the bubble above.
-    final stage = onTaskbar ? widget.stroll.box.height : SurfaceSizes.petStage;
+    final stage = onTaskbar ? widget.stroll.box.height : settings.petSize.stage;
     final p = context.palette;
     return Material(
       type: MaterialType.transparency,

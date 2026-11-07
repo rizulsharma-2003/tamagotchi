@@ -152,6 +152,10 @@ class PcRhythm extends ChangeNotifier {
   /// You're away from the PC; null when Mochi can't tell.
   bool? get away => _activity?.away;
 
+  /// Nobody can see the screen: the display is off, the PC is locked, asleep or switched to another user, or the
+  /// screen saver is on. Mochi stops drawing and watching the pointer until it's back.
+  bool get unseen => _activity?.displaysAsleep ?? false;
+
   void start() {
     if (!sampler.supported || _timer != null) return;
     _changes = sampler.changes.listen((_) => sample());
@@ -172,7 +176,8 @@ class PcRhythm extends ChangeNotifier {
         before == null ||
         before.isResting(restAfter) != activity.isResting(restAfter) ||
         before.userActive != activity.userActive ||
-        before.away != activity.away;
+        before.away != activity.away ||
+        before.displaysAsleep != activity.displaysAsleep;
     if (changed) notifyListeners();
   }
 

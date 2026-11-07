@@ -9,12 +9,18 @@ import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_wire/mochi_wire.dart' show HookStatus;
 
+import '../core/desktop_settings.dart' show DesktopStyle;
 import '../core/hotkeys.dart';
 import '../core/pet_cues.dart';
 import '../core/toasts.dart';
 import '../desktop.dart';
+import '../platform/displays.dart';
+import '../platform/process_cpu.dart';
 import '../platform/taskbar.dart';
+import '../platform/win32_taskbar.dart' show Win32TaskbarInfo;
+import 'perf_meter.dart';
 import 'pet/companion_director.dart';
+import 'pet/pet_director.dart' show PetMood;
 import '../update/updater.dart';
 import 'pet/pet_surface.dart';
 import 'pet/taskbar_stroll.dart';
@@ -26,6 +32,7 @@ import 'widgets/resize_edges.dart';
 import 'screens/pairing_screen.dart';
 import 'screens/settings_screen.dart';
 import 'shell.dart';
+import 'tray_glyph.dart';
 import 'widgets/title_bar.dart';
 
 export 'screens/settings_screen.dart' show SettingsNavigation, SettingsTab;
@@ -44,6 +51,7 @@ class DesktopApp extends StatefulWidget {
     this.initialPage = MainPage.home,
     this.initialPane,
     this.taskbar,
+    this.displays,
     this.strollClock,
     this.strollRandom,
   });
@@ -53,6 +61,9 @@ class DesktopApp extends StatefulWidget {
 
   /// Where the taskbar is (Win32 on Windows, none elsewhere, a fake in tests).
   final TaskbarInfo? taskbar;
+
+  /// The displays, for the desktop pet's place on each (Win32 on Windows, none elsewhere, a fake in tests).
+  final Displays? displays;
 
   /// The stroll's clock (seconds) and dice, for tests.
   final double Function()? strollClock;
@@ -105,18 +116,84 @@ class DesktopAppState extends State<DesktopApp> {
     motion: desktop.motion,
     cues: desktop.cues,
     companion: _companion,
+    rhythm: desktop.rhythm,
+    displays: widget.displays ?? systemDisplays(),
     idle: () => desktop.sessions.now.difference(_lastActivity),
     clock: _clock,
     random: widget.strollRandom,
     log: _strollLog(),
   );
-  late bool _trayRoaming = desktop.settings.roamTaskbar;
+  late DesktopStyle _trayStyle = desktop.settings.petStyle;
+
+  /// The classic tray icon (while Mochi lives there).
+  late final TrayGlyphController _tray = TrayGlyphController(
+    shell: widget.shell,
+    settings: desktop.settings,
+    folder: desktop.paths.join(desktop.paths.home, 'tray'),
+    mood: () => PetMood.of(desktop.sessions, now: desktop.sessions.now, lastActivity: _lastActivity, rhythm: desktop.rhythm),
+    cues: desktop.cues,
+    motion: desktop.motion,
+    rhythm: desktop.rhythm,
+    badge: () => desktop.reactions.badge?.level,
+    offline: () => desktop.bridgeProblem.value != null,
+    sessionOpen: () => desktop.sessions.live.isNotEmpty,
+    lightTaskbar: Platform.isWindows ? Win32TaskbarInfo.lightTheme : null,
+  );
+
+  /// The classic tray icon's controller (tests).
+  TrayGlyphController get tray => _tray;
 
   /// Development: the popover's frame times, with the stroll's debug log on.
   late final FrameMeter? _meter = switch (_stroll.log) {
     final log? => FrameMeter(log),
     null => null,
   };
+
+  /// Development: with a `perf-debug` file in Mochi's folder, what each state costs goes to `perf.log` there.
+  PerfMeter? _perf;
+
+  /// What Mochi is doing, for the perf meter.
+  String perfState() {
+    final state = _perfState();
+    return desktop.rhythm.unseen ? 'screen off: $state' : state;
+  }
+
+  String _perfState() {
+    switch (_surface) {
+      case Surface.hidden:
+        return 'hidden';
+      case Surface.main:
+        return 'main window';
+      case Surface.popover:
+        return _popoverClosing ? 'popover closing' : 'popover';
+      case Surface.pet:
+        final mood = _stroll.mood == PetMood.napping ? 'napping' : 'calm';
+        final patch = _stroll.home != null ? ' with Patch' : '';
+        return switch (_stroll.placement) {
+          PetPlacement.taskbar => '${_stroll.moving ? 'roaming' : mood}$patch',
+          PetPlacement.standing => 'standing, $mood',
+          PetPlacement.hidden => 'out of the way (full screen)',
+          PetPlacement.away => 'placing',
+        };
+    }
+  }
+
+  void _startPerf() {
+    final folder = desktop.paths.home;
+    if (!File('$folder${Platform.pathSeparator}perf-debug').existsSync()) return;
+    final file = File('$folder${Platform.pathSeparator}perf.log');
+    _perf = PerfMeter(
+      state: perfState,
+      cpu: processCpuMicroseconds,
+      log: (line) {
+        try {
+          file.writeAsStringSync('${DateTime.now().toIso8601String()} $line\n', mode: FileMode.append);
+        } on Object {
+          // Diagnostics only.
+        }
+      },
+    );
+  }
 
   MochiDesktop get desktop => widget.desktop;
   Surface get surface => _surface;
@@ -163,6 +240,7 @@ class DesktopAppState extends State<DesktopApp> {
       };
     }
     unawaited(_loadLibrary());
+    _startPerf();
     _subscriptions.add(widget.shell.actions.listen(handle));
     _subscriptions.add(desktop.cues.listen(_noteActivity));
     _subscriptions.add(desktop.opens.listen(openFromNotification));
@@ -170,9 +248,11 @@ class DesktopAppState extends State<DesktopApp> {
     // With Mochi's window or popover open you're looking already: no badge or Windows notification (the Mac's popover).
     desktop.reactions.lookingAtMochi = () => _surface == Surface.main || _surface == Surface.popover;
     desktop.sessions.addListener(_sessionsChanged);
+    desktop.sessions.addListener(_tray.refresh);
+    desktop.reactions.addListener(_tray.refresh);
     desktop.settings.addListener(_settingsChanged);
     desktop.updater.addListener(_updatesChanged);
-    unawaited(widget.shell.setRoaming(_trayRoaming));
+    unawaited(widget.shell.setStyle(_trayStyle));
     _updatesChanged();
     if (_page == MainPage.settings) widget.shell.mainSize = settingsSize();
     unawaited(_stroll.show(_surface));
@@ -222,11 +302,11 @@ class DesktopAppState extends State<DesktopApp> {
     await _quit();
   }
 
-  /// "Mochi on the desktop" switched while the main window is closed; "Roam along the taskbar" ticks in the tray.
+  /// "Mochi on the desktop" switched while the main window is closed; where Mochi lives ticks in the tray.
   void _settingsChanged() {
-    if (desktop.settings.roamTaskbar != _trayRoaming) {
-      _trayRoaming = desktop.settings.roamTaskbar;
-      unawaited(widget.shell.setRoaming(_trayRoaming));
+    if (desktop.settings.petStyle != _trayStyle) {
+      _trayStyle = desktop.settings.petStyle;
+      unawaited(widget.shell.setStyle(_trayStyle));
     }
     // The popover's own switches take effect when it closes.
     if (_surface == Surface.main || _surface == Surface.popover) return;
@@ -244,12 +324,17 @@ class DesktopAppState extends State<DesktopApp> {
         open(MainPage.pairing);
       case ShellAction.settings:
         open(MainPage.settings);
-      case ShellAction.toggleRoaming:
-        desktop.settings.roamTaskbar = !desktop.settings.roamTaskbar;
-      case ShellAction.backToTaskbar:
+      // On the taskbar (roaming it, or playing in its spot) is where you'll see Mochi: the pet shows too.
+      case ShellAction.roamTaskbar:
         desktop.settings
-          ..roamTaskbar = true
+          ..petStyle = DesktopStyle.roam
           ..showPet = true;
+      case ShellAction.playInSpot:
+        desktop.settings
+          ..petStyle = DesktopStyle.spot
+          ..showPet = true;
+      case ShellAction.trayIcon:
+        desktop.settings.petStyle = DesktopStyle.icon;
       case ShellAction.closeWindow:
         if (_surface == Surface.main) {
           closeMain();
@@ -429,6 +514,7 @@ class DesktopAppState extends State<DesktopApp> {
       _focusSession = null;
     }
     setState(() => _surface = surface);
+    if (surface == Surface.pet && !_warm && Platform.isWindows) _warmUpTimer ??= Timer.periodic(const Duration(seconds: 5), (_) => _warmUp());
     final shown = _stroll.show(surface);
     if (surface == Surface.popover) _popoverReady = shown;
     unawaited(shown);
@@ -456,8 +542,10 @@ class DesktopAppState extends State<DesktopApp> {
   bool _warm = false;
 
   void _warmUp() {
-    if (_warm) {
+    // Done, or there's no pet to warm up for (it starts again when the pet shows).
+    if (_warm || _surface == Surface.hidden) {
       _warmUpTimer?.cancel();
+      _warmUpTimer = null;
       return;
     }
     // While Mochi stands on the taskbar (its walk would stutter once).
@@ -503,6 +591,9 @@ class DesktopAppState extends State<DesktopApp> {
       unawaited(subscription.cancel());
     }
     desktop.sessions.removeListener(_sessionsChanged);
+    desktop.sessions.removeListener(_tray.refresh);
+    desktop.reactions.removeListener(_tray.refresh);
+    _tray.dispose();
     desktop.settings.removeListener(_settingsChanged);
     _warmUpTimer?.cancel();
     desktop.updater.removeListener(_updatesChanged);
@@ -510,6 +601,7 @@ class DesktopAppState extends State<DesktopApp> {
     _stroll.dispose();
     _companion.dispose();
     _meter?.dispose();
+    _perf?.dispose();
     super.dispose();
   }
 
