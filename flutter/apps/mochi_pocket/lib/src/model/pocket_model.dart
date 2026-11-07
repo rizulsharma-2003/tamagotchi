@@ -777,16 +777,17 @@ class PocketModel extends ChangeNotifier {
     link.set(LinkInteraction(id: id, kind: kind, at: _now).toValue(), LinkKey.phoneInteraction);
   }
 
-  /// Sends a typed request to the Mac: for Mochi, or (with [project] and [session]) for that Claude session. The id,
-  /// or null when there's nothing to send. While the Mac is away it waits on the relay for 10 minutes.
-  String? send(String text, {String? project, String? session}) {
+  /// Sends a request to the Mac, typed or (with [typed] false) spoken: for Mochi, or (with [project] and [session]) for
+  /// that Claude session. The id, or null when there's nothing to send. While the Mac is away it waits on the relay for
+  /// 10 minutes.
+  String? send(String text, {String? project, String? session, bool typed = true}) {
     final words = text.trim();
     final link = _link;
     if (words.isEmpty || link == null) return null;
     final id = RelayLink.newId();
     _exchanges.add(Exchange(id: id, text: words, project: project, sentAt: _clock()));
     if (_exchanges.length > 6) _exchanges.removeRange(0, _exchanges.length - 6);
-    link.set(LinkCommand(id: id, text: words, at: _now, typed: true, project: project, session: session).toValue(), LinkKey.command);
+    link.set(LinkCommand(id: id, text: words, at: _now, typed: typed, project: project, session: session).toValue(), LinkKey.command);
     _cue(PetCue.sending);
     notifyListeners();
     return id;

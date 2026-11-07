@@ -1,25 +1,37 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/semantics.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_link/mochi_link.dart';
 
 import '../model/pocket_model.dart';
+import '../talk/talk_model.dart';
 import '../theme.dart';
 import 'pose_library.dart';
 import 'scene_director.dart';
 
 /// Mochi's room, the same scene as the Mac's panel and the iPhone's (iOS/MochiPocket/RoomView.swift): the look the Mac
-/// shares, Patch at the desk doing what Claude does, and Mochi. Tap Mochi to pet it.
+/// shares, Patch at the desk doing what Claude does, and Mochi. Tap Mochi to pet it; press and hold Mochi to talk: it
+/// turns its right ear and shoulder towards you and listens, with sound arriving at that ear. Let go to send; slide
+/// your finger away first to cancel. While Mochi is busy with what you said, a tap stops it.
 class RoomView extends StatefulWidget {
-  const RoomView({super.key, required this.model, required this.library, required this.onPet});
+  const RoomView({super.key, required this.model, required this.library, required this.onPet, this.talk});
 
   final PocketModel model;
 
   /// The recorded animations (null while they load: everyone stands still).
   final PoseLibrary? library;
   final VoidCallback onPet;
+
+  /// Hold to talk (none: Mochi can only be petted).
+  final TalkModel? talk;
+
+  /// How far your finger may slide from where it pressed before letting go cancels.
+  static const double cancelDistance = 90;
 
   @override
   State<RoomView> createState() => _RoomViewState();
@@ -86,10 +98,47 @@ class _RoomViewState extends State<RoomView> with SingleTickerProviderStateMixin
     super.dispose();
   }
 
-  /// Everyone's poses at [time] on the room's clock (calmer with animations off).
+  /// Everyone's poses at [time] on the room's clock (calmer with animations off). Talking turns Mochi to listen where it
+  /// stands (the iPhone's `ListeningPose`); afterwards the room's cues (a nod, a look around, a happy bounce) play.
   SceneFrame _frame(double time) {
     final poses = _director.poses(widget.library, time, calm: _config.reducedMotion);
-    return SceneFrame(pet: poses.pet, companion: poses.companion);
+    var pet = poses.pet;
+    final talk = widget.talk;
+    if (talk != null && talk.isHolding) {
+      // Built on Mochi awake (the idle loop, as the iPhone's `ListeningPose` evaluates it), even if it was napping.
+      final idle = widget.library?.petTrack(PetAnimation.idle)?.at(time) ?? PetPose();
+      pet = ListeningPose.pose(idle, elapsed: talk.elapsed(), listening: talk.phase == TalkPhase.listening, time: time);
+    }
+    return SceneFrame(pet: pet, companion: poses.companion);
+  }
+
+  void _tapped() {
+    final talk = widget.talk;
+    if (talk != null && talk.isBusy) {
+      talk.cancel();
+    } else {
+      widget.onPet();
+    }
+  }
+
+  /// Tap and press-and-hold on Mochi; the hold starts after 0.35 s, as on the iPhone.
+  Map<Type, GestureRecognizerFactory> _gestures() {
+    final talk = widget.talk;
+    return {
+      TapGestureRecognizer: GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+        TapGestureRecognizer.new,
+        (recognizer) => recognizer.onTap = _tapped,
+      ),
+      if (talk != null)
+        LongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+          () => LongPressGestureRecognizer(duration: const Duration(milliseconds: 350)),
+          (recognizer) => recognizer
+            ..onLongPressStart = ((_) => unawaited(talk.earHeld()))
+            ..onLongPressMoveUpdate = ((details) => talk.slid(away: details.offsetFromOrigin.distance > RoomView.cancelDistance))
+            ..onLongPressEnd = ((_) => unawaited(talk.earReleased()))
+            ..onLongPressCancel = talk.fingerLost,
+        ),
+    };
   }
 
   @override
@@ -107,22 +156,33 @@ class _RoomViewState extends State<RoomView> with SingleTickerProviderStateMixin
             Positioned.fill(
               child: RepaintBoundary(
                 child: CustomPaint(
-                  painter: LiveRoomPainter(
-                    config: _config,
-                    frame: _frame,
-                    clock: _clock,
-                    calm: calm,
-                    dark: context.palette.isDark,
-                  ),
+                  painter: LiveRoomPainter(config: _config, frame: _frame, clock: _clock, calm: calm, dark: context.palette.isDark),
                 ),
               ),
             ),
+            if (widget.talk case final talk?)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: _SoundWaves(talk: talk, clock: _clock, tint: context.palette.tint),
+                    ),
+                  ),
+                ),
+              ),
             Positioned.fromRect(
               rect: pet,
               child: Semantics(
                 button: true,
-                label: '${widget.model.petName}. Tap to pet.',
-                child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onPet),
+                label: widget.talk == null
+                    ? '${widget.model.petName}. Tap to pet.'
+                    : '${widget.model.petName}. Tap to pet, press and hold to talk.',
+                onTap: _tapped,
+                customSemanticsActions: {
+                  if (widget.talk case final talk?)
+                    CustomSemanticsAction(label: 'Talk to ${widget.model.petName}'): () => unawaited(talk.earHeld(byTap: true)),
+                },
+                child: RawGestureDetector(behavior: HitTestBehavior.opaque, gestures: _gestures(), excludeFromSemantics: true),
               ),
             ),
           ],
@@ -130,4 +190,23 @@ class _RoomViewState extends State<RoomView> with SingleTickerProviderStateMixin
       );
     },
   );
+}
+
+/// Sound arriving at Mochi's listening ear while you hold it (the iPhone's `drawSoundWaves`), fading in as Mochi turns.
+class _SoundWaves extends CustomPainter {
+  _SoundWaves({required this.talk, required this.clock, required this.tint}) : super(repaint: clock);
+
+  final TalkModel talk;
+  final ValueListenable<double> clock;
+  final Color tint;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!talk.isHolding) return;
+    final appear = talk.phase == TalkPhase.listening ? 1.0 : (talk.elapsed() / ListeningPose.turnDuration).clamp(0.0, 1.0);
+    ListeningPose.drawSoundWaves(GContext(canvas), SceneLayout.phone(size), clock.value, appear, tint: tint);
+  }
+
+  @override
+  bool shouldRepaint(_SoundWaves old) => old.talk != talk || old.tint != tint;
 }

@@ -13,6 +13,8 @@ import 'screens/pairing_screen.dart';
 import 'services/alert_notifier.dart';
 import 'services/link_opener.dart';
 import 'services/platform_bridge.dart';
+import 'talk/speech_listener.dart';
+import 'talk/talk_model.dart';
 import 'theme.dart';
 import 'voice/updates_reader.dart';
 import 'widgets/clay.dart';
@@ -31,6 +33,8 @@ class MochiApp extends StatefulWidget {
     this.library,
     this.scan,
     this.live,
+    this.speech,
+    this.talkTo,
   });
 
   final PocketModel model;
@@ -53,13 +57,20 @@ class MochiApp extends StatefulWidget {
   /// Mochi on the lock screen while Claude works (Settings' sample and switch).
   final LiveUpdates? live;
 
+  /// Hold to talk's speech recognition (none: no talking, only typing).
+  final SpeechListener? speech;
+
+  /// Where hold to talk sends what you say: [model]'s computer, unless a development build's test room is given.
+  final PocketModel? talkTo;
+
   @override
   State<MochiApp> createState() => _MochiAppState();
 }
 
 class _MochiAppState extends State<MochiApp> {
   final GlobalKey<NavigatorState> _navigator = GlobalKey();
-  late final AppLifecycleListener _lifecycle = AppLifecycleListener(onResume: widget.model.resume);
+  late final AppLifecycleListener _lifecycle = AppLifecycleListener(onResume: widget.model.resume, onHide: () => _talk?.paused());
+  late final TalkModel? _talk = widget.speech == null ? null : TalkModel(model: widget.talkTo ?? widget.model, listener: widget.speech!);
   StreamSubscription<String>? _links;
   StreamSubscription<String>? _liveActionSubscription;
 
@@ -143,6 +154,7 @@ class _MochiAppState extends State<MochiApp> {
     unawaited(_links?.cancel());
     unawaited(_liveActionSubscription?.cancel());
     unawaited(_liveActions.close());
+    _talk?.dispose();
     super.dispose();
   }
 
@@ -183,6 +195,7 @@ class _MochiAppState extends State<MochiApp> {
             reader: widget.reader,
             live: widget.live,
             liveActions: _liveActions.stream,
+            talk: _talk,
           ),
         },
       ),

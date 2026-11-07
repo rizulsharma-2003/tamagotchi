@@ -187,10 +187,14 @@ object LiveNotification {
         return null
     }
 
-    /** Mochi alone, for the large icon: the scene's left square (Mochi stands at a quarter of its width). */
+    /**
+     * Mochi alone, for the large icon (shown small beside the text): the square around Mochi at the scene's lower left
+     * (the iPhone's scenes are 140 × 72 pt with Mochi between x 10 and 55), so Mochi fills it rather than the desk.
+     */
     private fun mochi(scene: Bitmap): Bitmap {
-        val side = minOf(scene.width, scene.height)
-        return Bitmap.createBitmap(scene, 0, 0, side, side)
+        val side = minOf((scene.height * 0.68f).toInt(), scene.width)
+        val left = minOf((scene.width * 0.05f).toInt(), scene.width - side)
+        return Bitmap.createBitmap(scene, left, scene.height - side, side, side)
     }
 
     private fun openIntent(context: Context, action: String): PendingIntent {

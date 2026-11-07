@@ -10,6 +10,7 @@ import '../scene/pose_library.dart';
 import '../scene/room_view.dart';
 import '../services/alert_notifier.dart';
 import '../services/link_opener.dart';
+import '../talk/talk_model.dart';
 import '../theme.dart';
 import '../voice/updates_reader.dart';
 import '../widgets/agent_card.dart';
@@ -33,6 +34,7 @@ class HomeScreen extends StatefulWidget {
     required this.reader,
     this.live,
     this.liveActions,
+    this.talk,
   });
 
   final PocketModel model;
@@ -49,6 +51,9 @@ class HomeScreen extends StatefulWidget {
 
   /// The ongoing notification's buttons: Open the Session scrolls to Claude's sessions.
   final Stream<String>? liveActions;
+
+  /// Hold to talk (none: Mochi can only be petted and typed to).
+  final TalkModel? talk;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -223,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: SafeArea(
           bottom: false,
           child: ListenableBuilder(
-            listenable: Listenable.merge([model, widget.reader]),
+            listenable: Listenable.merge([model, widget.reader, ?widget.talk]),
             builder: (context, _) => ListView(
               controller: _scroll,
               // Clear of the gesture bar or navigation buttons at the bottom (edge to edge).
@@ -346,52 +351,101 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // MARK: Room
 
-  Widget _room(MochiPalette p) => Column(
-    children: [
-      Stack(
-        children: [
-          Container(
-            height: 290,
-            decoration: claySurface(p),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(Radii.card),
-              child: RoomView(model: model, library: widget.library, onPet: () => model.interact('pet')),
-            ),
-          ),
-          Positioned(
-            left: 22,
-            right: 22,
-            top: Space.m,
-            child: IgnorePointer(
-              child: AnimatedSwitcher(
-                duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 250),
-                transitionBuilder: (child, animation) => FadeTransition(
-                  opacity: animation,
-                  child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(animation), child: child),
-                ),
-                child: _bubble == null
-                    ? const SizedBox.shrink()
-                    // A live region: TalkBack reads what Mochi says (the Mac's reply) as it appears.
-                    : Semantics(
-                        key: ValueKey(_bubble),
-                        liveRegion: true,
-                        label: '${model.petName} says: $_bubble',
-                        excludeSemantics: true,
-                        child: SpeechBubble(text: _bubble!),
-                      ),
+  Widget _room(MochiPalette p) {
+    final talk = widget.talk;
+    final holding = talk?.isHolding ?? false;
+    // While you talk, Mochi's bubble is what it hears and what it sent; otherwise the Mac's last answer.
+    final bubble = talk?.bubble ?? _bubble;
+    return Column(
+      children: [
+        Stack(
+          children: [
+            Container(
+              height: 290,
+              decoration: claySurface(p),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(Radii.card),
+                child: RoomView(model: model, library: widget.library, onPet: () => model.interact('pet'), talk: talk),
               ),
             ),
-          ),
+            Positioned(
+              left: 22,
+              right: 22,
+              top: Space.m,
+              child: IgnorePointer(
+                child: AnimatedSwitcher(
+                  duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 250),
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(animation), child: child),
+                  ),
+                  child: bubble == null
+                      ? const SizedBox.shrink()
+                      // A live region: TalkBack reads what Mochi says (the Mac's reply) as it appears. Not while it
+                      // listens: TalkBack reading the words aloud would be heard by the microphone.
+                      : Semantics(
+                          key: ValueKey(bubble),
+                          liveRegion: !holding,
+                          label: !holding
+                              ? '${model.petName} says: $bubble'
+                              : talk!.transcript.isEmpty
+                              ? '${model.petName} is listening'
+                              : 'Heard: ${talk.transcript}',
+                          excludeSemantics: true,
+                          child: SpeechBubble(text: bubble, highlighted: holding),
+                        ),
+                ),
+              ),
+            ),
+            if (talk != null) Positioned(right: Space.s, bottom: Space.s, child: _talkButtons(p, talk)),
+          ],
+        ),
+        const SizedBox(height: Space.s),
+        Text(
+          _roomHint(talk),
+          textAlign: TextAlign.center,
+          style: context.type.footnote.copyWith(fontWeight: FontWeight.w500, color: holding ? p.tint : null),
+        ),
+      ],
+    );
+  }
+
+  String _roomHint(TalkModel? talk) {
+    if (talk == null) return 'Tap ${model.petName} to pet';
+    if (talk.cancelArmed) return 'Let go to cancel';
+    if (talk.byTap) return 'Listening… tap Send when you’re done';
+    if (talk.isHolding) return 'Listening… let go to send, or slide away to cancel';
+    return 'Tap ${model.petName} to pet · press and hold to talk';
+  }
+
+  /// In the room's corner: Talk (tap to talk, for TalkBack or anyone who'd rather not hold), Send and Cancel while
+  /// listening that way, Stop while Mochi is busy with what you said, and Settings when the microphone is blocked.
+  Widget _talkButtons(MochiPalette p, TalkModel talk) {
+    if (talk.byTap) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          RoundIconButton(icon: Icons.close_rounded, label: 'Cancel', tint: p.inkSecondary, onPressed: talk.cancel),
+          const SizedBox(width: Space.xs),
+          RoundIconButton(icon: Icons.arrow_upward_rounded, label: 'Send', prominent: true, onPressed: () => unawaited(talk.earReleased())),
         ],
-      ),
-      const SizedBox(height: Space.s),
-      Text(
-        'Tap ${model.petName} to pet',
-        textAlign: TextAlign.center,
-        style: context.type.footnote.copyWith(fontWeight: FontWeight.w500),
-      ),
-    ],
-  );
+      );
+    }
+    if (talk.microphoneBlocked) {
+      return RoundIconButton(
+        icon: Icons.settings_rounded,
+        label: "Allow the microphone in Mochi's settings",
+        onPressed: () => unawaited(talk.openSettings()),
+      );
+    }
+    if (talk.isHolding) return const SizedBox.shrink();
+    if (talk.isBusy) return RoundIconButton(icon: Icons.close_rounded, label: 'Stop', tint: p.inkSecondary, onPressed: talk.cancel);
+    return RoundIconButton(
+      icon: Icons.mic_rounded,
+      label: 'Talk to ${model.petName}',
+      onPressed: () => unawaited(talk.earHeld(byTap: true)),
+    );
+  }
 
   // MARK: Actions
 

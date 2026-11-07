@@ -16,7 +16,7 @@ import io.flutter.plugin.common.MethodChannel
  * arrive while it runs (`link`, sent to Dart), this phone's model for the Mac's device list, the app's files folder,
  * audio focus while Mochi reads aloud (`audioFocusLost` tells Dart when a call or another app takes the audio), and
  * the button of Mochi's ongoing notification that opened the app (`liveAction`: `open`, or `session` for Open the
- * Session).
+ * Session). Hold to talk has a channel of its own ([SpeechChannel]).
  */
 class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
@@ -29,10 +29,13 @@ class MainActivity : FlutterActivity() {
 
     private var focusRequest: AudioFocusRequest? = null
 
+    private var speech: SpeechChannel? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         pendingLink = pairingLink(intent)
         pendingLiveAction = liveAction(intent)
+        speech = SpeechChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).also {
             it.setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -102,7 +105,14 @@ class MainActivity : FlutterActivity() {
         focusRequest = null
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        speech?.onPermissionResult(requestCode)
+    }
+
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        speech?.cancel()
+        speech = null
         abandonAudioFocus()
         channel?.setMethodCallHandler(null)
         channel = null

@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Scanning the Mac's pairing QR code (asked for when you tap Scan). -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Hold to talk: the microphone, only while you hold Mochi (asked for the first time you do). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
     <application
@@ -67,6 +69,10 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Hold to talk: the phone's speech recognizer (package visibility on Android 11+). -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
         </intent>
         <!-- Read aloud: the phone's text-to-speech engine (package visibility on Android 11+). -->
         <intent>

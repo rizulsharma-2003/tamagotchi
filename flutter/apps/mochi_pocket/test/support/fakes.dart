@@ -13,6 +13,7 @@ import 'package:mochi_pocket/src/services/notify/action_dispatcher.dart';
 import 'package:mochi_pocket/src/services/notify/notification_plan.dart';
 import 'package:mochi_pocket/src/services/platform_bridge.dart';
 import 'package:mochi_pocket/src/services/push/push_service.dart';
+import 'package:mochi_pocket/src/talk/speech_listener.dart';
 import 'package:mochi_pocket/src/voice/mochi_voice.dart';
 import 'package:mochi_pocket/src/voice/speech_engine.dart';
 
@@ -511,4 +512,79 @@ class FakeLiveNotifier implements LiveNotifier {
     resets++;
     _last = -1 << 52;
   }
+}
+
+/// A speech recognizer the test speaks into: [say] streams words while Mochi listens, and [stop] answers with
+/// [finalWords] (or what was heard). The microphone permission is [access]; [requestAccess] answers [afterAsking].
+class FakeSpeechListener implements SpeechListener {
+  MicAccess access_ = MicAccess.granted;
+  MicAccess afterAsking = MicAccess.granted;
+  SpeechProblem? startProblem;
+  String? finalWords;
+
+  /// Hold the answer to Android's question until [answerAccess] (the dialog is up).
+  Completer<MicAccess>? asking;
+  int requests = 0;
+  int starts = 0;
+  int stops = 0;
+  int cancels = 0;
+  int settings = 0;
+  bool listening = false;
+  String _heard = '';
+  void Function(String text)? _onHeard;
+  final StreamController<SpeechProblem> problemController = StreamController.broadcast();
+
+  void say(String words) {
+    _heard = words;
+    _onHeard?.call(words);
+  }
+
+  void answerAccess(MicAccess access) {
+    access_ = access;
+    asking?.complete(access);
+  }
+
+  @override
+  Future<MicAccess> access() async => access_;
+
+  @override
+  Future<MicAccess> requestAccess() async {
+    requests++;
+    final asking = this.asking;
+    if (asking != null) return asking.future;
+    access_ = afterAsking;
+    return afterAsking;
+  }
+
+  @override
+  Future<void> start({required void Function(String text) heard}) async {
+    starts++;
+    final problem = startProblem;
+    if (problem != null) throw problem;
+    _heard = '';
+    _onHeard = heard;
+    listening = true;
+  }
+
+  @override
+  Future<String?> stop() async {
+    stops++;
+    listening = false;
+    _onHeard = null;
+    final words = finalWords ?? _heard;
+    return words.isEmpty ? null : words;
+  }
+
+  @override
+  void cancel() {
+    cancels++;
+    listening = false;
+    _onHeard = null;
+  }
+
+  @override
+  Stream<SpeechProblem> get problems => problemController.stream;
+
+  @override
+  Future<void> openSettings() async => settings++;
 }

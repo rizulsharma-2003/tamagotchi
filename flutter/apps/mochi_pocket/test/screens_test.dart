@@ -81,6 +81,7 @@ void main() {
             settings: settings,
             reader: UpdatesReader(engine: FakeSpeechEngine(), focus: bridge, settings: settings, language: () => 'en-IN'),
             live: LiveUpdates(notifier: FakeLiveNotifier(), record: MemoryDocument(), enabled: () async => settings.showOnLockScreen),
+            speech: FakeSpeechListener(),
           ),
         );
         await tester.pump();

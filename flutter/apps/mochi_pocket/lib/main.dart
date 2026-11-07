@@ -30,6 +30,7 @@ import 'src/services/notify/app_actions.dart';
 import 'src/services/notify/debug_room.dart';
 import 'src/services/platform_bridge.dart';
 import 'src/services/push/push_service.dart';
+import 'src/talk/speech_listener.dart';
 import 'src/voice/speech_engine.dart';
 import 'src/voice/updates_reader.dart';
 
@@ -76,6 +77,7 @@ Future<void> main() async {
   actions = AppNotificationActions(model: model, opener: const UrlLinkOpener(), notifier: notifier)..start();
   // Development builds with a throwaway test room (DebugActionRoom): its pushes reach this phone too, and its Live
   // Activities while the app is open.
+  PocketModel? debugRoom;
   if (kDebugMode) {
     unawaited(DebugActionRoom.registerPush(files, push));
     final debugLive = LiveUpdates(
@@ -83,7 +85,7 @@ Future<void> main() async {
       record: AppFiles.document(files, LiveUpdates.debugFile),
       enabled: () async => settings.showOnLockScreen,
     );
-    unawaited(DebugActionRoom.listenLive(files, debugLive));
+    debugRoom = await DebugActionRoom.model(files, live: debugLive);
   }
   await notifier.start();
   final reader = UpdatesReader(
@@ -95,7 +97,20 @@ Future<void> main() async {
   );
   // Mochi's in-scene lettering (the sleepy z, ? and !) in the app's rounded face, as the Mac draws it in SF Rounded.
   MochiArtText.family = 'Nunito';
-  runApp(MochiApp(model: model, bridge: bridge, notifier: notifier, settings: settings, reader: reader, live: live));
+  runApp(
+    MochiApp(
+      model: model,
+      bridge: bridge,
+      notifier: notifier,
+      settings: settings,
+      reader: reader,
+      live: live,
+      // Hold to talk (A3): Android's speech recognizer, on the phone when it can be. A development build with a test
+      // room talks to that room's fake Mac instead of the real computer.
+      speech: PlatformSpeechListener(),
+      talkTo: debugRoom,
+    ),
+  );
   // A tap on a meeting heads-up (or its Join) that started the app opens the meeting, as on the iPhone.
   final launched = await notifier.launchResponse();
   if (launched != null) await actions.respond(launched);
