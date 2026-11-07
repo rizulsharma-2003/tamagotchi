@@ -1,5 +1,6 @@
 // CustomPainters over the renderers, for use in widgets.
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/rendering.dart';
 
 import 'companion_renderer.dart';
@@ -138,6 +139,59 @@ class ScenePainter extends CustomPainter {
   @override
   bool shouldRepaint(ScenePainter old) =>
       old.frame != frame || old.config != config || old.time != time || old.dark != dark || old.hour != hour;
+}
+
+/// The room drawn live, as the phones' and Windows' home screens show it: [frame] gives everyone's poses at the
+/// clock's time (seconds), and it repaints whenever [clock] ticks. The layout defaults to the iPhone's.
+class LiveRoomPainter extends CustomPainter {
+  LiveRoomPainter({
+    required this.config,
+    required this.frame,
+    required this.clock,
+    this.dark = false,
+    this.hour,
+    this.calm = false,
+    this.layout,
+  }) : super(repaint: clock);
+
+  final SceneConfig config;
+  final SceneFrame Function(double time) frame;
+  final ValueListenable<double> clock;
+
+  /// The room's night colours, with the dark theme.
+  final bool dark;
+
+  /// The hour the window shows (null: now).
+  final int? hour;
+
+  /// Animations are off: the art's own clock runs at half speed too.
+  final bool calm;
+  final SceneLayout Function(Size size)? layout;
+
+  /// The art's own clock (blinks, steam, the laptop's cursor) for [time]: well past zero, as in the gallery, and at
+  /// half speed when [calm].
+  static double artTime(double time, {bool calm = false}) => 100 + (calm ? time * 0.5 : time);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final time = clock.value;
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    SceneRenderer.draw(
+      config,
+      frame(time),
+      layout?.call(size) ?? SceneLayout.phone(size),
+      GContext(canvas),
+      time: artTime(time, calm: calm),
+      dark: dark,
+      hour: hour ?? DateTime.now().hour,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(LiveRoomPainter old) =>
+      old.config != config || old.frame != frame || old.clock != clock || old.dark != dark || old.hour != hour || old.calm != calm;
 }
 
 /// One piece of furniture, its foot (or centre, for wall pieces and rugs) at [anchor] (defaults

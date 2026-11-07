@@ -49,6 +49,29 @@ void main() {
         ],
       },
     ],
+    'interactions': [
+      {
+        'interaction': 'highFive',
+        'title': 'High five',
+        'length': 1,
+        'frames': [
+          {
+            'pet': {'x': 0.0},
+            'companion': {'x': 0.0},
+            'companionVisible': true,
+          },
+          {
+            'pet': {'x': 0.4},
+            'companion': {'x': -0.2},
+            'props': [
+              {'kind': 'sparkle', 'x': 0.5, 'y': 1},
+            ],
+            'companionVisible': true,
+          },
+        ],
+      },
+      {'interaction': 'notAnInteractionYet', 'length': 1, 'frames': <Object?>[]},
+    ],
   });
 
   test('reads the exporter format and skips animations it does not know', () {
@@ -60,6 +83,21 @@ void main() {
     expect(library.petVariants(PetAnimation.petted), 1);
     expect(library.petTrack(PetAnimation.sleep), isNull);
     expect(library.companionTrack(CompanionAnimation.typing)!.frames.single.facing, 1);
+  });
+
+  test('reads the interactions: whole frames, blended, holding the last one', () {
+    final library = PoseLibrary.parse(packed);
+    expect(library.interactions.map((track) => track.interaction), [InteractionID.highFive]);
+    final track = library.interactionTrack(InteractionID.highFive)!;
+    expect(track.loop, isFalse);
+    expect(track.length, 1);
+    final middle = track.at(0.25);
+    expect(middle.pet.x, closeTo(0.2, 1e-9));
+    expect(middle.companion.x, closeTo(-0.1, 1e-9));
+    expect(track.at(0.1).props, isEmpty, reason: 'props switch halfway between frames');
+    expect(track.at(5).props.single.kind, ScenePropKind.sparkle);
+    expect(library.interactionTrack(InteractionID.welcome), isNull);
+    expect(PoseLibrary.parse(pack({'fps': 2})).interactions, isEmpty, reason: 'older files have none');
   });
 
   test('loops wrap, one-shots hold, neighbours blend', () {

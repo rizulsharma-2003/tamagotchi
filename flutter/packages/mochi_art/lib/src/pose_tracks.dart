@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import 'model/poses.dart';
 import 'model/world.dart';
+import 'scene_renderer.dart' show SceneFrame;
 
 /// One recorded animation. Playback blends neighbouring samples, so it animates smoothly at any frame rate.
 class PoseTrack<T> {
@@ -64,12 +65,32 @@ class CompanionTrack extends PoseTrack<CompanionPose> {
   final CompanionAnimation animation;
 }
 
+/// One of Mochi's and Patch's scripted moments together (TamagotchiCore's InteractionLibrary: a high five, a coffee
+/// delivery, keeping watch…), recorded as whole room frames: Mochi's and Patch's poses (their `x` in path units, 0 at
+/// Mochi's spot and 1 at Patch's) and the props.
+class InteractionTrack extends PoseTrack<SceneFrame> {
+  InteractionTrack({required this.interaction, required super.length, required super.fps, required super.frames})
+    : super(loop: false, blend: _blend);
+
+  final InteractionID interaction;
+
+  static SceneFrame _blend(SceneFrame a, SceneFrame b, double t) => SceneFrame(
+    pet: PetPose.lerp(a.pet, b.pet, t),
+    companion: CompanionPose.lerp(a.companion, b.companion, t),
+    props: t < 0.5 ? a.props : b.props,
+    companionVisible: a.companionVisible,
+    companionVelocity: a.companionVelocity + (b.companionVelocity - a.companionVelocity) * t,
+    subagents: a.subagents,
+  );
+}
+
 /// Every recorded track.
 class PoseLibrary {
-  PoseLibrary({required this.pet, required this.companion});
+  PoseLibrary({required this.pet, required this.companion, this.interactions = const []});
 
   final List<PetTrack> pet;
   final List<CompanionTrack> companion;
+  final List<InteractionTrack> interactions;
 
   /// The track for [animation] (and [variant], when it has several), or null when it wasn't recorded.
   PetTrack? petTrack(PetAnimation animation, [int variant = 0]) {
@@ -91,6 +112,13 @@ class PoseLibrary {
     return null;
   }
 
+  InteractionTrack? interactionTrack(InteractionID interaction) {
+    for (final track in interactions) {
+      if (track.interaction == interaction) return track;
+    }
+    return null;
+  }
+
   /// Loads and parses [asset] (off the UI isolate).
   static Future<PoseLibrary> load(AssetBundle bundle, String asset) async {
     final data = await bundle.load(asset);
@@ -98,8 +126,8 @@ class PoseLibrary {
     return Isolate.run(() => parse(bytes));
   }
 
-  /// Raw-deflated JSON: `{fps, pet: [{animation, variant, loop, length, frames}], companion: […]}`. Animations this
-  /// version doesn't know are skipped.
+  /// Raw-deflated JSON: `{fps, pet: [{animation, variant, loop, length, frames}], companion: […], interactions:
+  /// [{interaction, length, frames}]}`. Animations this version doesn't know are skipped.
   static PoseLibrary parse(Uint8List packed) {
     final json = (jsonDecode(utf8.decode(ZLibDecoder(raw: true).convert(packed))) as Map).cast<String, Object?>();
     final fps = (json['fps'] as num?)?.toDouble() ?? 15;
@@ -136,6 +164,16 @@ class PoseLibrary {
               length: (e['length'] as num?)?.toDouble() ?? 1,
               fps: fps,
               frames: frames(e).map(CompanionPose.fromJson).toList(),
+            ),
+      ],
+      interactions: [
+        for (final e in entries('interactions'))
+          if (named(InteractionID.values, e['interaction']) case final interaction?)
+            InteractionTrack(
+              interaction: interaction,
+              length: (e['length'] as num?)?.toDouble() ?? 1,
+              fps: fps,
+              frames: frames(e).map(SceneFrame.fromJson).toList(),
             ),
       ],
     );
