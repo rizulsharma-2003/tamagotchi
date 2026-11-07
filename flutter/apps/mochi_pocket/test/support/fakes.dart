@@ -5,12 +5,15 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:mochi_link/mochi_link.dart';
+import 'package:mochi_pocket/src/live/live_notifier.dart';
+import 'package:mochi_pocket/src/live/live_update_view.dart';
 import 'package:mochi_pocket/src/services/alert_notifier.dart';
 import 'package:mochi_pocket/src/services/link_opener.dart';
 import 'package:mochi_pocket/src/services/notify/action_dispatcher.dart';
 import 'package:mochi_pocket/src/services/notify/notification_plan.dart';
 import 'package:mochi_pocket/src/services/platform_bridge.dart';
 import 'package:mochi_pocket/src/services/push/push_service.dart';
+import 'package:mochi_pocket/src/talk/speech_listener.dart';
 import 'package:mochi_pocket/src/voice/mochi_voice.dart';
 import 'package:mochi_pocket/src/voice/speech_engine.dart';
 
@@ -115,6 +118,10 @@ class FakeRelay {
     ...(jsonDecode(RelayLink.frame(value, key, macCredentials, roomKey, id: _id())) as Map).cast<String, Object?>(),
     'from': macCredentials.device,
   });
+
+  /// A Live Activity update as relay 1.4.0 hands it to an Android phone's socket (no box; the apns object).
+  void liveActivity(Map<String, Object?> apns, {required String id}) =>
+      socket.deliver({'v': 1, 'op': 'send', 'key': 'liveActivity', 'id': id, 'from': macCredentials.device, 'ttl': 600, 'apns': apns});
 
   void alert(Map<String, Object?> inner) => socket.deliver({
     ...(jsonDecode(LinkAlert.frame(inner, macCredentials, roomKey, id: _id())) as Map).cast<String, Object?>(),
@@ -226,6 +233,20 @@ class FakeBridge implements PlatformBridge, AudioFocus {
 
   @override
   Stream<String> get links => controller.stream;
+
+  /// The ongoing notification's button that started the app.
+  String? initialLive;
+  final StreamController<String> liveActionController = StreamController.broadcast();
+
+  @override
+  Future<String?> initialLiveAction() async {
+    final action = initialLive;
+    initialLive = null;
+    return action;
+  }
+
+  @override
+  Stream<String> get liveActions => liveActionController.stream;
 
   @override
   Future<String> deviceName() async => 'Test Phone';
@@ -401,4 +422,169 @@ Map<String, Object?> alertPush(String id, Map<String, Object?> inner, {String ro
     }),
     'category': 'turn',
   };
+}
+
+/// The room's K_la (what the Mac seals Live Activity titles with).
+final List<int> liveActivityKey = LinkCrypto.liveActivityKey(roomKey);
+
+/// The Mac's Live Activity `apns` object (LiveActivityPayload + LinkPush.liveActivity), sealed with [liveActivityKey].
+Map<String, Object?> macLiveActivity(
+  String event,
+  String phase, {
+  required int timestamp,
+  String? title,
+  String? detail,
+  num? since,
+  int frame = 0,
+  bool alert = false,
+  num? dismissalDate,
+  List<int>? key,
+}) => LinkLiveActivity.apns(
+  event: event,
+  timestamp: timestamp,
+  phase: phase,
+  title:
+      title ??
+      switch (phase) {
+        'working' => 'Claude is working',
+        'waiting' => 'Claude needs you',
+        'done' => 'Claude finished!',
+        _ => 'Claude is idle',
+      },
+  detail: detail,
+  since: (since ?? timestamp - 30).toDouble(),
+  frame: frame,
+  liveActivityKey: key ?? liveActivityKey,
+  alert: alert,
+  dismissalDate: dismissalDate?.toDouble(),
+);
+
+/// The relay's FCM data message for a Live Activity (1.4.0's `liveActivityData`).
+Map<String, Object?> livePush(String id, Map<String, Object?> apns, {String room = 'room_1'}) => {
+  'kind': 'liveActivity',
+  'room': room,
+  'id': id,
+  'from': macCredentials.device,
+  'apns': jsonEncode(apns),
+};
+
+/// Mochi's ongoing notification without a phone: what was shown and cancelled, and whether it's still up (set
+/// [showing] false to swipe it away).
+class FakeLiveNotifier implements LiveNotifier {
+  final List<LiveUpdateView> shown = [];
+  final List<({int? timestamp, bool force})> cancels = [];
+  bool showing = false;
+  bool allowed = true;
+  bool? promotable;
+  int resets = 0;
+  int _last = -1 << 52;
+
+  LiveUpdateView? get last => shown.lastOrNull;
+
+  @override
+  Future<LiveUpdatePosted> show(LiveUpdateView view) async {
+    if (!view.force && view.timestamp <= _last) return LiveUpdatePosted.older;
+    if (!view.force) _last = view.timestamp;
+    if (!allowed) return LiveUpdatePosted.blocked;
+    shown.add(view);
+    showing = true;
+    return LiveUpdatePosted.shown;
+  }
+
+  @override
+  Future<void> cancel({int? timestamp, bool force = false}) async {
+    cancels.add((timestamp: timestamp, force: force));
+    if (!force && timestamp != null) {
+      if (timestamp <= _last) return;
+      _last = timestamp;
+    }
+    showing = false;
+  }
+
+  @override
+  Future<bool> isShowing() async => showing;
+
+  @override
+  Future<LiveUpdateStatus> status() async => LiveUpdateStatus(enabled: allowed, promotable: promotable, sdk: 33);
+
+  @override
+  Future<void> reset() async {
+    resets++;
+    _last = -1 << 52;
+  }
+}
+
+/// A speech recognizer the test speaks into: [say] streams words while Mochi listens, and [stop] answers with
+/// [finalWords] (or what was heard). The microphone permission is [access]; [requestAccess] answers [afterAsking].
+class FakeSpeechListener implements SpeechListener {
+  MicAccess access_ = MicAccess.granted;
+  MicAccess afterAsking = MicAccess.granted;
+  SpeechProblem? startProblem;
+  String? finalWords;
+
+  /// Hold the answer to Android's question until [answerAccess] (the dialog is up).
+  Completer<MicAccess>? asking;
+  int requests = 0;
+  int starts = 0;
+  int stops = 0;
+  int cancels = 0;
+  int settings = 0;
+  bool listening = false;
+  String _heard = '';
+  void Function(String text)? _onHeard;
+  final StreamController<SpeechProblem> problemController = StreamController.broadcast();
+
+  void say(String words) {
+    _heard = words;
+    _onHeard?.call(words);
+  }
+
+  void answerAccess(MicAccess access) {
+    access_ = access;
+    asking?.complete(access);
+  }
+
+  @override
+  Future<MicAccess> access() async => access_;
+
+  @override
+  Future<MicAccess> requestAccess() async {
+    requests++;
+    final asking = this.asking;
+    if (asking != null) return asking.future;
+    access_ = afterAsking;
+    return afterAsking;
+  }
+
+  @override
+  Future<void> start({required void Function(String text) heard}) async {
+    starts++;
+    final problem = startProblem;
+    if (problem != null) throw problem;
+    _heard = '';
+    _onHeard = heard;
+    listening = true;
+  }
+
+  @override
+  Future<String?> stop() async {
+    stops++;
+    listening = false;
+    _onHeard = null;
+    final words = finalWords ?? _heard;
+    return words.isEmpty ? null : words;
+  }
+
+  @override
+  void cancel() {
+    cancels++;
+    listening = false;
+    _onHeard = null;
+  }
+
+  @override
+  Stream<SpeechProblem> get problems => problemController.stream;
+
+  @override
+  Future<void> openSettings() async => settings++;
 }

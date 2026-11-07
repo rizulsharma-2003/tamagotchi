@@ -17,6 +17,8 @@ import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_link/mochi_link.dart';
 
 import 'src/app.dart';
+import 'src/live/live_notifier.dart';
+import 'src/live/live_updates.dart';
 import 'src/model/app_settings.dart';
 import 'src/model/pocket_model.dart';
 import 'src/screens/settings_screen.dart' show appVersion;
@@ -28,6 +30,7 @@ import 'src/services/notify/app_actions.dart';
 import 'src/services/notify/debug_room.dart';
 import 'src/services/platform_bridge.dart';
 import 'src/services/push/push_service.dart';
+import 'src/talk/speech_listener.dart';
 import 'src/voice/speech_engine.dart';
 import 'src/voice/updates_reader.dart';
 
@@ -42,6 +45,15 @@ Future<void> main() async {
   final notifier = LocalAlertNotifier(onResponse: (response) => unawaited(actions.respond(response)));
   final files = await bridge.filesDir();
   final push = FirebasePushService();
+  // Appearance, voice and the lock screen, loaded before the first frame so the chosen theme shows straight away.
+  final settings = AppSettings(AppFiles.document(files, AppFiles.settings));
+  await settings.load();
+  // Mochi on the lock screen while Claude works (the iPhone's Live Activity), shared with the push handler.
+  final live = LiveUpdates(
+    notifier: const PluginLiveNotifier(),
+    record: AppFiles.document(files, LiveUpdates.file),
+    enabled: () async => settings.showOnLockScreen,
+  );
   final model = PocketModel(
     credentialStore: SecureCredentialStore(),
     doneDocument: AppFiles.document(files, AppFiles.done),
@@ -58,16 +70,24 @@ Future<void> main() async {
     ),
     // FCM: alerts reach the phone while the app is closed (google-services.json at build time; see the Gradle file).
     push: push,
+    live: live,
     shown: await openShownAlerts(),
     deviceName: await bridge.deviceName(),
   );
   actions = AppNotificationActions(model: model, opener: const UrlLinkOpener(), notifier: notifier)..start();
-  // Development builds with a throwaway test room (DebugActionRoom): its pushes reach this phone too.
-  if (kDebugMode) unawaited(DebugActionRoom.registerPush(files, push));
+  // Development builds with a throwaway test room (DebugActionRoom): its pushes reach this phone too, and its Live
+  // Activities while the app is open.
+  PocketModel? debugRoom;
+  if (kDebugMode) {
+    unawaited(DebugActionRoom.registerPush(files, push));
+    final debugLive = LiveUpdates(
+      notifier: const PluginLiveNotifier(),
+      record: AppFiles.document(files, LiveUpdates.debugFile),
+      enabled: () async => settings.showOnLockScreen,
+    );
+    debugRoom = await DebugActionRoom.model(files, live: debugLive);
+  }
   await notifier.start();
-  // Appearance and voice, loaded before the first frame so the chosen theme shows straight away.
-  final settings = AppSettings(AppFiles.document(files, AppFiles.settings));
-  await settings.load();
   final reader = UpdatesReader(
     engine: FlutterTtsEngine(),
     focus: bridge,
@@ -77,7 +97,20 @@ Future<void> main() async {
   );
   // Mochi's in-scene lettering (the sleepy z, ? and !) in the app's rounded face, as the Mac draws it in SF Rounded.
   MochiArtText.family = 'Nunito';
-  runApp(MochiApp(model: model, bridge: bridge, notifier: notifier, settings: settings, reader: reader));
+  runApp(
+    MochiApp(
+      model: model,
+      bridge: bridge,
+      notifier: notifier,
+      settings: settings,
+      reader: reader,
+      live: live,
+      // Hold to talk (A3): Android's speech recognizer, on the phone when it can be. A development build with a test
+      // room talks to that room's fake Mac instead of the real computer.
+      speech: PlatformSpeechListener(),
+      talkTo: debugRoom,
+    ),
+  );
   // A tap on a meeting heads-up (or its Join) that started the app opens the meeting, as on the iPhone.
   final launched = await notifier.launchResponse();
   if (launched != null) await actions.respond(launched);

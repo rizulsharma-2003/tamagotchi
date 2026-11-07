@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_pocket/src/app.dart';
+import 'package:mochi_pocket/src/live/live_updates.dart';
 import 'package:mochi_pocket/src/model/app_settings.dart';
 import 'package:mochi_pocket/src/model/pocket_model.dart';
 import 'package:mochi_pocket/src/model/updates_history.dart';
@@ -24,6 +25,7 @@ void main() {
   late FakeSpeechEngine speech;
   late UpdatesReader reader;
   late List<String> announced;
+  late FakeLiveNotifier liveNotifier;
 
   setUp(() {
     bridge = FakeBridge();
@@ -31,6 +33,7 @@ void main() {
     settings = AppSettings(settingsDocument);
     speech = FakeSpeechEngine();
     announced = [];
+    liveNotifier = FakeLiveNotifier();
     reader = UpdatesReader(engine: speech, focus: bridge, settings: settings, language: () => 'en-IN', announce: announced.add);
     relay = FakeRelay();
     notifier = FakeNotifier();
@@ -63,6 +66,7 @@ void main() {
         opener: opener,
         library: Future.value(null),
         scan: scan,
+        live: LiveUpdates(notifier: liveNotifier, record: MemoryDocument(), enabled: () async => settings.showOnLockScreen),
       ),
     );
     await tester.pump();
@@ -442,6 +446,62 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(settings.voiceName, 'en-us-x-sfg-network');
     expect(find.textContaining('This voice needs the internet'), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('Lock screen: a sample per phase, and the switch turns Mochi off there and takes it away', (tester) async {
+    store.saved = phoneCredentials;
+    await launch(tester);
+    await macShares(tester);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Lock screen'), findsOneWidget);
+    expect(find.text('Show Mochi on my lock screen while Claude works'), findsOneWidget);
+    expect(find.textContaining('while Claude works on your Mac'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Needs you'));
+    await tester.pump();
+    await tester.tap(find.text('Show on Lock Screen'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(liveNotifier.last!.title, 'Claude needs you');
+    expect(liveNotifier.last!.actions, ['open', 'session']);
+    await tester.tap(find.byTooltip('Remove the sample'));
+    await tester.pump();
+    expect(liveNotifier.showing, isFalse);
+    // Off: saved, and nothing stays.
+    await tester.tap(find.text('Show on Lock Screen'));
+    await tester.pump();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(settings.showOnLockScreen, isFalse);
+    expect(settingsDocument.json?['showOnLockScreen'], false);
+    expect(liveNotifier.showing, isFalse);
+    expect(find.text('Show on Lock Screen'), findsNothing);
+    await finish(tester);
+  });
+
+  testWidgets("Open the Session in Mochi's notification brings Claude's sessions into view", (tester) async {
+    store.saved = phoneCredentials;
+    tester.view.physicalSize = const Size(1080, 1800);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MochiApp(model: model, bridge: bridge, notifier: notifier, settings: settings, reader: reader, library: Future.value(null)),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await macShares(tester);
+    final sessions = find.text('Claude on your Mac');
+    expect(sessions, findsNothing, reason: 'below the first screen, so not built yet');
+    bridge.liveActionController.add('session');
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(sessions, findsOneWidget);
+    final top = tester.getTopLeft(sessions).dy;
+    expect(top, inInclusiveRange(0, 600), reason: 'on screen');
     await finish(tester);
   });
 

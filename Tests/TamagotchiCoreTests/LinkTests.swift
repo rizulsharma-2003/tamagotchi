@@ -64,6 +64,31 @@ struct LinkTests {
         #expect(first.box != second.box)
     }
 
+    @Test("The Live Activity vectors: K_la from K, and sealed titles reproduced and opened (link-spec/live-activity.json)")
+    func liveActivityVectors() throws {
+        struct KeyVector: Decodable { var name, roomKey, liveActivityKey: String }
+        struct SealedVector: Decodable { var name, roomKey, liveActivityKey, ad, nonce, plaintext, sealed, title: String; var detail: String? }
+        struct File: Decodable { var keys: [KeyVector]; var sealed: [SealedVector] }
+        let file = try JSONDecoder().decode(File.self, from: Data(contentsOf: Self.spec.appendingPathComponent("live-activity.json")))
+        #expect(file.keys.count >= 3 && file.sealed.count >= 3)
+        func liveActivityKey(_ roomKey: String) throws -> SymmetricKey {
+            LinkCrypto.liveActivityKey(from: SymmetricKey(data: try #require(LinkCrypto.data(base64url: roomKey))))
+        }
+        for vector in file.keys {
+            #expect(LinkCrypto.base64url(try liveActivityKey(vector.roomKey).withUnsafeBytes { Data($0) }) == vector.liveActivityKey, "\(vector.name)")
+        }
+        for vector in file.sealed {
+            let key = try liveActivityKey(vector.roomKey)
+            #expect(LinkCrypto.base64url(key.withUnsafeBytes { Data($0) }) == vector.liveActivityKey)
+            #expect(vector.ad == LinkPush.liveActivityAD)
+            let again = try LinkCrypto.seal(Data(vector.plaintext.utf8), ad: vector.ad, key: key,
+                                            nonce: try #require(LinkCrypto.data(base64url: vector.nonce)))
+            #expect(again.nonce + "." + again.box == vector.sealed, "\(vector.name)")
+            let opened = try #require(LinkPush.openLiveActivity(vector.sealed, liveActivityKey: key))
+            #expect(opened.title == vector.title && opened.detail == vector.detail)
+        }
+    }
+
     @Test("The Live Activity key is derived, stable, and can't open what K sealed")
     func liveActivityKey() throws {
         let roomKey = SymmetricKey(data: Data(repeating: 7, count: 32))

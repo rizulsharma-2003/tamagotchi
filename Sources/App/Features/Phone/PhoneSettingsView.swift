@@ -19,9 +19,13 @@ struct PhoneSettingsView: View {
     private var link: LinkController { environment.link }
     @State private var confirmUnpair = false
     private var name: String { store.settings.petName }
-    private var ready: Bool { link.paired && phone.pushToStartToken != nil }
+    private var ready: Bool { link.paired && (phone.pushToStartToken != nil || phone.hasAndroidPhone) }
     /// The Live Activity needs an iPhone: one is in the room, or one has shared its Live Activity address.
     private var hasIPhone: Bool { link.hasIPhone || phone.pushToStartToken != nil }
+    /// An Android phone shows it as an ongoing notification on its lock screen.
+    private var androidName: String? {
+        link.phones.first { $0.linkPlatform == .android }.map { $0.name ?? "Your Android phone" }
+    }
     /// The paired iPhone's own name ("Rizul's iPhone").
     private var iPhoneName: String {
         link.phones.first { $0.linkPlatform == .iOS }?.name ?? "Your iPhone"
@@ -33,7 +37,7 @@ struct PhoneSettingsView: View {
 
             Section("Talking from your phones") {
                 Toggle("Run what I tell \(name) on my phones", isOn: $store.settings.phone.acceptCommands)
-                Text("Type to \(name) on any phone, or press and hold \(name) on your iPhone and talk: your words reach "
+                Text("Type to \(name) on any phone, or press and hold \(name) and talk: your words reach "
                      + "this Mac through Mochi Link and run in Ask \(name) exactly as if you typed them here. Approvals for "
                      + "messages to Claude sessions show on this Mac and your phones.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -65,15 +69,21 @@ struct PhoneSettingsView: View {
                 }
             }
 
-            Section("Live Activity on iPhone") {
-                Toggle("Show \(name) on my iPhone", isOn: $store.settings.phone.enabled)
+            Section(androidName == nil ? "Live Activity on iPhone" : "On your phones' lock screens") {
+                Toggle("Show \(name) on my \(androidName == nil ? "iPhone" : "phones")", isOn: $store.settings.phone.enabled)
                 Text("A Live Activity on your iPhone's Lock Screen and in the Dynamic Island while Claude works. It lights up "
                      + "when Claude needs you and celebrates when Claude is done. Needs Mochi on your iPhone, paired above.")
                     .font(.caption).foregroundStyle(.secondary)
-                if link.paired, !hasIPhone {
-                    Label("Live Activities need an iPhone, and none is paired. Your other phones still get notifications.",
-                          systemImage: "info.circle")
+                if let androidName, link.paired {
+                    Label("\(androidName) shows it as an ongoing notification on its lock screen.", systemImage: "info.circle")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+                if link.paired, !hasIPhone {
+                    if androidName == nil {
+                        Label("Live Activities need an iPhone, and none is paired. Your other phones still get notifications.",
+                              systemImage: "info.circle")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 } else if link.paired {
                     status(iPhoneName, ok: phone.pushToStartToken != nil,
                            detail: phone.pushToStartToken == nil ? "Open Mochi on your iPhone once"
@@ -82,8 +92,8 @@ struct PhoneSettingsView: View {
                            detail: phone.activityRunning ? "Showing “\(phone.shown?.title ?? "")”" : "Not showing")
                 }
                 HStack {
-                    Button("Send a Test to My iPhone") { phone.sendTest() }.disabled(!ready)
-                    Button("End It") { phone.endNow() }.disabled(!link.paired || !hasIPhone)
+                    Button("Send a Test to My \(androidName == nil ? "iPhone" : "Phones")") { phone.sendTest() }.disabled(!ready)
+                    Button("End It") { phone.endNow() }.disabled(!link.paired || (!hasIPhone && androidName == nil))
                 }
                 if !link.paired {
                     Text(PhoneController.pairFirst).font(.caption).foregroundStyle(.secondary)

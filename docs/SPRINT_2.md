@@ -13,6 +13,7 @@
 |---|---|
 | 2026-11-07 | **W29** install and signed auto-update (Windows 0.2.0, 0.2.1 on the user's PC) · **A6** Updates history · **A8** notification actions (Android) |
 | 2026-11-08 | **W1** Windows toasts · **W2** the PC's rhythm · **W3** notify only when away · **W4** global shortcuts · **W10** summaries parity (Windows 0.2.2) |
+| 2026-11-08 | **A1** Mochi on the Android lock screen while Claude works (relay 1.4.0 committed, not deployed) · **A3** hold to talk (Android) |
 | Parked | Multi-host rooms (docs/MULTI_HOST_PLAN.md), by the user's decision |
 
 ## Where Sprint 1 left us
@@ -153,9 +154,9 @@ Windows lets an app see and nudge much more of the desktop than macOS does, so M
 
 | # | Feature (iPhone reference) | Android approach | Size |
 |---|---|---|---|
-| A1 | **Live Activity equivalent**: Mochi on the Lock Screen and status bar while Claude works, lighting up when Claude needs you and celebrating when done | An ongoing notification (Android 16 *Live Updates* / progress-style, falling back to a standard ongoing notification), updated by FCM data messages. **The relay needs Android `liveActivity` delivery through FCM**; today Live Activity frames go to APNs only. | L |
+| A1 | **Live Activity equivalent**: Mochi on the Lock Screen and status bar while Claude works, lighting up when Claude needs you and celebrating when done. **Built (2026-11-08; checked on the Realme against a local 1.4.0 relay, socket path):** an ongoing notification updated in place (plugins/mochi_live_update): the iPhone's scene per phase and pose, the timer, Open and Open the Session; "When Claude needs you" lights up with a sound; ends as on the iPhone (End It, `activityEnded`); Settings › Lock screen with a sample per phase. Relay 1.4.0 (mochi-link, not deployed) pushes `liveActivity` to Android by FCM and to its socket; K_la vectors in link-spec/live-activity.json. The Mac now sends it with only an Android phone paired. Android 16 Live Update promotion not yet seen on a phone. | An ongoing notification (Android 16 *Live Updates* / progress-style, falling back to a standard ongoing notification), updated by FCM data messages. **The relay needs Android `liveActivity` delivery through FCM**; today Live Activity frames go to APNs only. | L |
 | A2 | **Home-screen widget**: "Mochi & Claude" with Waiting for you, like the iPhone Lock Screen widget (`iOS/MochiWidgets`) | An AppWidget (Glance), updated from the app and FCM | M |
-| A3 | **Hold to talk**: press and hold Mochi, Mochi listens, and the request runs on the computer (`TalkModel`, `PhoneListener`) | Android on-device `SpeechRecognizer` (offline when available) | M |
+| A3 | **Hold to talk**: press and hold Mochi, Mochi listens, and the request runs on the computer (`TalkModel`, `PhoneListener`). **Built (2026-11-08; the listening UI, the microphone question and the on-device recognizer checked on the Realme; no speech there at night):** the listening pose and sound waves, words as they're heard, let go to send, slide away to cancel, the 45 s answer timeout, a Talk button (tap, then Send) and a TalkBack action. | Android on-device `SpeechRecognizer` (offline when available) | M |
 | A4 | **"Hey Google" instead of Siri**: "What's waiting on Mochi?" and similar phrases (`MochiIntents`) | App Actions / Shortcuts (capabilities.xml), a Quick Settings tile and app shortcuts. Read the answer in Mochi's voice. | M |
 | A5 | **Full pet simulation in the room**: the iPhone runs `CompanionWorld`; Android plays recorded poses | Use G1 `mochi_world` | M (after G1) |
 | A6 | **Updates history**: a week of history grouped by day, like the iPhone (today: waiting and done only). **Built (2026-11-07; not yet checked on the Realme):** every card's items kept a week (`updates.json`, also from the push handler), shown by day under Waiting for you with when each came in and where and when it was marked done. | S |

@@ -54,6 +54,10 @@ final class PhoneController {
     /// Paired with Mochi Link: the phones can be reached.
     var paired: Bool { MochiLink.relay != nil }
 
+    /// An Android phone is in the room. It shows the Live Activity as an ongoing notification (relay 1.4.0 pushes it by
+    /// FCM and hands it to the app's socket), so it can be started, updated and ended without an iPhone's addresses.
+    var hasAndroidPhone: Bool { environment.link.phones.contains { $0.linkPlatform == .android } }
+
     func start() {
         NotificationCenter.default.addObserver(forName: .linkStoreDidChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.readTokens() }
@@ -415,7 +419,7 @@ final class PhoneController {
         if !paired {
             lastResult = nil
             lastError = Self.pairFirst
-        } else if updateTokens.isEmpty {
+        } else if updateTokens.isEmpty, !hasAndroidPhone {
             lastResult = nil
             lastError = "Your iPhone hasn't shared this Live Activity's address yet, so it closes when Mochi Pocket next opens."
         }
@@ -466,7 +470,7 @@ final class PhoneController {
 
     private func send(start state: LiveActivityState) {
         let state = nextFrame(state)
-        guard pushToStartToken != nil else {
+        guard pushToStartToken != nil || hasAndroidPhone else {
             Self.linkLog.notice("live activity: can't start, no push-to-start address from the iPhone yet")
             lastError = environment.link.hasIPhone
                 ? "Open Mochi on your iPhone once, so it can share where to reach it."
@@ -486,7 +490,8 @@ final class PhoneController {
         guard force || !state.sameContent(as: shown) else { return }
         let state = nextFrame(state)
         shown = state
-        guard !updateTokens.isEmpty else { return }   // sent once the iPhone shares the activity's address
+        // Sent once the iPhone shares the activity's address, or at once for an Android phone.
+        guard !updateTokens.isEmpty || hasAndroidPhone else { return }
         let payload = LiveActivityPayload.update(state, timestamp: nextTimestamp(), alert: urgent)
         deliver(payload, priority: urgent || state.phase != "working" ? 10 : 5, label: "Updated: \(state.title)")
     }
@@ -499,7 +504,7 @@ final class PhoneController {
         // Mochi Pocket also closes it the next time it runs, in case the push can't reach it.
         let now = Date().timeIntervalSince1970
         write(["at": now, "since": state.since, "dismissAt": now + max(0, dismissAfter)], for: .activityEnded)
-        guard !updateTokens.isEmpty else { return }
+        guard !updateTokens.isEmpty || hasAndroidPhone else { return }
         deliver(LiveActivityPayload.end(state, timestamp: nextTimestamp(), dismissAfter: dismissAfter), priority: 10, label: "Ended")
     }
 

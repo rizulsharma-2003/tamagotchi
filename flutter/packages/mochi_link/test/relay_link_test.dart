@@ -551,4 +551,97 @@ void main() {
       expect(jsonDecode(utf8.decode(plain!)), inner);
     });
   });
+
+  group('live activities', () {
+    final laKey = LinkCrypto.liveActivityKey(roomKey);
+
+    /// A Live Activity frame as relay 1.4.0 hands it to an Android phone's socket: no box, the apns object, `from`.
+    Map<String, Object?> fromMac(String id, String phase, {int timestamp = 100, String title = 'Claude is working'}) {
+      final frame =
+          (jsonDecode(
+                    LinkLiveActivity.hostFrame(
+                      LinkLiveActivity.apns(
+                        event: 'update',
+                        timestamp: timestamp,
+                        phase: phase,
+                        title: title,
+                        since: 90,
+                        liveActivityKey: laKey,
+                      ),
+                      id: id,
+                      priority: 5,
+                    ),
+                  )
+                  as Map)
+              .cast<String, Object?>();
+      return {
+        ...frame
+          ..remove('push')
+          ..remove('to'),
+        'from': 'dev_mac',
+      };
+    }
+
+    test('one on the socket is opened with K_la and announced once, not acked, and not state or a message', () async {
+      await link.dispose();
+      link = makeLink(phone);
+      final activities = <LinkLiveActivity>[];
+      link.liveActivities.listen(activities.add);
+      final socket = await connected();
+      socket.deliver(fromMac('la-1', 'working'));
+      socket.deliver(fromMac('la-1', 'working'));
+      socket.deliver(fromMac('la-2', 'waiting', timestamp: 101, title: 'Claude needs you'));
+      await pumpEventQueue();
+      expect(activities.map((activity) => activity.id), ['la-1', 'la-2']);
+      expect(activities.first.title, 'Claude is working');
+      expect(activities.first.from, 'dev_mac');
+      expect(activities.first.room, 'room_1');
+      expect(activities.last.phase, 'waiting');
+      expect(activities.last.title, 'Claude needs you');
+      expect(socket.sentOp('ack'), isEmpty);
+      expect(changes, isEmpty);
+      expect(incoming, isEmpty);
+    });
+
+    test('one sealed for another room is still announced, with its placeholder title and not opened', () async {
+      await link.dispose();
+      link = makeLink(phone);
+      final activities = <LinkLiveActivity>[];
+      link.liveActivities.listen(activities.add);
+      final socket = await connected();
+      final other = LinkCrypto.liveActivityKey(LinkCrypto.newRoomKey());
+      socket.deliver({
+        'v': 1,
+        'op': 'send',
+        'key': 'liveActivity',
+        'id': 'la-x',
+        'from': 'dev_mac',
+        'apns': LinkLiveActivity.apns(event: 'update', timestamp: 1, phase: 'done', title: 'secret', since: 1, liveActivityKey: other),
+      });
+      // A put with the key (the relay never sends one) is ignored.
+      socket.deliver({'v': 1, 'op': 'put', 'key': 'liveActivity', 'id': 'la-y', 'from': 'dev_mac', 'apns': <String, Object?>{}});
+      await pumpEventQueue();
+      expect(activities.single.opened, isFalse);
+      expect(activities.single.title, 'Mochi');
+    });
+
+    test("sendLiveActivity writes Swift's frame, and only the newest waiting update is kept while offline", () async {
+      link.sendLiveActivity(
+        LinkLiveActivity.apns(event: 'start', timestamp: 1, phase: 'working', title: 'a', since: 1, liveActivityKey: laKey),
+        priority: 10,
+      );
+      for (final title in ['b', 'c']) {
+        link.sendLiveActivity(
+          LinkLiveActivity.apns(event: 'update', timestamp: 2, phase: 'working', title: title, since: 1, liveActivityKey: laKey),
+        );
+      }
+      final socket = await connected();
+      final sent = socket.sentOp('send');
+      expect(sent.map((frame) => (frame['apns']! as Map)['event']), ['start', 'update']);
+      expect(sent.map((frame) => (frame['push']! as Map)['priority']), [10, 5]);
+      expect(sent.every((frame) => frame['key'] == 'liveActivity' && frame['ttl'] == 600), isTrue);
+      final last = LinkLiveActivity.fromEnvelope({...sent.last, 'from': 'dev_mac'}, liveActivityKey: laKey)!;
+      expect(last.title, 'c');
+    });
+  });
 }

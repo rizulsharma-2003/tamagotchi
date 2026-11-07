@@ -1,0 +1,54 @@
+{
+  "about" : "Mochi Link v1 Live Activity vectors (docs/MOCHI_LINK_PLAN.md 4.6.1). keys: K_la = HKDF-SHA256(K, salt: none, info: \"mochi-link/v1 live-activity\", 32 bytes), the key a phone opens a Live Activity's text with (the iPhone's widget, Android's push handler). sealed: a Live Activity's title and detail as the host seals them into content-state.sealed = \"<nonce>.<box>\": AES-256-GCM with K_la, associated data \"mochi-link/v1|live-activity|detail\", plaintext {\"title\", \"detail\"?} (no detail when there's none). Keys, nonces and boxes are base64url without padding; box = ciphertext || 16-byte tag. Every client must derive liveActivityKey from roomKey, reproduce sealed from the rest, and open it to title and detail. Made with CryptoKit.",
+  "keys" : [
+    {
+      "liveActivityKey" : "McrAx3YCwrIXXU5yWE1wVXosmh1rfebRgV8AhtoMrLA",
+      "name" : "sevens",
+      "roomKey" : "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+    },
+    {
+      "liveActivityKey" : "S1ieazEEBqsLr1aRH-Hc_LDYChhM94Ob_uapbMKgAFQ",
+      "name" : "counting",
+      "roomKey" : "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+    },
+    {
+      "liveActivityKey" : "wTK5y2ajiU_iWkoW9WOa08Z7bGLofpvjGZAZia6Hdvo",
+      "name" : "spread",
+      "roomKey" : "KXK7BE2W3yhxugNMld4ncLkCS5TdJm-4AUqT3CVutwA"
+    }
+  ],
+  "sealed" : [
+    {
+      "ad" : "mochi-link/v1|live-activity|detail",
+      "detail" : "web · 3 tools",
+      "liveActivityKey" : "wTK5y2ajiU_iWkoW9WOa08Z7bGLofpvjGZAZia6Hdvo",
+      "name" : "working",
+      "nonce" : "AAECAwQFBgcICQoL",
+      "plaintext" : "{\"detail\":\"web · 3 tools\",\"title\":\"Claude is working\"}",
+      "roomKey" : "KXK7BE2W3yhxugNMld4ncLkCS5TdJm-4AUqT3CVutwA",
+      "sealed" : "AAECAwQFBgcICQoL.aPJevyuVeDIHzRJP7Nud7Xiao3v8G6ohIKS4w793vEyRvCnKOUw8bFM-F2gnA8UrF5bZf5s02ydMyCHamMZ9XazngSWEBVE",
+      "title" : "Claude is working"
+    },
+    {
+      "ad" : "mochi-link/v1|live-activity|detail",
+      "liveActivityKey" : "wTK5y2ajiU_iWkoW9WOa08Z7bGLofpvjGZAZia6Hdvo",
+      "name" : "waiting-no-detail",
+      "nonce" : "CQgHBgUEAwIBAP_-",
+      "plaintext" : "{\"title\":\"Claude needs you\"}",
+      "roomKey" : "KXK7BE2W3yhxugNMld4ncLkCS5TdJm-4AUqT3CVutwA",
+      "sealed" : "CQgHBgUEAwIBAP_-.LY4cgqivtzS-RcKCT0MvGRuELoA6hex-yHML4cqQWdrz1LFBZAuqGUNgxfw",
+      "title" : "Claude needs you"
+    },
+    {
+      "ad" : "mochi-link/v1|live-activity|detail",
+      "detail" : "Café ☕ · ünïcödé 🐾",
+      "liveActivityKey" : "McrAx3YCwrIXXU5yWE1wVXosmh1rfebRgV8AhtoMrLA",
+      "name" : "done-unicode",
+      "nonce" : "WhEiM0RVZneImaq7",
+      "plaintext" : "{\"detail\":\"Café ☕ · ünïcödé 🐾\",\"title\":\"Claude finished!\"}",
+      "roomKey" : "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "sealed" : "WhEiM0RVZneImaq7.sXf1L_AhLXdXFKtf6UAOA5d9bOO5xaLvrAE17RjBCUDiWvJIiiMiWNUr18gPPgQeK6j8sWCj3EIInX4jxtQvzoGfIfqQSmHLNBYyMoRbR3EUAshbWQ",
+      "title" : "Claude finished!"
+    }
+  ]
+}

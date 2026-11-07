@@ -23,8 +23,9 @@ enum Appearance {
   static Appearance parse(Object? name) => values.where((value) => value.name == name).firstOrNull ?? system;
 }
 
-/// This phone's own choices (not shared with the Mac): appearance, and Mochi's voice. Kept in a small file in the
-/// app's private folder; a change applies at once.
+/// This phone's own choices (not shared with the Mac): appearance, Mochi's voice, and Mochi on the lock screen while
+/// Claude works. Kept in a small file in the app's private folder (the push handler reads it too); a change applies at
+/// once.
 class AppSettings extends ChangeNotifier {
   AppSettings(this._document);
 
@@ -33,6 +34,7 @@ class AppSettings extends ChangeNotifier {
   Appearance _appearance = Appearance.system;
   VoiceCharacter _character = VoiceCharacter.mochi;
   String? _voiceName;
+  bool _showOnLockScreen = true;
 
   Appearance get appearance => _appearance;
   VoiceCharacter get character => _character;
@@ -40,12 +42,17 @@ class AppSettings extends ChangeNotifier {
   /// The chosen voice's name; null picks the best English voice on the phone.
   String? get voiceName => _voiceName;
 
+  /// "Show Mochi on my lock screen while Claude works" (the iPhone's Live Activity, as an ongoing notification). On
+  /// unless you turn it off.
+  bool get showOnLockScreen => _showOnLockScreen;
+
   Future<void> load() async {
     final json = await _document.read();
     _appearance = Appearance.parse(json?['appearance']);
     _character = VoiceCharacter.parse(json?['voiceCharacter']);
     final voice = json?['voiceName'];
     _voiceName = voice is String && voice.isNotEmpty ? voice : null;
+    _showOnLockScreen = json?['showOnLockScreen'] != false;
     notifyListeners();
   }
 
@@ -67,6 +74,12 @@ class AppSettings extends ChangeNotifier {
     _changed();
   }
 
+  set showOnLockScreen(bool value) {
+    if (value == _showOnLockScreen) return;
+    _showOnLockScreen = value;
+    _changed();
+  }
+
   void _changed() {
     notifyListeners();
     unawaited(_save());
@@ -74,7 +87,12 @@ class AppSettings extends ChangeNotifier {
 
   Future<void> _save() async {
     try {
-      await _document.write({'appearance': _appearance.name, 'voiceCharacter': _character.name, 'voiceName': ?_voiceName});
+      await _document.write({
+        'appearance': _appearance.name,
+        'voiceCharacter': _character.name,
+        'voiceName': ?_voiceName,
+        'showOnLockScreen': _showOnLockScreen,
+      });
     } on Object catch (error) {
       debugPrint('Mochi: settings were not saved (${error.runtimeType})');
     }

@@ -15,13 +15,20 @@ abstract interface class AudioFocus {
 }
 
 /// What the Android side tells the app (MainActivity.kt): the `mochi://pair` link it was opened with or that
-/// arrives while it runs, this phone's model, and the app's private files folder.
+/// arrives while it runs, the button of Mochi's ongoing notification that opened it, this phone's model, and the app's
+/// private files folder.
 abstract interface class PlatformBridge {
   /// The pairing link that opened the app, once (null after the first call).
   Future<String?> initialLink();
 
   /// Pairing links that arrive while the app runs.
   Stream<String> get links;
+
+  /// The ongoing notification's button that started the app (`open`, or `session` for Open the Session), once.
+  Future<String?> initialLiveAction();
+
+  /// The same, when the app was already running.
+  Stream<String> get liveActions;
 
   /// "realme RMX3242": how the Mac lists this phone.
   Future<String> deviceName();
@@ -34,12 +41,14 @@ class MethodChannelBridge implements PlatformBridge, AudioFocus {
   MethodChannelBridge() {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'link' && call.arguments is String) _links.add(call.arguments as String);
+      if (call.method == 'liveAction' && call.arguments is String) _liveActions.add(call.arguments as String);
       if (call.method == 'audioFocusLost') _focusLost.add(null);
     });
   }
 
   static const MethodChannel _channel = MethodChannel('com.insideedge.mochi/platform');
   final StreamController<String> _links = StreamController.broadcast();
+  final StreamController<String> _liveActions = StreamController.broadcast();
   final StreamController<void> _focusLost = StreamController.broadcast();
 
   @override
@@ -74,6 +83,18 @@ class MethodChannelBridge implements PlatformBridge, AudioFocus {
 
   @override
   Stream<String> get links => _links.stream;
+
+  @override
+  Future<String?> initialLiveAction() async {
+    try {
+      return await _channel.invokeMethod<String>('initialLiveAction');
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  @override
+  Stream<String> get liveActions => _liveActions.stream;
 
   @override
   Future<String> deviceName() async {

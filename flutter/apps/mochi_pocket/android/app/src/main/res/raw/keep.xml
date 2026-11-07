@@ -1,3 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The notification icon is looked up by name from Dart, so release builds' resource shrinking must keep it. -->
-<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/ic_stat_mochi" />
+<!-- The notification icon and the Live Activity art (mochi_scene_*, copied from the iPhone's at build time) are
+     looked up by name, so release builds' resource shrinking must keep them. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/ic_stat_mochi,@drawable/mochi_scene_*" />

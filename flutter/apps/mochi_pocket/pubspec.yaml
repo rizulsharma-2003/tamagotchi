@@ -18,6 +18,9 @@ dependencies:
     path: ../../packages/mochi_art
   mochi_link:
     path: ../../packages/mochi_link
+  # Mochi's ongoing notification while Claude works (A1), a local plugin so the push handler's background engine has it.
+  mochi_live_update:
+    path: plugins/mochi_live_update
   # Alerts from the Mac shown as Android notifications while the app runs (20.1.0: 2026-02; 21+ needs Dart 3.10).
   flutter_local_notifications: 20.1.0
   # Credentials in Android Keystore-backed storage (10.3.4: 2026-09-13; 11.x needs Dart 3.10 through its Windows part).

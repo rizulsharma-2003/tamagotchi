@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Android 16: lets the ongoing notification be promoted to a Live Update (status bar chip, top of the shade and
+         the lock screen). A normal permission, granted at install; the user can still turn it off per app. -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+</manifest>

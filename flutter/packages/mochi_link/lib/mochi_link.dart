@@ -11,6 +11,9 @@
 /// - Models for every value ([PetLook], [ClaudeMirror], [PhoneSessions], [AgentPending], [AgentDoneList],
 ///   [LinkCommand], [LinkReply], …), checked against `link-spec/fixtures`.
 /// - [LinkAlert]: sealed notifications for the phones (4.6.1), on [RelayLink.alerts] and [RelayLink.sendAlert].
+/// - [LinkLiveActivity]: the computer's Live Activity, its title and detail sealed with K_la
+///   ([LinkCrypto.liveActivityKey], `link-spec/live-activity.json`): from an FCM push ([LinkLiveActivity.fromPushData])
+///   or an Android phone's socket ([RelayLink.liveActivities]); [RelayLink.sendLiveActivity] for hosts.
 /// - [LinkPeerNames], [LinkHostName], [LinkPlatform]: what every screen calls the devices in the room ("your Mac",
 ///   "your PC", "realme RMX3242 · Android"), as the Swift apps do.
 ///
@@ -27,6 +30,7 @@ export 'src/link_credentials.dart';
 export 'src/link_crypto.dart';
 export 'src/link_envelope.dart';
 export 'src/link_key.dart';
+export 'src/link_live_activity.dart';
 export 'src/link_names.dart';
 export 'src/link_pairing.dart';
 export 'src/link_socket.dart';

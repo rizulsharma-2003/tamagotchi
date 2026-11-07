@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_pocket/src/app.dart';
+import 'package:mochi_pocket/src/live/live_updates.dart';
 import 'package:mochi_pocket/src/model/app_settings.dart';
 import 'package:mochi_pocket/src/model/done_marks.dart';
 import 'package:mochi_pocket/src/model/pocket_model.dart';
@@ -79,6 +80,8 @@ void main() {
             library: Future.value(library),
             settings: settings,
             reader: UpdatesReader(engine: FakeSpeechEngine(), focus: bridge, settings: settings, language: () => 'en-IN'),
+            live: LiveUpdates(notifier: FakeLiveNotifier(), record: MemoryDocument(), enabled: () async => settings.showOnLockScreen),
+            speech: FakeSpeechListener(),
           ),
         );
         await tester.pump();
@@ -181,7 +184,7 @@ void main() {
       });
 
       testWidgets('settings ($variant)', (tester) async {
-        final (model, _) = await open(tester, height: scale == 1 ? 1700 : 3600);
+        final (model, _) = await open(tester, height: scale == 1 ? 2300 : 4800);
         await tester.tap(find.byTooltip('Settings'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 600));

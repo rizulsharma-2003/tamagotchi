@@ -51,6 +51,25 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
+// Mochi's ongoing notification while Claude works (plugins/mochi_live_update) shows the iPhone's own Live Activity art:
+// the scene for each phase and its ten poses (iOS/Shared/Art.xcassets, scene-<phase>[-<frame>].imageset), copied at
+// build time into drawables named mochi_scene_<phase>[_<frame>], so the pictures are never kept twice.
+val liveActivityArt = rootProject.file("../../../../iOS/Shared/Art.xcassets")
+val liveActivityRes = layout.buildDirectory.dir("generated/mochiLiveActivityArt/res")
+val copyLiveActivityArt by tasks.registering(Sync::class) {
+    from(liveActivityArt) {
+        include("scene-*.imageset/scene-*.png")
+        eachFile { path = "drawable-nodpi/mochi_" + name.removeSuffix(".png").replace('-', '_') + ".png" }
+    }
+    includeEmptyDirs = false
+    into(liveActivityRes)
+    doFirst {
+        require(liveActivityArt.isDirectory) { "Mochi: the Live Activity art isn't at $liveActivityArt" }
+    }
+}
+android.sourceSets.getByName("main").res.srcDir(liveActivityRes)
+tasks.named("preBuild") { dependsOn(copyLiveActivityArt) }
+
 flutter {
     source = "../.."
 }
