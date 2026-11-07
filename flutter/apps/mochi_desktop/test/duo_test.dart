@@ -14,7 +14,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_desktop/src/core/desktop_settings.dart';
-import 'package:mochi_desktop/src/core/pet_cues.dart';
 import 'package:mochi_desktop/src/platform/system.dart';
 import 'package:mochi_desktop/src/platform/taskbar.dart';
 import 'package:mochi_desktop/src/ui/app.dart';
@@ -143,20 +142,14 @@ void main() {
       }
     });
 
-    void session(String name, {String? tool, String? notificationType}) => t.desktop.sessions.apply(
+    void session(String name, {String? tool, String? notificationType}) => t.desktop.receive(
       hook(name, tool: tool, toolUseId: tool == null ? null : 'u-$tool', notificationType: notificationType, at: DateTime.now()),
     );
 
     /// Patch and the stroll on the test's clock, showing the pet.
     Future<(TaskbarStroll, CompanionDirector)> start(WidgetTester tester, {int seed = 7, SystemMotion? motion, FakeTaskbar? info}) async {
       double clock() => tester.binding.clock.now().microsecondsSinceEpoch / 1e6;
-      final companion = CompanionDirector(
-        sessions: t.desktop.sessions,
-        settings: t.desktop.settings,
-        cues: t.desktop.cues,
-        clock: clock,
-        random: Random(seed),
-      )..library = library;
+      final companion = CompanionDirector(t.desktop.world);
       final stroll = TaskbarStroll(
         shell: shell,
         taskbar: info ?? taskbar,
@@ -178,6 +171,8 @@ void main() {
     Future<void> elapse(WidgetTester tester, double seconds, {double step = 0.1, void Function()? each}) async {
       for (var s = 0.0; s < seconds; s += step) {
         await tester.pump(Duration(microseconds: (step * 1e6).round()));
+        // Mochi's world moves on with the clock (its own timer runs only in the app).
+        t.desktop.world.tick();
         each?.call();
       }
     }
@@ -193,7 +188,7 @@ void main() {
       expect(window.frames.last, stage.homeFrame(home, stroll.windowSize));
       expect(stroll.duo!.originX, window.frames.last.left / stage.scale);
       expect(stage.zones.any((zone) => home.minX >= zone.minX - 0.5 && home.deskRight <= zone.maxX + stage.box.width / 2 + 0.5), isTrue);
-      expect(companion.interaction?.id ?? companion.pending, InteractionID.welcome, reason: 'Mochi came over to say hello');
+      expect(companion.interaction?.id, InteractionID.welcome, reason: 'they say hello');
     });
 
     duoTest('Mochi keeps him company: it potters beside him inside the window, which never moves', (tester) async {
@@ -261,7 +256,7 @@ void main() {
       expect((sample.x, sample.style, sample.activity), (stroll.home!.petHome, StrollStyle.attentive, StrollActivity.attend));
     });
 
-    duoTest('a moment together: Mochi trots over first, and it starts when Mochi gets there', (tester) async {
+    duoTest('a moment together: Mochi holds still where it is while it plays, from there to his desk', (tester) async {
       final (stroll, companion) = await start(tester, seed: 3);
       session('SessionStart');
       // Let the welcome play out, and wait for Mochi to wander a little way off.
@@ -273,25 +268,21 @@ void main() {
       }
       expect((stroll.sample()!.x - home.petHome).abs(), greaterThan(19), reason: 'Mochi wandered off (seed 3)');
       session('UserPromptSubmit');
+      await elapse(tester, 3, step: 0.5);
       session('Stop');
-      t.desktop.cue(PetCue.finished);
       await tester.pump();
-      expect(companion.pending, InteractionID.highFive, reason: 'waiting for Mochi');
-      expect(stroll.sample()!.activity, StrollActivity.visit);
-      var started = false;
+      expect(companion.interaction?.id, InteractionID.highFive, reason: "the world's high five, at once");
+      expect(companion.burst, isNotNull, reason: 'and confetti');
+      final spot = stroll.sample()!.x;
+      expect(stroll.sample()!.activity, StrollActivity.react, reason: 'the stroll holds Mochi for it');
       await elapse(
         tester,
-        4,
-        step: 0.05,
+        3,
+        step: 0.1,
         each: () {
-          if (companion.interaction != null && !started) {
-            started = true;
-            expect(stroll.sample()!.x, closeTo(home.petHome, 0.5), reason: 'it starts with Mochi beside him');
-          }
+          if (companion.together) expect(stroll.sample()!.x, closeTo(spot, 0.5), reason: 'Mochi stays on its spot meanwhile');
         },
       );
-      expect(started, isTrue);
-      expect(companion.burst, isNotNull, reason: 'and confetti');
     });
 
     duoTest('Patch leaves: Mochi has the taskbar to itself again, in its own small window', (tester) async {
@@ -300,7 +291,8 @@ void main() {
       await elapse(tester, 0.5);
       expect(stroll.home, isNotNull);
       t.desktop.settings.companionVisibility = CompanionVisibility.never;
-      await elapse(tester, 3);
+      // Once their hello is over, he packs up and goes (the world's departure).
+      await elapse(tester, 8);
       expect((companion.visible, stroll.home), (false, null));
       expect(window.frames.last.width, 64);
       expect(stroll.placement, PetPlacement.taskbar);
@@ -390,7 +382,7 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 100));
       final state = tester.state<DesktopAppState>(find.byType(DesktopApp));
-      t.desktop.sessions.apply(hook('SessionStart', at: DateTime.now()));
+      t.desktop.receive(hook('SessionStart', at: DateTime.now()));
       await tester.pump(const Duration(milliseconds: 500));
       final stroll = state.stroll;
       final frame = stroll.frame!;
@@ -404,8 +396,8 @@ void main() {
       expect(find.bySemanticsLabel(RegExp(r'Byte (is|and Mochi)')), findsOneWidget);
 
       // Claude asks for permission: Patch asks for your OK, by his name.
-      t.desktop.sessions.apply(hook('PreToolUse', tool: 'Bash', toolUseId: 'b1', at: DateTime.now()));
-      t.desktop.sessions.apply(hook('Notification', notificationType: 'permission_prompt', at: DateTime.now()));
+      t.desktop.receive(hook('PreToolUse', tool: 'Bash', toolUseId: 'b1', at: DateTime.now()));
+      t.desktop.receive(hook('Notification', notificationType: 'permission_prompt', at: DateTime.now()));
       await tester.pump(const Duration(seconds: 6));
       // The mood reaches the bubble a frame later.
       await tester.pump();

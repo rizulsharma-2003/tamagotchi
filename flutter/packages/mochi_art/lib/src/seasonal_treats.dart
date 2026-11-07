@@ -3,30 +3,13 @@
 import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
+import 'package:mochi_world/mochi_world.dart' show TreatStyle;
 
 import 'drawing.dart';
 import 'item_renderer.dart';
-import 'model/world.dart';
 
-/// The treat Mochi gets depends on the season: candy at Halloween, a laddoo at Diwali,
-/// gingerbread at Christmas, cake on birthdays.
-enum TreatStyle {
-  cookie,
-  candy,
-  laddoo,
-  gingerbread,
-  cakeSlice,
-  heartCookie;
-
-  static TreatStyle of(SeasonalEvent? event) => switch (event) {
-    SeasonalEvent.halloween => TreatStyle.candy,
-    SeasonalEvent.diwali => TreatStyle.laddoo,
-    SeasonalEvent.christmas => TreatStyle.gingerbread,
-    SeasonalEvent.userBirthday || SeasonalEvent.mochiBirthday => TreatStyle.cakeSlice,
-    SeasonalEvent.valentines => TreatStyle.heartCookie,
-    SeasonalEvent.newYear || null => TreatStyle.cookie,
-  };
-}
+// `TreatStyle` (which treat for which holiday) lives in mochi_world with the seasons; the art for each is here.
+export 'package:mochi_world/mochi_world.dart' show TreatStyle;
 
 /// Drawn in place of the cookie, centred on the origin.
 abstract final class SeasonalTreats {

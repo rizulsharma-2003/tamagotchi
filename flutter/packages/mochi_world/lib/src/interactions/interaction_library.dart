@@ -38,7 +38,7 @@ enum ScenePropKind { ball, orb, clap, confetti, sparkle, butterfly, yarn, leaf, 
 
 /// A prop that belongs to the scene rather than to one character.
 class SceneProp {
-  SceneProp(this.kind, {required this.x, required this.y, this.scale = 1, this.opacity = 1, this.rotation = 0, this.variant = 0});
+  SceneProp(this.kind, {this.x = 0, this.y = 0, this.scale = 1, this.opacity = 1, this.rotation = 0, this.variant = 0});
 
   factory SceneProp.fromJson(Map<String, Object?> j) => SceneProp(
     enumByName(ScenePropKind.values, j['kind']) ?? ScenePropKind.sparkle,

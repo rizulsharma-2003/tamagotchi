@@ -276,7 +276,7 @@ class _RoomPageState extends State<RoomPage> {
       ('fishBowl', 0.87, 0.9, true),
     ];
     for (final (id, x, y, flipped) in picks) {
-      room.add(FurnitureCatalog.kind(id)!, x, y, flipped: flipped);
+      room.add(FurnitureCatalog.kind(id)!, x: x, y: y, flipped: flipped);
     }
     return room;
   }

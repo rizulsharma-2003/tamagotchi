@@ -1,8 +1,5 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_art/mochi_art.dart';
-import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_desktop/src/core/pet_cues.dart';
 import 'package:mochi_desktop/src/core/session_store.dart';
 import 'package:mochi_desktop/src/core/sessions.dart';
@@ -184,28 +181,24 @@ void main() {
       expect(PetMood.napping.description, 'Mochi is napping');
     });
 
-    test('the recorded animations play: loops for moods, one-shots for moments, calmer when asked', () {
-      final library = PoseLibrary.parse(File('assets/pose_tracks.json.deflate').readAsBytesSync());
-      for (final mood in PetMood.values) {
-        expect(library.petTrack(mood.loop), isNotNull, reason: '${mood.loop} is recorded');
-      }
-      final director = PetDirector();
-      director.follow(PetMood.watching, time: 0);
-      final calm = director.pose(library, 1.3, calm: true);
-      final lively = director.pose(library, 1.3);
-      expect(calm.toJson(), isNot(lively.toJson()));
-      director.cue(PetCue.pet, time: 2);
-      expect(director.shot?.animation, PetAnimation.petted);
-      director.cue(PetCue.working, time: 2.5);
-      expect(director.shot?.animation, PetAnimation.petted, reason: "news doesn't cut a pet short");
-      director.cue(PetCue.finished, time: 10);
-      expect(director.shot?.animation, PetAnimation.happyBounce);
-      director.pose(library, 100);
-      expect(director.shot, isNull, reason: 'one-shots end');
-      director
-        ..follow(PetMood.napping, time: 101)
-        ..follow(PetMood.watching, time: 200);
-      expect(director.shot?.animation, PetAnimation.wakeUp);
+    test("Mochi's poses come from its world: its loop for the mood, its moments over it, the nap the world's", () {
+      var seconds = 1000.0;
+      final t = TestDesktop.make(uptime: () => seconds);
+      addTearDown(t.dispose);
+      final director = PetDirector(t.desktop.world)..follow(PetMood.watching);
+      final loop = director.pose(seconds, quantum: 1 / 15);
+      expect(loop.repeats, isTrue, reason: 'a loop: its picture can be kept');
+      expect(director.playing, isFalse);
+      t.desktop.cue(PetCue.pet);
+      expect(director.playing, isTrue);
+      expect(t.desktop.world.world.pet.current.animation, PetAnimation.petted);
+      seconds += 0.5;
+      expect(director.pose(seconds).repeats, isFalse, reason: 'a moment is drawn from the art');
+      seconds += 10;
+      t.desktop.world.tick();
+      expect(director.playing, isFalse, reason: 'moments end');
+      expect(PetMood.of(t.desktop.sessions, now: t.desktop.sessions.now, lastActivity: at(0), asleep: true), PetMood.napping);
+      expect(PetMood.of(t.desktop.sessions, now: t.desktop.sessions.now, lastActivity: at(0), asleep: false), PetMood.relaxed);
     });
   });
 }

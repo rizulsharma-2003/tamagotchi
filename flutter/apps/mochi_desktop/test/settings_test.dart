@@ -366,18 +366,22 @@ void main() {
       }
 
       await choose('Mochi wears', 'Round Glasses');
-      await choose('Patch wears', 'Tiny Headphones');
+      // The headphones come with an achievement (Hello, Patch): shown with how to get them, not to be chosen yet.
+      final patchMenu = tester.widget<MenuRow<Accessory?>>(find.ancestor(of: find.text('Patch wears'), matching: find.byType(MenuRow<Accessory?>)));
+      expect(patchMenu.items, contains((Accessory.headphones, 'Tiny Headphones — Unlock: Hello, Patch')));
+      expect(patchMenu.locked, contains(Accessory.headphones));
+      await choose('Patch wears', 'Knitted Scarf');
       await choose('On the desk', 'Rubber Duck');
       await choose('Office theme', 'Space Station');
       expect(
         (settings.petAccessory, settings.companionAccessory, settings.deskAccessory, settings.officeTheme),
-        (Accessory.roundGlasses, Accessory.headphones, Accessory.rubberDuck, OfficeTheme.spaceStation),
+        (Accessory.roundGlasses, Accessory.scarf, Accessory.rubberDuck, OfficeTheme.spaceStation),
       );
       expect(t.document.json!['deskAccessory'], 'rubberDuck');
       expect(tester.takeException(), isNull);
 
-      // Mochi's window: the room, the pet in lavender with round glasses, Patch in headphones at a Space Station desk
-      // with the duck.
+      // Mochi's window: the room, the pet in lavender with round glasses, Patch in a scarf at a Space Station desk with
+      // the duck.
       state.open(MainPage.home);
       await tester.pump(const Duration(milliseconds: 300));
       SceneConfig room() => (tester.widget<CustomPaint>(
@@ -385,7 +389,7 @@ void main() {
       ).painter! as LiveRoomPainter).config;
       expect(
         (room().petColor, room().wornByPet, room().wornByCompanion, room().deskAccessory, room().theme),
-        (PetColor.lavender, Accessory.roundGlasses, Accessory.headphones, Accessory.rubberDuck, OfficeTheme.spaceStation),
+        (PetColor.lavender, Accessory.roundGlasses, Accessory.scarf, Accessory.rubberDuck, OfficeTheme.spaceStation),
       );
       // Nothing chosen: Diwali's flower crown.
       settings.petAccessory = null;

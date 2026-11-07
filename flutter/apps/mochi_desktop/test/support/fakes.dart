@@ -7,9 +7,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart' show TestWidgetsFlutterBinding;
 import 'package:flutter/foundation.dart' show Uint8List;
 import 'package:mochi_desktop/src/core/claude_cli.dart';
 import 'package:mochi_desktop/src/core/desktop_settings.dart';
+import 'package:mochi_desktop/src/core/desktop_world.dart';
 import 'package:mochi_desktop/src/core/hook_setup.dart';
 import 'package:mochi_desktop/src/core/hotkeys.dart';
 import 'package:mochi_desktop/src/core/pc_rhythm.dart';
@@ -629,7 +631,11 @@ class TestDesktop {
     this.sound,
     this.usage,
     this.hotkeys,
+    this.worldStore,
   );
+
+  /// Where Mochi's world is kept (memory).
+  final MemoryWorldStore worldStore;
 
   final FakeToasts toasts;
   final FakeSound sound;
@@ -662,6 +668,9 @@ class TestDesktop {
     SelfInstaller? installer,
     FakeToasts? toasts,
     SystemActivity? activity,
+    double Function()? uptime,
+    int? worldSeed = 0x5EED5,
+    MemoryWorldStore? worldStore,
   }) {
     final temp = Directory.systemTemp.createTempSync('mochi_desktop_test');
     final toastService = toasts ?? FakeToasts();
@@ -675,6 +684,7 @@ class TestDesktop {
     final vault = MemoryVault(saved);
     final document = MemorySettingsDocument(settings);
     final start = startup ?? FakeStartup();
+    final store = worldStore ?? MemoryWorldStore();
     final desktop = MochiDesktop(
       paths: paths,
       settings: DesktopSettings(document, clock: clock),
@@ -713,13 +723,28 @@ class TestDesktop {
       sound: sound,
       usage: usage,
       hotkeys: hotkeys,
+      worldStore: store,
+      uptime: uptime ?? testSeconds,
+      worldSeed: worldSeed,
     );
-    return TestDesktop._(temp, desktop, sockets, api, claude, vault, document, start, toastService, sound, usage, hotkeys);
+    return TestDesktop._(temp, desktop, sockets, api, claude, vault, document, start, toastService, sound, usage, hotkeys, store);
   }
 
   Future<void> dispose() async {
     await desktop.dispose();
     if (temp.existsSync()) temp.deleteSync(recursive: true);
+  }
+}
+
+final Stopwatch _testWatch = Stopwatch()..start();
+
+/// Seconds on the test's clock, for Mochi's world: inside `testWidgets` the fake clock (it moves with `pump`, as the
+/// stroll's does), elsewhere a stopwatch.
+double testSeconds() {
+  try {
+    return TestWidgetsFlutterBinding.instance.clock.now().microsecondsSinceEpoch / 1e6;
+  } on Object {
+    return _testWatch.elapsedMicroseconds / 1e6;
   }
 }
 

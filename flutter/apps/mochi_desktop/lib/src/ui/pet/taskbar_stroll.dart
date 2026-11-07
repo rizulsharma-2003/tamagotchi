@@ -28,7 +28,9 @@
 //   desk takes a spot in a free stretch, with Mochi's place beside it, as mini Patch sits beside Mochi's bed in the
 //   Mac's menu bar. The window then covers both (Mochi stays near him, as on the Mac), it doesn't move while Mochi
 //   potters about inside it, and clicks reach both of them (only their bodies). With no stretch roomy enough for both,
-//   Patch stays off the taskbar and Mochi has it to itself. For a moment together, Mochi trots over first.
+//   Patch stays off the taskbar and Mochi has it to itself. A moment together runs from where Mochi is to his desk.
+// - While Mochi's world reacts (a moment together, Claude's news, a pet: the Mac's roamer freezes for these), Mochi holds
+//   still where it is until it's over.
 // - The taskbar is looked at again every 10 seconds and after display or DPI changes. Its buttons are measured with UI
 //   Automation only when something on it may have moved (TaskbarInfo.fingerprint: the app windows that have buttons,
 //   the tray's width), or once a minute, and not while Mochi naps.
@@ -137,11 +139,14 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
        stroller = Stroller(random: random, tuning: tuning),
        _roaming = settings.roamTaskbar {
     _cues = cues.listen(_cue);
+    _celebrations = companion?.host.celebrated.listen((_) => _celebrated());
     settings.addListener(_settingsChanged);
     motion.addListener(_motionChanged);
     companion?.addListener(_companionChanged);
+    companion?.host.addListener(_holdForWorld);
     rhythm?.addListener(_rhythmChanged);
     _companionOnTaskbar = settings.companionOnTaskbar;
+    _onlyMoments = settings.companionOnlyMoments;
     _spotSeen = _spotOf(settings);
     _standingSeen = _standingOf(settings);
   }
@@ -197,6 +202,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   final Duration Function() _idle;
   final double Function() _clock;
   late final StreamSubscription<PetCue> _cues;
+  StreamSubscription<Object?>? _celebrations;
 
   Surface _surface = Surface.hidden;
   PetPlacement _placement = PetPlacement.away;
@@ -225,7 +231,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   bool _patchWanted = false;
   bool _companionOnTaskbar = true;
   double? _homeNear;
-  Timer? _summonTimer;
+  Object? _heldFor;
   int _checks = 0;
   Timer? _frameTimer;
   Timer? _wakeTimer;
@@ -334,8 +340,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   bool get checking => _checkTimer != null;
 
   /// Any of the stroll's timers.
-  bool get anyTimer =>
-      moving || waiting || watchingPointer || checking || _summonTimer != null || _popoverTimer != null || _momentTimer != null;
+  bool get anyTimer => moving || waiting || watchingPointer || checking || _popoverTimer != null || _momentTimer != null;
 
   /// Nobody can see the screen: everything waits.
   bool get _unseen => rhythm?.unseen ?? false;
@@ -872,7 +877,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     }
     _notify();
     _tick();
-    _summon();
+    _holdForWorld();
   }
 
   /// Off the taskbar (or off the desktop): the window takes clicks again and nothing watches the pointer.
@@ -885,8 +890,6 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     _nearPointer = false;
     _lastHome = _home ?? _lastHome;
     _home = null;
-    _summonTimer?.cancel();
-    _summonTimer = null;
     _pointerTimer?.cancel();
     _pointerTimer = null;
     if (_clickThrough != null) {
@@ -1105,8 +1108,8 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
       PetCue.goodbye => 1.4,
       _ => null,
     };
-    // A moment with Patch is the reaction itself: Mochi is on its way over to him, or already there.
-    final together = companion?.pending != null || companion?.interaction != null;
+    // A moment with Patch is the reaction itself: the world holds Mochi for it ([_holdForWorld]).
+    final together = companion?.together ?? false;
     if (hold == null || !onTaskbar || _dragging || together) return;
     const news = {PetCue.finished, PetCue.snag, PetCue.replied, PetCue.celebrate, PetCue.cheer, PetCue.worry, PetCue.greet};
     stroller.react(_clock(), hold, attentive: news.contains(cue));
@@ -1128,6 +1131,12 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
       PetCue.needsYou,
     };
     if (!moments.contains(cue)) return;
+    _momentUntil = _clock() + momentLength;
+    if (settings.companionOnlyMoments) _companionChanged();
+  }
+
+  /// A real Claude moment earned a celebration (G2): with "only for interesting moments", Patch comes out for it.
+  void _celebrated() {
     _momentUntil = _clock() + momentLength;
     if (settings.companionOnlyMoments) _companionChanged();
   }
@@ -1195,32 +1204,23 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
 
   bool _onlyMoments = false;
 
-  /// Patch arrived, left, or wants Mochi over for a moment together (or, with "only for interesting moments", a moment
-  /// began or ended).
+  /// Patch arrived or left, Mochi's world started a moment (or, with "only for interesting moments", a moment began or
+  /// ended).
   void _companionChanged() {
     if (_disposed) return;
     if (_wantsPatch != _patchWanted && _surface == Surface.pet) unawaited(_enqueue(_place));
-    _summon();
   }
 
-  /// A moment together is waiting: Mochi trots over to Patch, and it starts when Mochi gets there. Where Patch isn't
-  /// on the taskbar (no room, or it's off) there's nobody to see it, so it starts (and ends) at once.
-  void _summon() {
-    final companion = this.companion;
-    final id = companion?.pending;
-    if (companion == null || id == null || _summonTimer != null || _surface != Surface.pet) return;
-    final now = _clock();
-    final besidePatch = onTaskbar && !_dragging && !_fullscreen && _home != null;
-    final arrival = besidePatch ? stroller.summon(now, companion.lengthOf(id)) : null;
-    if (arrival == null) {
-      companion.startPending();
-      return;
-    }
+  /// While Mochi's world reacts (a moment together with Patch, Claude's news, a pet: the Mac's roamer freezes for
+  /// these), Mochi holds still where it is, once per moment, for as long as the moment has left.
+  void _holdForWorld() {
+    final world = companion?.host;
+    if (_disposed || world == null || !world.reacting || !onTaskbar || _dragging || _surface != Surface.pet || !stroller.isPlaced) return;
+    final moment = world.world.interaction?.startedAt ?? world.world.pet.current.token;
+    if (moment == _heldFor) return;
+    _heldFor = moment;
+    stroller.react(_clock(), world.reactionLeft);
     _tick();
-    _summonTimer = Timer(Duration(microseconds: ((arrival - now) * 1e6).ceil()), () {
-      _summonTimer = null;
-      if (companion.pending == id) companion.startPending();
-    });
   }
 
   void _start() {
@@ -1297,8 +1297,6 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     _halt();
     _popoverTimer?.cancel();
     _popoverTimer = null;
-    _summonTimer?.cancel();
-    _summonTimer = null;
     _pointerTimer?.cancel();
     _pointerTimer = null;
     _checkTimer?.cancel();
@@ -1347,9 +1345,11 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     _precise(false);
     if (_covered) shell.petWindow?.uncover();
     unawaited(_cues.cancel());
+    unawaited(_celebrations?.cancel());
     settings.removeListener(_settingsChanged);
     motion.removeListener(_motionChanged);
     companion?.removeListener(_companionChanged);
+    companion?.host.removeListener(_holdForWorld);
     rhythm?.removeListener(_rhythmChanged);
     super.dispose();
   }

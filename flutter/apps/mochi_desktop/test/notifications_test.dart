@@ -453,8 +453,8 @@ void main() {
       expect(t.desktop.settings.delivery(NotificationCategory.turnCompleted).banner, isTrue);
       expect(box(tester, 'Tool activity: Banner').onChanged, isNull);
       expect(box(tester, 'Session start & end: Badge').onChanged, isNull);
-      expect(box(tester, 'Achievements: Animate').onChanged, isNull, reason: 'no achievements on Windows yet');
-      expect(find.text(SoonRow.tag), findsOneWidget);
+      expect(box(tester, 'Achievements: Animate').onChanged, isNotNull, reason: 'achievements on Windows now (W13)');
+      expect(find.text(SoonRow.tag), findsNothing);
       expect(box(tester, 'Turn completed: Sound').onChanged, isNull, reason: 'Play sounds is off');
       await tester.ensureVisible(find.text('Restore Defaults'));
       await tester.tap(find.text('Restore Defaults'));

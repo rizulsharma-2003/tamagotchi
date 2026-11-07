@@ -3,18 +3,19 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart';
-import 'package:mochi_art/pose_tracks.dart';
 
-import '../../core/pet_cues.dart';
 import '../../desktop.dart';
 import 'companion_director.dart';
 import 'pet_director.dart';
+import 'speech_bubble.dart';
 
 /// Mochi's room in Mochi's window, as the phones' home screens show it (mochi_pocket's RoomView, the iPhone's
 /// RoomView.swift): the room's style and today's holiday, Patch at his desk doing what Claude does (his desk empty
 /// while he's away), and Mochi, watching Claude work, waving when Claude needs you, napping after a quiet while and
 /// reacting to you. They share Claude's moments: a high five when a turn finishes, a coffee or a game now and then.
-/// Click Mochi to pet it, or Patch for a wave.
+/// Everyone is drawn as Mochi's world has them (`MochiWorld.frame`, the Mac's scene), with a bubble over whoever is
+/// talking (W11) and the world's note at the top (an achievement, a new friendship level, growing up). Click Mochi to
+/// pet it, or Patch for a wave.
 ///
 /// It's drawn only as often as what's happening needs (as the taskbar's Mochi is): smooth for a moment together, a
 /// calm 10–12 frames a second otherwise, fewer while both nap; calmer still with animations off.
@@ -23,7 +24,6 @@ class RoomView extends StatefulWidget {
     super.key,
     required this.desktop,
     required this.companion,
-    required this.library,
     required this.lastActivity,
     this.layout = SceneLayout.phone,
     this.hidePet = false,
@@ -31,9 +31,6 @@ class RoomView extends StatefulWidget {
 
   final MochiDesktop desktop;
   final CompanionDirector companion;
-
-  /// The recorded animations (null while they load: everyone stands still).
-  final PoseLibrary? library;
 
   /// The last hook event, pet or launch: a long quiet stretch sends Mochi to sleep.
   final DateTime Function() lastActivity;
@@ -57,8 +54,7 @@ class RoomView extends StatefulWidget {
 
 class _RoomViewState extends State<RoomView> {
   final ValueNotifier<double> _clock = ValueNotifier(0);
-  final PetDirector _pet = PetDirector();
-  StreamSubscription<PetCue>? _cues;
+  PetMood _mood = PetMood.relaxed;
   Timer? _moodTimer;
   Timer? _frames;
   double _fps = 0;
@@ -70,7 +66,6 @@ class _RoomViewState extends State<RoomView> {
   @override
   void initState() {
     super.initState();
-    _cues = widget.desktop.cues.listen(_cue);
     widget.desktop.sessions.addListener(_follow);
     companion.addListener(_companionChanged);
     _moodTimer = Timer.periodic(const Duration(seconds: 5), (_) => _follow());
@@ -78,25 +73,26 @@ class _RoomViewState extends State<RoomView> {
     _companionChanged();
   }
 
-  void _cue(PetCue cue) {
-    _pet.cue(cue, time: _time);
-    _frame();
-  }
-
   void _follow() {
-    final sessions = widget.desktop.sessions;
-    final mood = PetMood.of(sessions, now: sessions.now, lastActivity: widget.lastActivity(), rhythm: widget.desktop.rhythm);
-    if (mood != _pet.mood) {
-      _pet.follow(mood, time: _time);
+    final desktop = widget.desktop;
+    final sessions = desktop.sessions;
+    final mood = PetMood.of(
+      sessions,
+      now: sessions.now,
+      lastActivity: widget.lastActivity(),
+      rhythm: desktop.rhythm,
+      asleep: desktop.world.asleep,
+    );
+    if (mood != _mood) {
+      _mood = mood;
       if (mounted) setState(() {});
     }
     _frame();
   }
 
-  /// Patch's news: in the room he and Mochi are always side by side, so a moment together starts at once.
+  /// The world's news (a moment, Patch coming or going, a nap).
   void _companionChanged() {
-    if (companion.pending != null) companion.startPending();
-    _frame();
+    _follow();
     if (mounted) setState(() {});
   }
 
@@ -106,8 +102,8 @@ class _RoomViewState extends State<RoomView> {
     final time = _time;
     _clock.value = time;
     final fps = RoomView.frameRate(
-      mood: _pet.mood,
-      petMoment: _pet.playing(widget.library, time),
+      mood: _mood,
+      petMoment: widget.desktop.world.world.pet.isPlayingOneShot,
       companion: companion.visible ? companion.frameRate(time) : 0,
       calm: _calm,
     );
@@ -117,25 +113,21 @@ class _RoomViewState extends State<RoomView> {
     _frames = Timer.periodic(Duration(microseconds: (1e6 / fps).round()), (_) => _frame());
   }
 
-  /// Everyone at [time]: a moment together, or each at what they're doing.
+  /// Everyone at [time], as the world has them (a moment together, or each at what they're doing).
   SceneFrame _scene(double time) {
-    final library = widget.library;
-    final helpers = math.min(3, widget.desktop.sessions.primary?.activeSubagents.length ?? 0);
-    final together = companion.scene(time);
-    if (together != null) {
-      return SceneFrame(pet: together.pet, companion: together.companion, props: together.props, subagents: helpers);
-    }
+    final frame = widget.desktop.world.world.frame(time);
     return SceneFrame(
-      pet: _pet.pose(library, time, calm: _calm),
-      companion: companion.pose(library, time, calm: _calm),
-      companionVisible: companion.visible,
-      subagents: companion.visible ? helpers : 0,
+      pet: frame.pet,
+      companion: frame.companion,
+      props: frame.props,
+      companionVisible: frame.companionVisible,
+      companionVelocity: frame.companionVelocity,
+      subagents: frame.companionVisible ? math.min(3, frame.subagents) : 0,
     );
   }
 
   @override
   void dispose() {
-    unawaited(_cues?.cancel());
     widget.desktop.sessions.removeListener(_follow);
     companion.removeListener(_companionChanged);
     _moodTimer?.cancel();
@@ -172,7 +164,7 @@ class _RoomViewState extends State<RoomView> {
         return Semantics(
           container: true,
           explicitChildNodes: true,
-          label: "$pet's room. ${_pet.mood.describe(pet)}. ${companion.describe(patch)}.",
+          label: "$pet's room. ${_mood.describe(pet)}. ${companion.describe(patch)}.",
           child: Stack(
             children: [
               Positioned.fill(
@@ -191,6 +183,38 @@ class _RoomViewState extends State<RoomView> {
                     ),
                   ),
                 ),
+              ),
+              // What Mochi or Patch is saying, over whoever speaks (the Mac's SceneSpeechOverlay).
+              ValueListenableBuilder(
+                valueListenable: widget.desktop.world.speechNow,
+                builder: (context, speech, _) {
+                  final byPatch = speech?.speaker.name == 'companion';
+                  if (speech == null || (byPatch && !companion.visible)) return const SizedBox.shrink();
+                  final frame = byPatch ? layout.companionFrame : layout.petFrame;
+                  const half = MochiBubble.maxWidth / 2;
+                  final x = frame.center.dx.clamp(half, math.max(half, constraints.maxWidth - half));
+                  final bottom = math.max(40.0, frame.top + (byPatch ? -4 : 4));
+                  return Positioned(
+                    left: x - half,
+                    width: MochiBubble.maxWidth,
+                    bottom: math.max(0.0, constraints.maxHeight - bottom),
+                    child: IgnorePointer(
+                      child: Align(alignment: Alignment.bottomCenter, child: MochiBubble(key: ObjectKey(speech), text: speech.text)),
+                    ),
+                  );
+                },
+              ),
+              // The world's note at the top of the scene.
+              ValueListenableBuilder(
+                valueListenable: widget.desktop.world.toastNow,
+                builder: (context, note, _) => note == null
+                    ? const SizedBox.shrink()
+                    : Positioned(
+                        top: 6,
+                        left: 8,
+                        right: 8,
+                        child: IgnorePointer(child: Center(child: SceneNote(title: note.title, detail: note.detail))),
+                      ),
               ),
               Positioned.fromRect(
                 rect: layout.petFrame.inflate(10),

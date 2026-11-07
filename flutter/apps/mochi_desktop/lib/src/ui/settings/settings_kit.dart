@@ -338,7 +338,9 @@ class ChoiceRow<T> extends StatelessWidget {
 
   final String label;
   final T selected;
-  final ValueChanged<T> onSelected;
+
+  /// Null: shown but can't be changed now.
+  final ValueChanged<T>? onSelected;
   final List<(T, String, IconData)> choices;
 
   @override
@@ -365,7 +367,7 @@ class ChoiceRow<T> extends StatelessWidget {
                   labelStyle: context.type.label.copyWith(fontSize: 13, color: value == selected ? p.onTint : p.ink),
                   backgroundColor: p.sunken,
                   side: BorderSide(color: p.stroke),
-                  onSelected: (_) => onSelected(value),
+                  onSelected: onSelected == null ? null : (_) => onSelected!(value),
                 ),
             ],
           ),
@@ -377,12 +379,15 @@ class ChoiceRow<T> extends StatelessWidget {
 
 /// A label and a menu of choices (accessories, the theme, a birthday).
 class MenuRow<T> extends StatelessWidget {
-  const MenuRow({super.key, required this.label, required this.value, required this.items, required this.onChanged});
+  const MenuRow({super.key, required this.label, required this.value, required this.items, required this.onChanged, this.locked = const {}});
 
   final String label;
   final T value;
   final List<(T, String)> items;
   final ValueChanged<T>? onChanged;
+
+  /// Items shown but not to be chosen now (an accessory not earned yet).
+  final Set<T> locked;
 
   @override
   Widget build(BuildContext context) {
@@ -401,7 +406,11 @@ class MenuRow<T> extends StatelessWidget {
           onChanged: onChanged == null ? null : (value) => onChanged!(value as T),
           items: [
             for (final (item, text) in items)
-              DropdownMenuItem<T>(value: item, child: Text(text, overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem<T>(
+                value: item,
+                enabled: !locked.contains(item),
+                child: Text(text, overflow: TextOverflow.ellipsis, style: locked.contains(item) ? TextStyle(color: p.inkSecondary) : null),
+              ),
           ],
         ),
       ),

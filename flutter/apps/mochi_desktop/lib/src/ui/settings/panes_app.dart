@@ -99,7 +99,13 @@ class PrivacyPane extends StatelessWidget {
             InfoRow(label: 'Events while Mochi was closed', value: desktop.paths.spoolFile, selectable: true),
             InfoRow(label: 'The link to your phones', value: link.vaultDescription),
             InfoRow(label: 'Claude Code backups', value: desktop.paths.backupsDirectory, selectable: true),
-            const NoteRow(text: 'No history of your sessions is kept: they live in memory while Mochi runs.'),
+            InfoRow(label: '$pet’s world', value: desktop.world.file ?? 'In memory only', selectable: desktop.world.file != null),
+            NoteRow(
+              text:
+                  '$pet’s world keeps your friendship and achievements, and Claude Code’s events of the last three hours (event '
+                  'names, session ids, project folder names, tool names) so $pet picks up where it was after a restart. Never '
+                  'paths, prompts or notification text; older events are dropped.',
+            ),
             ActionsRow(
               children: [
                 OutlinedButton(

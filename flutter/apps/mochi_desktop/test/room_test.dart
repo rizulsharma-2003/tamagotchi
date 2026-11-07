@@ -56,12 +56,15 @@ void main() {
     for (final scale in [1.0, 2.0]) {
       testWidgets('the room with Patch at work (${theme.name}, ${scale.toStringAsFixed(0)}×)', (tester) async {
         t.desktop.settings.companionName = 'Byte';
-        t.desktop.sessions
-          ..apply(hook('SessionStart', at: DateTime.now()))
-          ..apply(hook('UserPromptSubmit', at: DateTime.now()))
-          ..apply(hook('PreToolUse', tool: 'Edit', toolUseId: 'e', at: DateTime.now()));
+        t.desktop
+          ..receive(hook('SessionStart', at: DateTime.now()))
+          ..receive(hook('UserPromptSubmit', at: DateTime.now()))
+          ..receive(hook('PreToolUse', tool: 'Edit', toolUseId: 'e', at: DateTime.now()));
         await show(tester, theme: theme, scale: scale);
         await tester.pump(const Duration(seconds: 6));
+        // Mochi's world moves on (its own timer runs only in the app): the welcome is over, Patch is at work.
+        t.desktop.world.tick();
+        await tester.pump();
         expect(tester.takeException(), isNull);
         final room = tester.getSize(find.byType(RoomView));
         expect(room.height, closeTo(HomeScreen.roomHeight, 2), reason: 'inside its card');
@@ -76,7 +79,8 @@ void main() {
         final state = tester.state<DesktopAppState>(find.byType(DesktopApp));
         await tester.tap(find.bySemanticsLabel('Byte. Click for a wave.'));
         await tester.pump();
-        expect(state.companion.shot?.animation, CompanionAnimation.greet);
+        // At work he nods back (the Mac's pokeCompanion; idle, he waves).
+        expect(state.companion.world.companion.current.animation, CompanionAnimation.nod);
         await tester.pump(const Duration(seconds: 1));
         expect(tester.takeException(), isNull);
       });

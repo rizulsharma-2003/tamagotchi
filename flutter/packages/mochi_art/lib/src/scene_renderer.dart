@@ -43,11 +43,30 @@ class SceneConfig {
     petAccessory: enumByName(Accessory.values, j['petAccessory']),
     companionAccessory: enumByName(Accessory.values, j['companionAccessory']),
     deskAccessory: j.containsKey('deskAccessory') ? enumByName(Accessory.values, j['deskAccessory']) : Accessory.plant,
-    room: RoomLayout.fromJson(j['room']),
+    room: roomFromJson(j['room']),
     season: enumByName(SeasonalEvent.values, j['season']),
     reducedMotion: boolean(j, 'reducedMotion', false),
     petAway: boolean(j, 'petAway', false),
   );
+
+  /// A scene's room, read as leniently as the art always read it: a piece without an id (the Swift reference scenes
+  /// have none) gets one by its place in the list, and a missing position or kind takes the old defaults. (mochi_world's
+  /// `RoomLayout.fromJson` is strict, like the Mac's settings, and would skip such a piece.)
+  static RoomLayout roomFromJson(Object? json) {
+    final raw = json is Map ? json['items'] : json;
+    if (raw is! List) return RoomLayout();
+    final items = raw.whereType<Map<Object?, Object?>>().toList();
+    return RoomLayout.fromJson([
+      for (final (index, item) in items.indexed)
+        {
+          ...item.cast<String, Object?>(),
+          if (item['id'] is! String) 'id': 'item-$index',
+          if (item['kind'] is! String) 'kind': '',
+          if (item['x'] is! num) 'x': 0.5,
+          if (item['y'] is! num) 'y': 0.9,
+        },
+    ]);
+  }
 
   OfficeTheme theme;
   PetColor petColor;
@@ -123,7 +142,7 @@ abstract final class SceneRenderer {
     SeasonRenderContext.petColor = config.petColor;
     if (layout.background) {
       ThemeRenderer.background(config.theme, g, layout.size, layout.ground, dark: dark, time: time, hour: hour);
-      SeasonDecor.drawRoom(config.season, g, layout, dark: dark, time: time);
+      SeasonDecorArt.drawRoom(config.season, g, layout, dark: dark, time: time);
       RoomDecor.draw(config.room, g, layout, dark: dark, time: time);
     }
 
@@ -182,7 +201,7 @@ abstract final class SceneRenderer {
       final point = Offset(layout.petHome + prop.x * layout.path, layout.ground - prop.y * PetRenderer.bodyHeight * layout.scale);
       EffectRenderer.drawProp(prop, g, point, layout.scale, dark);
     }
-    SeasonDecor.drawForeground(config.season, g, layout, dark: dark, time: time, reduced: config.reducedMotion);
+    SeasonDecorArt.drawForeground(config.season, g, layout, dark: dark, time: time, reduced: config.reducedMotion);
   }
 
   /// Subagents are tiny mascots hopping around the big one, each on its own beat.

@@ -295,10 +295,10 @@ class RoomLayout {
   }
 
   /// Adds a piece, at (x, y) or at a free spot near its default place. Returns null when the room is full.
-  PlacedFurniture? add(FurnitureKind kind, {double? x, double? y, String? id}) {
+  PlacedFurniture? add(FurnitureKind kind, {double? x, double? y, String? id, bool flipped = false}) {
     if (isFull) return null;
     final position = x != null && y != null ? snapped(kind, x, y) : freeSpot(kind);
-    final item = PlacedFurniture(id: id ?? _newID(), kind: kind.id, x: position.$1, y: position.$2);
+    final item = PlacedFurniture(id: id ?? _newID(), kind: kind.id, x: position.$1, y: position.$2, flipped: flipped);
     items.add(item);
     return item;
   }

@@ -1,6 +1,6 @@
 # Mochi's world in Dart (`mochi_world`)
 
-Sprint 2 **G1** and **G2**, and the logic of **W11, W12, W14, W15, W16, W18 and W20**. `flutter/packages/mochi_world` is the Mac's pet-life engine (`Sources/TamagotchiCore`) in pure Dart, with no dependencies. Windows (W11–W20) and Android (A5) run it so that Mochi and Patch behave exactly as they do on the Mac. It isn't wired into `mochi_desktop` or `mochi_pocket` yet. This note says how to do that.
+Sprint 2 **G1** and **G2**, and the logic of **W11, W12, W14, W15, W16, W18 and W20**. `flutter/packages/mochi_world` is the Mac's pet-life engine (`Sources/TamagotchiCore`) in pure Dart, with no dependencies. Windows (W11–W20) and Android (A5) run it so that Mochi and Patch behave exactly as they do on the Mac. `mochi_desktop` runs it since Sprint 2 (G1: `lib/src/core/desktop_world.dart`); `mochi_pocket` doesn't yet. This note says how.
 
 ## What's in it
 
@@ -144,7 +144,7 @@ seasons.refresh(DateTime.now(), settings: seasonal, adopted: world.progress.firs
 final growth = Growth.check(world.progress, DateTime.now(), lifeStages: world.settings.lifeStages, seen: lifeStageSeen, petName: name);
 ```
 
-`mochi_art` has some of the same names: `SeasonalEvent`, `TreatStyle`, `Wearer`, `FurnitureKind`, `FurnitureCatalog`, `PlacedFurniture`, `RoomLayout` and `FurniturePlacement`. They have the same values and JSON. Import one of the two packages with a prefix, as for the poses; `art.RoomLayout.fromJson(room.toJson())` hands a room to the painters.
+`mochi_art` draws these very types (`SeasonalEvent`, `TreatStyle`, `Wearer`, the furniture and `RoomLayout` are re-exported by it), so a `RoomLayout` goes to the painters as it is; see "Rendering with `mochi_art`" below.
 
 ## Celebrations (G2)
 
@@ -167,6 +167,8 @@ Two rules decide a long turn and a real result:
 
 ## Windows (`mochi_desktop`, W11–W20)
 
+How it's done (Sprint 2 G1): `DesktopWorld` (`lib/src/core/desktop_world.dart`) owns the one `MochiWorld`, ticks it at 4 Hz while the screen can be seen (no timer at all while it can't), and keeps `world.json` in Mochi's folder. Claude's moments keep their Windows notifications, sounds and badge in `Reactions` (W1, the same Mac rules): the world gets the user's per-category "Animate" and "Badge" but no sound or banner for those categories, so nothing is said twice; its own moments (achievements, petting, growing up, feature moments) go to the same toasts and sounds. The taskbar pet draws the world's poses through the W30 pictures (`ui/pet/world_poses.dart`): loops are played on a seamless 5-second ring, so their poses repeat and are drawn once; the world's moments carry on from the ring and are drawn from the art. The room in Mochi's window and the popover draws `frame()` as it is.
+
 What the app feeds in:
 
 - **Claude's events.** Every `WireEvent` from the `BridgeServer` goes to `ingestWire(wire.toJson())`. Spooled events drained at launch are `delivery: EventDelivery.late`; after draining, call `noteSpoolDrained(delivered:, dropped:)`. Pings can go in too: they only update `lastPingAt`. Keep the bridge's own history if you want it (`onRecord` fires for every real event).
@@ -180,7 +182,7 @@ Per item:
 - **W11 Mochi talks.** `SpeechDirector` decides when Mochi or Patch speaks, as the Mac's SpeechController does, and puts the line in the world; draw `world.activeSpeech` over the speaker.
   - Feed it the world's `worldDidReact` and `userDidInteract`, set `windowVisible` while Mochi's window is open (greetings wait for it), and call `tick()` with the world's. It follows `speechEnabled`, `chattiness` and `pauseReactions`.
   - **Fresh lines.** Give it a `writer`. For each occasion it's asked about, run `FreshLinePrompt(occasion, petName:, companionName:, home: 'the Windows taskbar')` through Claude Haiku (`claude -p`, with `instructions` as the system prompt and `prompt` as the request), and keep what `SpeechLines.sanitize` returns. The director asks every two hours while `speechFreshLines` is on, keeps three lines per occasion and uses one about half the time. Only the kind of moment is sent, never anything about the work.
-  - Settings › Speech: the Mac's "Apple Intelligence" switch becomes "Fresh lines from Claude Haiku", stored under the Mac's key `speech.useAppleIntelligence`.
+  - Settings › Fun › Talking (where the Mac has it): the Mac's "Apple Intelligence" switch becomes "Fresh lines from Claude Haiku", stored under the Mac's key `speech.useAppleIntelligence`. On Windows it's off by default (it uses your Claude Code) and asks for every moment in one `claude -p` request (`lib/src/core/fresh_lines.dart`), with each moment's Mac prompt.
 - **W12 grows up.** Call `Growth.check(world.progress, now, lifeStages:, seen:, petName:)` every minute. Draw its `stage` (`mochi_art` has the art), store `seen` as `lifeStageSeen` when it changes, and apply its `moment` ("Meet kitten Mochi!" at first, then "Mochi grew up!" once per stage).
 - **W13 Progress.** Use `world.progress`: hearts from `friendshipLevel` and `pointsToNextLevel`; achievements from `AchievementID.title`, `criteria` and `reward`. `world.toast` already announces unlocks.
 - **W14 mini-games.**
@@ -252,13 +254,8 @@ The engine needs 64-bit integers, so it runs on Windows, Android and the Dart VM
 
 ## Rendering with `mochi_art`
 
-`mochi_world` has its own copy of the pose model. `PetPose`, `CompanionPose`, `Effect`, `SceneProp` and the animation enums have the same names, fields and JSON as `mochi_art`'s, so `mochi_art`, which depends on Flutter, could stay untouched while other work was going on. Until the two are merged, convert at the boundary:
+`mochi_art` depends on `mochi_world` and draws its types: the poses (`PetPose`, `CompanionPose`, `Effect`, `SceneProp` and their enums), `Ease`, the animation and interaction enums, `Accessory`, `LifeStage`, `SeasonalEvent`, `TreatStyle`, `Wearer`, `SeasonDecor` and the room's furniture (`FurnitureCatalog`, `FurnitureKind`, `PlacedFurniture`, `RoomLayout`) are `mochi_world`'s, re-exported by `mochi_art`. So `world.frame().pet` goes straight to `PetRenderer.draw`, with no conversion, and an app can import both packages without a prefix. Only the drawing-side settings (`PetColor`, `OfficeTheme`, `RenderDetail`) are `mochi_art`'s own.
 
-```dart
-import 'package:mochi_art/mochi_art.dart' as art;
-import 'package:mochi_world/mochi_world.dart' as world;
+Two drawing classes were renamed so the names stay unique: the confetti burst is `CelebrationArt` (mochi_world's `Celebration` is G2's decision), and the holiday decorations are `SeasonDecorArt` (mochi_world's `SeasonDecor` says which costume and how many candles). `PetPose.lerp`, `CompanionPose.lerp` and `Effect.lerp` moved into `mochi_world` with the types. `SceneConfig.fromJson` still reads a room whose pieces have no id (the Swift reference scenes), as before; `RoomLayout.fromJson` itself is strict, like the Mac's settings.
 
-art.PetPose.fromJson(frame.pet.toJson());   // likewise CompanionPose and SceneProp
-```
-
-That costs a few microseconds per frame. A follow-up removes it: make `mochi_art` depend on `mochi_world`, and replace its `model/poses.dart`, `ease.dart` and the animation, interaction and accessory enums in `model/world.dart` with re-exports. The APIs are a superset of `mochi_art`'s, with `copy()` no longer going through JSON. Do it once the apps aren't being edited in parallel.
+Apps that have their own types with the world's names (`mochi_desktop` has its own `NotificationCategory`, `SoundCue`, `SystemActivity`, `CompanionVisibility` and others from W1 and W2) import `mochi_world` with a prefix (`as w`) in the files that use both.

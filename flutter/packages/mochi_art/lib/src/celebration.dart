@@ -9,7 +9,8 @@ import 'drawing.dart';
 import 'model/ease.dart';
 import 'palettes.dart';
 
-abstract final class Celebration {
+/// Drawn for a celebration burst (mochi_world decides when there is one: `MochiWorld.burst`, `Celebrations`).
+abstract final class CelebrationArt {
   /// How long a burst lasts (seconds).
   static const double length = 2.6;
 

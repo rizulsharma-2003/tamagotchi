@@ -82,6 +82,28 @@ enum Accessory {
     _ => null,
   };
 
+  /// How to get it, for a picker (Swift `unlockHint`): "Available", "Unlock: First Finish", "Seasonal (October)".
+  String get unlockHint {
+    if (unlockAchievement case final id?) return 'Unlock: ${id.title}';
+    if (seasonMonths case (final first, _)) return 'Seasonal (${_monthNames[first - 1]})';
+    return 'Available';
+  }
+
+  static const List<String> _monthNames = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+
   bool isAvailable({required Set<AchievementID> unlocked, required DateTime date, WorldCalendar calendar = const WorldCalendar.local()}) {
     if (unlockAchievement case final id?) return unlocked.contains(id);
     if (seasonMonths case (final first, final last)) {
@@ -321,6 +343,10 @@ enum LifeStage implements Comparable<LifeStage> {
 
   const LifeStage(this.title);
   final String title;
+
+  /// A stored stage: Swift encodes it as its Int raw value (kitten 0, young 1, grownUp 2); a name works too.
+  static LifeStage? fromJson(Object? value) =>
+      value is int && value >= 0 && value < values.length ? values[value] : enumByName(values, value);
 
   @override
   int compareTo(LifeStage other) => index - other.index;

@@ -8,12 +8,14 @@
 /// (`PetPose`, `CompanionPose`, `SceneConfig`, `RoomLayout`, …) read the JSON the Swift side
 /// writes: enum names are the Swift raw values, keys the Swift property names.
 ///
+/// The model (poses, animations, interactions, props, accessories, life stages, holidays, the room's furniture and
+/// `Ease`) is mochi_world's, re-exported here: the poses its evaluators and `MochiWorld` produce are drawn as they are,
+/// and an app can import both packages without a prefix. Only the drawing-side settings (`PetColor`, `OfficeTheme`,
+/// `RenderDetail`) are defined here.
+///
 /// Not ported yet (TODO):
-/// - The pose evaluators (TamagotchiCore/Animation: `PetPoseEvaluator`, `CompanionPoseEvaluator`,
-///   `PetIdleLife`, `PetPlay`/`PetTreat`/`PetAffection`, `InteractionLibrary`) and the world that
-///   drives them. Poses come ready-made (from Swift, or recorded tracks as in the gallery).
 /// - Menu-bar-only drawing (`MenuBarGlyph`, most of `MenuBarPetCanvas`, the bed; its celebration burst is
-///   [Celebration]), the popover's speech bubbles (`SceneSpeechOverlay`) and the desktop pet; the seasonal calendar
+///   [CelebrationArt]), the popover's speech bubbles (`SceneSpeechOverlay`) and the desktop pet; the seasonal calendar
 ///   and greetings.
 /// - Fonts: Swift draws z/?/! and the bunting letters in SF Pro Rounded; here they use
 ///   [MochiArtText.family] (the platform font by default). Bundle an OFL rounded font for

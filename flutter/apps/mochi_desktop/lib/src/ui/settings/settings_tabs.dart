@@ -94,14 +94,14 @@ enum SettingsTab {
   /// The pane's header line. [phoneNames] names the paired phones ("Rizul's iPhone and Pixel 8"), or "your phones".
   String blurb({String pet = 'Mochi', String companion = 'Patch', String phoneNames = 'your phones'}) => switch (this) {
     general => 'Names, starting with Windows, the window’s theme, how $pet reacts and quiet hours.',
-    characters => 'Looks for $pet and $companion: the coat, what they wear, the desk and the room, and when $companion is around.',
+    characters => 'Looks for $pet and $companion: the coat, what they wear, the desk and the room, when $companion is around, and your friendship.',
     claude => 'Connect Claude Code so $pet follows your sessions and reacts to what they do.',
     assistant => 'Ask $pet questions and quick commands, here on this PC or from your phones.',
     phones => 'Mochi on $phoneNames: pairing, Claude’s summaries and talking to $pet from a phone.',
     agent => '$pet keeps an eye on Gmail, Google Calendar and Notion and tells you what matters.',
     notifications => 'Which of Claude’s moments $pet reacts to, which get a Windows notification, and how they sound.',
     desktop => 'Let $pet sit on your desktop or stroll along the taskbar, with $companion at his desk.',
-    fun => 'Holidays, games, adventures and little surprises.',
+    fun => 'Talking, growing up, holidays, games, adventures and little surprises.',
     privacy => 'What leaves this PC, what Mochi keeps here, and where.',
     developer => 'Diagnostics: the hook bridge, the spool, logs and Mochi Link.',
     about => 'Version, links, licences and how to uninstall.',
@@ -112,7 +112,8 @@ enum SettingsTab {
     general => 'name names pet companion startup start with windows sign in login boot theme light dark appearance '
         'reactions pause quiet mode quiet hours do not disturb reset',
     characters => 'pet companion colour color coat accessory accessories hat glasses wear desk theme office room look '
-        'mochi patch costume show linger stays naps sleep rest idle away pc rhythm visibility always never sessions',
+        'mochi patch costume show linger stays naps sleep rest idle away pc rhythm visibility always never sessions '
+        'friendship hearts achievements progress level points unlock reset',
     claude => 'hooks connect sessions integration claude code helper bridge settings.json backup troubleshoot',
     assistant => 'ask mochi voice talk shortcut hotkey keyboard ctrl alt space quick commands model haiku sonnet brain '
         'approvals',
@@ -125,7 +126,8 @@ enum SettingsTab {
         'desk style spot tray icon classic size small medium large always on top click through clicks display monitor '
         'moments',
     fun => 'games adventure seasons seasonal holidays halloween diwali christmas new year valentine birthday treats '
-        'focus recap room furniture talking',
+        'focus recap room furniture talking speech bubbles chattiness chatty quiet fresh lines haiku growing grows up kitten '
+        'young grown-up life stages',
     privacy => 'privacy data history relay encryption summaries share keep folder clear',
     developer => 'debug diagnostics logs bridge port spool relay device id room simulator',
     about => 'version credits licence license licenses uninstall nunito open source links',

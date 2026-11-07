@@ -47,9 +47,8 @@ enum NotificationCategory {
   bool get allowsBanner => this != toolActivity;
   bool get allowsBadge => this != toolActivity && this != sessionLifecycle;
 
-  /// Mochi for Windows has no friendship achievements yet (Settings › Characters says so), so nothing is ever in this
-  /// category here: its row is shown, tagged, and can't be changed.
-  bool get availableOnWindows => this != achievement;
+  /// Every category reaches you on Windows (achievements since Mochi's world, Sprint 2 W13).
+  bool get availableOnWindows => true;
 
   CategoryDelivery get defaultDelivery => switch (this) {
     needsAttention => const CategoryDelivery(badge: true, sound: true),

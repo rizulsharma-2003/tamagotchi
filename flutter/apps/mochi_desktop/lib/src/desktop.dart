@@ -8,6 +8,8 @@ import 'package:mochi_wire/mochi_wire.dart';
 import 'core/ask_mochi.dart';
 import 'core/claude_cli.dart';
 import 'core/desktop_settings.dart';
+import 'core/desktop_world.dart';
+import 'core/fresh_lines.dart';
 import 'core/hook_setup.dart';
 import 'core/hotkeys.dart';
 import 'core/pc_rhythm.dart';
@@ -65,6 +67,9 @@ class MochiDesktop {
     SoundOutput? sound,
     UsageSampler? usage,
     HotkeyRegistrar? hotkeys,
+    WorldStore? worldStore,
+    double Function()? uptime,
+    int? worldSeed,
   }) : _claude = claude,
        _locateClaude = locateClaude,
        startup = startup ?? const UnsupportedStartup(),
@@ -73,8 +78,22 @@ class MochiDesktop {
        toasts = toasts ?? const UnsupportedToasts(),
        _bridge = bridge ?? BridgeServer(paths) {
     sounds = MochiSounds(output: sound ?? const SilentOutput(), volume: () => settings.soundVolume, clock: clock);
-    reactions = Reactions(settings: settings, sessions: sessions, cue: cue, toasts: this.toasts, sounds: sounds, clock: clock);
+    // Claude's moments: Reactions posts their notifications and sounds (W1) and tells the views; Mochi's world animates
+    // them from the hook events themselves.
+    reactions = Reactions(settings: settings, sessions: sessions, cue: _claudeCue, toasts: this.toasts, sounds: sounds, clock: clock);
     rhythm = PcRhythm(settings: settings, sampler: usage);
+    world = DesktopWorld(
+      settings: settings,
+      rhythm: rhythm,
+      sounds: sounds,
+      toasts: this.toasts,
+      store: worldStore,
+      freshLines: HaikuLineWriter(claude).call,
+      reducedMotion: () => motion.reduced,
+      clock: clock,
+      uptime: uptime,
+      seed: worldSeed,
+    );
     this.hotkeys = Hotkeys(
       registrar: hotkeys ?? const UnsupportedHotkeys(),
       chosen: settings.shortcut,
@@ -204,6 +223,7 @@ class MochiDesktop {
       sound: Platform.isWindows ? Win32SoundOutput() : null,
       usage: system == null ? null : Win32Usage(system),
       hotkeys: system,
+      worldStore: demoMode ? null : FileWorldStore(paths.join(paths.home, 'world.json')),
     );
   }
 
@@ -227,6 +247,10 @@ class MochiDesktop {
   /// The PC's rhythm: Mochi naps while it rests (Settings › Characters › Naps), and the phones hear only while you're
   /// away (Settings › Phones).
   late final PcRhythm rhythm;
+
+  /// Mochi's world (the Mac's CompanionWorld): what Mochi and Patch do, friendship and achievements, speech and growing
+  /// up.
+  late final DesktopWorld world;
 
   /// The global shortcuts (Settings › Desktop Pet and Assistant).
   late final Hotkeys hotkeys;
@@ -277,7 +301,15 @@ class MochiDesktop {
   /// Where Claude Code's `claude` is on this PC (null: not found), for Settings. Looks again each time.
   String? locateClaude() => _locateClaude?.call();
 
+  /// One of this PC's own moments (petting, play and treats here or from a phone, Ask Mochi, updates): Mochi's world
+  /// plays it, and the views hear about it.
   void cue(PetCue cue) {
+    world.cue(cue);
+    if (!_cues.isClosed) _cues.add(cue);
+  }
+
+  /// One of Claude's moments, as Reactions allowed it: the views hear about it (the world reacted to the event itself).
+  void _claudeCue(PetCue cue) {
     if (!_cues.isClosed) _cues.add(cue);
   }
 
@@ -301,6 +333,7 @@ class MochiDesktop {
     });
     _startUpdates();
     rhythm.start();
+    world.start();
     await toasts.start((target) {
       if (!_opens.isClosed) _opens.add(target);
     });
@@ -333,25 +366,51 @@ class MochiDesktop {
   void _drainSpool() {
     final drained = EventSpool.drain(paths.spoolFile);
     sessions.droppedEvents += drained.dropped;
+    var delivered = 0;
     for (final line in drained.lines) {
       try {
-        sessions.apply(EventValidator.decode(line), delivery: Delivery.late);
+        final event = EventValidator.decode(line);
+        sessions.apply(event, delivery: Delivery.late);
+        world.ingest(event, late: true);
+        delivered++;
       } on WireRejection {
         // Too old or malformed: skip it.
       }
     }
+    world.noteSpoolDrained(delivered: delivered, dropped: drained.dropped);
   }
+
+  /// A hook event as the bridge delivers it (tests: the whole way, from the phones to Mochi's world).
+  @visibleForTesting
+  void receive(WireEvent event) => _live(event);
 
   void _live(WireEvent event) {
     phone.record(event);
     _previousPrimary = sessions.primary?.id;
     sessions.apply(event);
     _previousPrimary = null;
+    world.ingest(event);
   }
 
   /// Every applied event: live ones get Mochi's reaction, as Settings › Notifications allows (late ones from the spool
   /// only update the badge).
   void _transition(SessionTransition transition) => reactions.handle(transition, previousPrimary: _previousPrimary);
+
+  /// "Milestone" in the popover (the Mac's): a milestone you reached, recorded as a real event for the session Mochi
+  /// follows, so it's celebrated (graduation the first time), notified as Settings › Notifications says, and shared.
+  void markMilestone() {
+    final now = sessions.now;
+    final primary = sessions.primary;
+    final event = WireEvent(id: 'manual-${now.microsecondsSinceEpoch}', ts: now.microsecondsSinceEpoch / 1e6, origin: WireOrigin.report, event: 'Report')
+      ..report = const WireReport(kind: 'milestone', status: 'reached', label: 'Marked by you');
+    if (primary != null && primary.isLive) {
+      event
+        ..session = primary.id
+        ..project = primary.project
+        ..projectKey = primary.projectKey;
+    }
+    _live(event);
+  }
 
   /// Petting, play or treats on this PC (Mochi reacts, and so do the phones).
   void interact(String kind) {
@@ -393,6 +452,7 @@ class MochiDesktop {
     await _bridge.dispose();
     link.dispose();
     motion.dispose();
+    world.dispose();
     rhythm.dispose();
     hotkeys.dispose();
     toasts.dispose();

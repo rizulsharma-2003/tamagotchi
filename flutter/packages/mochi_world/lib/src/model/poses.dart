@@ -170,6 +170,35 @@ class Effect {
     if (followsFacing) 'followsFacing': true,
     if (worldSpace) 'worldSpace': true,
   };
+
+  /// Linear blend of two effects of the same kind (for smooth playback of sampled tracks; mochi_art's pose tracks).
+  static Effect lerp(Effect a, Effect b, double t) => Effect(
+    a.kind,
+    x: _l(a.x, b.x, t),
+    y: _l(a.y, b.y, t),
+    scale: _l(a.scale, b.scale, t),
+    opacity: _l(a.opacity, b.opacity, t),
+    rotation: _l(a.rotation, b.rotation, t),
+    variant: t < 0.5 ? a.variant : b.variant,
+    stretch: _l(a.stretch, b.stretch, t),
+    phase: _l(a.phase, b.phase, t),
+    x2: _l(a.x2, b.x2, t),
+    y2: _l(a.y2, b.y2, t),
+    followsFacing: a.followsFacing,
+    worldSpace: a.worldSpace,
+  );
+}
+
+double _l(double a, double b, double t) => a + (b - a) * t;
+
+/// Effects blended frame to frame when both frames have the same kinds in the same order; otherwise the nearer frame's.
+List<Effect> _lerpEffects(List<Effect> a, List<Effect> b, double t) {
+  var same = a.length == b.length;
+  for (var i = 0; same && i < a.length; i++) {
+    same = a[i].kind == b[i].kind;
+  }
+  if (!same) return [for (final e in t < 0.5 ? a : b) e.copy()];
+  return [for (var i = 0; i < a.length; i++) Effect.lerp(a[i], b[i], t)];
 }
 
 /// Per-character inputs every pose is a pure function of (Swift `PoseContext`).
@@ -477,6 +506,54 @@ class PetPose {
     e.worldSpace = true;
     add(e);
   }
+
+  /// Blends two sampled poses (numbers interpolate, discrete channels switch at the middle; effects interpolate when
+  /// both frames have the same kinds in the same order). For playing sampled tracks (mochi_art) and cross-fades.
+  static PetPose lerp(PetPose a, PetPose b, double t) {
+    final n = t < 0.5 ? a : b;
+    return PetPose()
+      ..x = _l(a.x, b.x, t)
+      ..y = _l(a.y, b.y, t)
+      ..scaleX = _l(a.scaleX, b.scaleX, t)
+      ..scaleY = _l(a.scaleY, b.scaleY, t)
+      ..rotation = _l(a.rotation, b.rotation, t)
+      ..tilt = _l(a.tilt, b.tilt, t)
+      ..facing = n.facing
+      ..eyes = n.eyes
+      ..eyeOpenness = _l(a.eyeOpenness, b.eyeOpenness, t)
+      ..lookX = _l(a.lookX, b.lookX, t)
+      ..lookY = _l(a.lookY, b.lookY, t)
+      ..brows = n.brows
+      ..mouth = n.mouth
+      ..blush = _l(a.blush, b.blush, t)
+      ..earPerk = _l(a.earPerk, b.earPerk, t)
+      ..leftArm = _l(a.leftArm, b.leftArm, t)
+      ..rightArm = _l(a.rightArm, b.rightArm, t)
+      ..tailWag = _l(a.tailWag, b.tailWag, t)
+      ..step = _l(a.step, b.step, t)
+      ..held = n.held
+      ..hat = n.hat
+      ..effects = _lerpEffects(a.effects, b.effects, t)
+      ..shadow = _l(a.shadow, b.shadow, t)
+      ..opacity = _l(a.opacity, b.opacity, t)
+      ..earLeft = _l(a.earLeft, b.earLeft, t)
+      ..earRight = _l(a.earRight, b.earRight, t)
+      ..tailCurl = _l(a.tailCurl, b.tailCurl, t)
+      ..tailLift = _l(a.tailLift, b.tailLift, t)
+      ..lean = _l(a.lean, b.lean, t)
+      ..breath = _l(a.breath, b.breath, t)
+      ..cheekLeft = _l(a.cheekLeft, b.cheekLeft, t)
+      ..cheekRight = _l(a.cheekRight, b.cheekRight, t)
+      ..eyeSparkle = _l(a.eyeSparkle, b.eyeSparkle, t)
+      ..eyeScale = _l(a.eyeScale, b.eyeScale, t)
+      ..crossEyed = _l(a.crossEyed, b.crossEyed, t)
+      ..stride = _l(a.stride, b.stride, t)
+      ..kick = _l(a.kick, b.kick, t)
+      ..pawToMouth = _l(a.pawToMouth, b.pawToMouth, t)
+      ..holdFront = _l(a.holdFront, b.holdFront, t)
+      ..headTurn = _l(a.headTurn, b.headTurn, t)
+      ..earListen = _l(a.earListen, b.earListen, t);
+  }
 }
 
 // MARK: - Companion
@@ -625,4 +702,28 @@ class CompanionPose {
     'shadow': shadow,
     'opacity': opacity,
   };
+
+  /// Blends two sampled poses; the pixel mascot snaps its limbs to whole pixels anyway.
+  static CompanionPose lerp(CompanionPose a, CompanionPose b, double t) {
+    final n = t < 0.5 ? a : b;
+    return n.copy()
+      ..x = _l(a.x, b.x, t)
+      ..y = _l(a.y, b.y, t)
+      ..scaleX = _l(a.scaleX, b.scaleX, t)
+      ..scaleY = _l(a.scaleY, b.scaleY, t)
+      ..rotation = _l(a.rotation, b.rotation, t)
+      ..eyeOpenness = _l(a.eyeOpenness, b.eyeOpenness, t)
+      ..lookX = _l(a.lookX, b.lookX, t)
+      ..lookY = _l(a.lookY, b.lookY, t)
+      ..antennaGlow = _l(a.antennaGlow, b.antennaGlow, t)
+      ..antennaBend = _l(a.antennaBend, b.antennaBend, t)
+      ..leftArm = _l(a.leftArm, b.leftArm, t)
+      ..rightArm = _l(a.rightArm, b.rightArm, t)
+      ..reach = _l(a.reach, b.reach, t)
+      ..laptop.openness = _l(a.laptop.openness, b.laptop.openness, t)
+      ..laptop.scroll = _l(a.laptop.scroll, b.laptop.scroll, t)
+      ..effects = _lerpEffects(a.effects, b.effects, t)
+      ..shadow = _l(a.shadow, b.shadow, t)
+      ..opacity = _l(a.opacity, b.opacity, t);
+  }
 }

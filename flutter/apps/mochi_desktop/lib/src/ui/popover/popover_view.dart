@@ -15,7 +15,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mochi_art/mochi_art.dart' show SceneLayout;
-import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_wire/mochi_wire.dart' show HookStatus;
 
@@ -24,6 +23,7 @@ import '../../core/session_store.dart';
 import '../../core/sessions.dart';
 import '../../desktop.dart';
 import '../pet/companion_director.dart';
+import '../settings/panes_pet.dart' show FriendshipHearts;
 import '../pet/room_view.dart';
 
 class PopoverView extends StatelessWidget {
@@ -31,7 +31,6 @@ class PopoverView extends StatelessWidget {
     super.key,
     required this.desktop,
     required this.companion,
-    required this.library,
     required this.lastActivity,
     required this.onClose,
     required this.onOpenMain,
@@ -43,7 +42,6 @@ class PopoverView extends StatelessWidget {
 
   final MochiDesktop desktop;
   final CompanionDirector companion;
-  final PoseLibrary? library;
   final DateTime Function() lastActivity;
 
   /// Escape: back to the taskbar.
@@ -93,7 +91,7 @@ class PopoverView extends StatelessWidget {
                   children: [
                     SizedBox(
                       height: sceneHeight,
-                      child: _Scene(desktop: desktop, companion: companion, library: library, lastActivity: lastActivity, hidePet: hidePet),
+                      child: _Scene(desktop: desktop, companion: companion, lastActivity: lastActivity, hidePet: hidePet),
                     ),
                     Divider(height: 1, color: p.stroke),
                     Expanded(
@@ -112,6 +110,8 @@ class PopoverView extends StatelessWidget {
                               Divider(height: Space.m, color: p.stroke),
                               const SizedBox(height: Space.xs),
                               _PetControls(desktop: desktop),
+                              const SizedBox(height: Space.s),
+                              _Friendship(desktop: desktop),
                               const SizedBox(height: Space.s),
                               _Switches(settings: desktop.settings),
                             ],
@@ -135,11 +135,10 @@ class PopoverView extends StatelessWidget {
 // MARK: - Scene
 
 class _Scene extends StatelessWidget {
-  const _Scene({required this.desktop, required this.companion, required this.library, required this.lastActivity, this.hidePet = false});
+  const _Scene({required this.desktop, required this.companion, required this.lastActivity, this.hidePet = false});
 
   final MochiDesktop desktop;
   final CompanionDirector companion;
-  final PoseLibrary? library;
   final DateTime Function() lastActivity;
   final bool hidePet;
 
@@ -150,7 +149,6 @@ class _Scene extends StatelessWidget {
         child: RoomView(
           desktop: desktop,
           companion: companion,
-          library: library,
           lastActivity: lastActivity,
           // The Mac popover's room.
           layout: (size) => SceneLayout.popover(size.width, size.height),
@@ -602,9 +600,51 @@ class _PetControls extends StatelessWidget {
             onTap: () => desktop.interact('treat'),
           ),
         ),
+        const SizedBox(width: Space.s),
+        // The Mac's Milestone: a milestone you reached, celebrated (graduation the first time) and kept in the history.
+        Expanded(
+          child: _ControlButton(
+            title: 'Milestone',
+            label: 'Mark a milestone you reached',
+            icon: Icons.star_rounded,
+            tint: p.success,
+            onTap: desktop.markMilestone,
+          ),
+        ),
       ],
     );
   }
+}
+
+/// The Mac's friendship row: five hearts, the level, and the points to the next one.
+class _Friendship extends StatelessWidget {
+  const _Friendship({required this.desktop});
+
+  final MochiDesktop desktop;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: desktop.world,
+    builder: (context, _) {
+      final progress = desktop.world.world.progress;
+      final level = progress.friendshipLevel;
+      final next = progress.pointsToNextLevel;
+      return Semantics(
+        container: true,
+        label: 'Friendship level $level of ${FriendshipHearts.count}${next == null ? '' : ', $next points to the next'}',
+        excludeSemantics: true,
+        child: Row(
+          children: [
+            FriendshipHearts(level: level, size: 11),
+            const SizedBox(width: Space.xs),
+            Flexible(child: Text('Friendship level $level', overflow: TextOverflow.ellipsis, style: context.type.caption)),
+            const Spacer(),
+            if (next != null) Text('$next to next', style: context.type.caption.copyWith(color: context.palette.inkSecondary)),
+          ],
+        ),
+      );
+    },
+  );
 }
 
 class _ControlButton extends StatelessWidget {

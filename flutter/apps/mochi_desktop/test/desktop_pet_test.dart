@@ -49,7 +49,7 @@ void main() {
         ..companionOnlyMoments = true
         ..placePet('A', const PetPlace(0.25, 1))
         ..placePet('B', const PetPlace(0.5, 0.5));
-      expect(document.json!['v'], 5);
+      expect(document.json!['v'], DesktopSettings.version);
       final again = DesktopSettings(document);
       expect(
         (again.petStyle, again.spotRoom, again.spotX, again.petSize, again.petOnTop, again.petClickThrough, again.trayAnimation),
@@ -167,6 +167,8 @@ void main() {
     Future<void> elapse(WidgetTester tester, double seconds, {double step = 0.25, void Function()? each}) async {
       for (var s = 0.0; s < seconds; s += step) {
         await tester.pump(Duration(microseconds: (step * 1e6).round()));
+        // Mochi's world moves on with the clock (its own timer runs only in the app).
+        t.desktop.world.tick();
         each?.call();
       }
     }
@@ -302,21 +304,15 @@ void main() {
     });
 
     petTest('Patch only for interesting moments: his desk comes out for one, and goes again after', (tester) async {
-      final library = PoseLibrary.parse(File('assets/pose_tracks.json.deflate').readAsBytesSync());
       final settings = t.desktop.settings
         ..companionVisibility = CompanionVisibility.always
         ..companionOnlyMoments = true;
-      final companion = CompanionDirector(
-        sessions: t.desktop.sessions,
-        settings: settings,
-        cues: t.desktop.cues,
-        clock: () => tester.binding.clock.now().microsecondsSinceEpoch / 1e6,
-        random: Random(2),
-      )..library = library;
+      final companion = CompanionDirector(t.desktop.world);
       disposables.add(companion.dispose);
       final stroll = await start(tester, companion: companion);
       expect(companion.visible, isTrue);
-      await elapse(tester, 1);
+      // He arrives with a hello for Mochi (a moment together), then nothing interesting is going on.
+      await elapse(tester, 8);
       expect(stroll.home, isNull, reason: 'nothing interesting: Mochi has the taskbar to itself');
 
       // Claude finished: Patch comes out to celebrate.

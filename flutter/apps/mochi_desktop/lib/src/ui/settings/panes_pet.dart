@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_ui/mochi_ui.dart';
+import 'package:mochi_world/mochi_world.dart' show AchievementID, Chattiness, ProgressState;
 
 import '../../core/desktop_settings.dart';
 import '../../core/hotkeys.dart';
@@ -148,7 +149,9 @@ class _GeneralPaneState extends State<GeneralPane> {
               value: settings.quietMode,
               onChanged: (value) => settings.quietMode = value,
             ),
-            ActionsRow(children: [PaneLink(host: host, tab: SettingsTab.notifications, label: 'Choose the moments')]),
+            ActionsRow(
+              children: [PaneLink(host: host, tab: SettingsTab.notifications, label: 'Choose the moments')],
+            ),
           ],
         ),
         _QuietHoursGroup(settings: settings),
@@ -285,6 +288,14 @@ class CharactersPane extends StatelessWidget {
     final holiday = settings.holidayOn(host.now);
     final wearables = Accessory.values.where((accessory) => accessory.slot == AccessorySlot.wearable).toList();
     final deskThings = Accessory.values.where((accessory) => accessory.slot == AccessorySlot.desk).toList();
+    // What's earned (achievements) or in season can be chosen; the rest says how to get it (the Mac's picker).
+    final unlocked = host.desktop.world.world.progress.unlockedIDs;
+    bool available(Accessory accessory) => accessory.isAvailable(unlocked: unlocked, date: host.now);
+    String named(Accessory accessory) => available(accessory) ? accessory.title : '${accessory.title} — ${accessory.unlockHint}';
+    final locked = {
+      for (final accessory in Accessory.values)
+        if (!available(accessory)) accessory,
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -315,31 +326,37 @@ class CharactersPane extends StatelessWidget {
               child: Wrap(
                 spacing: Space.m,
                 runSpacing: Space.s,
-                children: [for (final color in PetColor.values) _CoatSwatch(color: color, selected: settings.petColor == color, onTap: () => settings.petColor = color)],
+                children: [
+                  for (final color in PetColor.values)
+                    _CoatSwatch(color: color, selected: settings.petColor == color, onTap: () => settings.petColor = color),
+                ],
               ),
             ),
           ],
         ),
         SettingsGroup(
           title: 'Look',
-          footer: 'With nothing chosen, $pet and $companion dress up for holidays.',
+          footer: 'With nothing chosen, $pet and $companion dress up for holidays. Achievements unlock more to wear (Friendship, below).',
           children: [
             MenuRow<Accessory?>(
               label: '$pet wears',
               value: settings.petAccessory,
-              items: [(null, 'Nothing'), for (final accessory in wearables) (accessory, accessory.title)],
+              items: [(null, 'Nothing'), for (final accessory in wearables) (accessory, named(accessory))],
+              locked: locked,
               onChanged: (value) => settings.petAccessory = value,
             ),
             MenuRow<Accessory?>(
               label: '$companion wears',
               value: settings.companionAccessory,
-              items: [(null, 'Nothing'), for (final accessory in wearables) (accessory, accessory.title)],
+              items: [(null, 'Nothing'), for (final accessory in wearables) (accessory, named(accessory))],
+              locked: locked,
               onChanged: (value) => settings.companionAccessory = value,
             ),
             MenuRow<Accessory?>(
               label: 'On the desk',
               value: settings.deskAccessory,
-              items: [(null, 'Nothing'), for (final accessory in deskThings) (accessory, accessory.title)],
+              items: [(null, 'Nothing'), for (final accessory in deskThings) (accessory, named(accessory))],
+              locked: locked,
               onChanged: (value) => settings.deskAccessory = value,
             ),
             MenuRow<OfficeTheme>(
@@ -382,23 +399,33 @@ class CharactersPane extends StatelessWidget {
               label: 'Naps after, without news from Claude',
               value: settings.companionSleepAfterMinutes,
               items: [
-                for (final minutes in _minuteChoices(const [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 45, 60], settings.companionSleepAfterMinutes))
+                for (final minutes in _minuteChoices(const [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  8,
+                  10,
+                  15,
+                  20,
+                  30,
+                  45,
+                  60,
+                ], settings.companionSleepAfterMinutes))
                   (minutes, '$minutes min'),
               ],
-              onChanged: settings.companionVisibility == CompanionVisibility.never ? null : (value) => settings.companionSleepAfterMinutes = value,
+              onChanged: settings.companionVisibility == CompanionVisibility.never
+                  ? null
+                  : (value) => settings.companionSleepAfterMinutes = value,
             ),
-            ActionsRow(children: [PaneLink(host: host, tab: SettingsTab.desktop, label: '$companion on the taskbar')]),
-          ],
-        ),
-        SettingsGroup(
-          title: 'From the Mac',
-          children: [
-            SoonRow(
-              title: 'Friendship and achievements',
-              detail: 'Petting, play and treats earn friendship on a Mac, and achievements unlock new things to wear. Here everything is unlocked.',
+            ActionsRow(
+              children: [PaneLink(host: host, tab: SettingsTab.desktop, label: '$companion on the taskbar')],
             ),
           ],
         ),
+        _FriendshipGroup(host: host),
       ],
     );
   }
@@ -480,7 +507,8 @@ class DesktopPetPane extends StatelessWidget {
     final never = settings.companionVisibility == CompanionVisibility.never;
     final shortcut = settings.shortcut(MochiShortcut.pet)?.label;
     // Patch is around and should be on the taskbar, but there's no stretch roomy enough for both right now.
-    final noRoom = patch != null &&
+    final noRoom =
+        patch != null &&
         patch.visible &&
         settings.companionOnTaskbar &&
         style.onTaskbar &&
@@ -569,14 +597,19 @@ class DesktopPetPane extends StatelessWidget {
                     '$name comes out for arrivals, Claude waiting for you, errors and celebrations, then leaves again so '
                     '$pet stays compact while you work.',
                 value: settings.companionOnlyMoments,
-                onChanged: settings.showPet && settings.companionOnTaskbar && !never ? (value) => settings.companionOnlyMoments = value : null,
+                onChanged: settings.showPet && settings.companionOnTaskbar && !never
+                    ? (value) => settings.companionOnlyMoments = value
+                    : null,
               ),
             ],
             if (never)
               NoteRow(text: '$name is set never to show, in Characters.')
             else if (noRoom)
               NoteRow(text: 'There’s no stretch of the taskbar roomy enough for both right now, so $name waits in $pet’s room.'),
-            if (never) ActionsRow(children: [PaneLink(host: host, tab: SettingsTab.characters, label: 'Show $name')]),
+            if (never)
+              ActionsRow(
+                children: [PaneLink(host: host, tab: SettingsTab.characters, label: 'Show $name')],
+              ),
           ],
         ),
         SettingsGroup(
@@ -675,6 +708,8 @@ class FunPane extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _TalkingGroup(host: host),
+        _GrowingUpGroup(host: host),
         SettingsGroup(
           title: 'Holidays',
           footer:
@@ -713,8 +748,6 @@ class FunPane extends StatelessWidget {
         SettingsGroup(
           title: 'From the Mac',
           children: [
-            SoonRow(title: 'Talking in speech bubbles', detail: '$pet and ${host.companion} chatting as they work, as often as you like. Here $pet speaks up only for Claude’s moments.'),
-            SoonRow(title: 'Growing up', detail: 'Kitten, then young, then grown-up as your friendship grows.'),
             SoonRow(title: 'Games', detail: 'Catch and rock-paper-scissors with $pet.'),
             SoonRow(title: 'Adventures', detail: '$pet heads out to explore your desktop and comes back with stories.'),
             SoonRow(title: 'Focus sessions', detail: 'A focus timer $pet keeps you company through.'),
@@ -723,6 +756,240 @@ class FunPane extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Settings › Fun › Talking (the Mac's): Mochi and Patch say a word now and then in speech bubbles, as chatty as you
+/// like, and (with Claude Code on this PC) now and then a fresh line from Claude Haiku.
+class _TalkingGroup extends StatefulWidget {
+  const _TalkingGroup({required this.host});
+
+  final SettingsHost host;
+
+  @override
+  State<_TalkingGroup> createState() => _TalkingGroupState();
+}
+
+class _TalkingGroupState extends State<_TalkingGroup> {
+  /// Where Claude Code is on this PC (fresh lines need it), looked for once.
+  late final String? _claude = widget.host.desktop.locateClaude();
+
+  @override
+  Widget build(BuildContext context) {
+    final host = widget.host;
+    final settings = host.desktop.settings;
+    final pet = host.pet;
+    final talking = settings.speechEnabled;
+    return SettingsGroup(
+      title: 'Talking',
+      footer: switch (settings.chattiness) {
+        Chattiness.quiet => 'Quiet: only what matters (Claude needs you, a finished turn, green tests).',
+        Chattiness.normal => 'Greetings, Claude’s moments, petting and the odd sleepy mumble.',
+        Chattiness.chatty => 'Chatty: more often, and musings while nothing’s going on.',
+      },
+      children: [
+        ToggleRow(
+          title: '$pet and ${host.companion} talk in speech bubbles',
+          value: talking,
+          onChanged: (value) => settings.speechEnabled = value,
+        ),
+        ChoiceRow<Chattiness>(
+          label: 'Chattiness',
+          selected: settings.chattiness,
+          onSelected: talking ? (value) => settings.chattiness = value : null,
+          choices: const [
+            (Chattiness.quiet, 'Quiet', Icons.volume_mute_rounded),
+            (Chattiness.normal, 'Normal', Icons.chat_bubble_outline_rounded),
+            (Chattiness.chatty, 'Chatty', Icons.forum_rounded),
+          ],
+        ),
+        ToggleRow(
+          title: 'Fresh lines from Claude Haiku',
+          subtitle: _claude == null
+              ? 'Needs Claude Code on this PC (Settings › Claude Code).'
+              : 'Now and then a line written for the moment, through Claude Code on this PC, every couple of hours while '
+                    'it’s on. Only the kind of moment is sent, never anything about your work.',
+          value: settings.speechFreshLines && _claude != null,
+          onChanged: talking && _claude != null ? (value) => settings.speechFreshLines = value : null,
+        ),
+      ],
+    );
+  }
+}
+
+/// The Mac's five hearts: filled up to the friendship level.
+class FriendshipHearts extends StatelessWidget {
+  const FriendshipHearts({super.key, required this.level, this.size = 14});
+
+  final int level;
+  final double size;
+
+  /// Hearts there are (levels 0–5).
+  static const int count = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return ExcludeSemantics(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < count; i++)
+            Icon(
+              i < level ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+              size: size,
+              color: i < level ? p.pet : p.inkSecondary.withValues(alpha: 0.6),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "8 November 2026".
+String fullDate(DateTime date) => '${date.day} ${monthNames[date.month - 1]} ${date.year}';
+
+/// Settings › Characters › Friendship (the Mac's): the hearts and points, how they're earned, every achievement with
+/// what it takes and what it unlocks, and Reset Progress.
+class _FriendshipGroup extends StatelessWidget {
+  const _FriendshipGroup({required this.host});
+
+  final SettingsHost host;
+
+  Future<void> _reset(BuildContext context) async {
+    final confirmed = await confirmAction(
+      context,
+      title: 'Reset friendship and achievements?',
+      message: 'The hearts, the points and every achievement start again, on this PC. Nothing else changes.',
+      confirm: 'Reset',
+      destructive: true,
+    );
+    if (confirmed) host.desktop.world.resetProgress();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final world = host.desktop.world;
+    return ListenableBuilder(
+      listenable: world,
+      builder: (context, _) {
+        final progress = world.world.progress;
+        final level = progress.friendshipLevel;
+        final p = context.palette;
+        return SettingsGroup(
+          title: 'Friendship',
+          footer:
+              'Petting, playing and treats earn a few points a day (with daily caps). Points never go down, and nothing bad '
+              'happens if you’re away.',
+          children: [
+            MergeSemantics(
+              child: Padding(
+                padding: rowPadding,
+                child: Wrap(
+                  spacing: Space.m,
+                  runSpacing: Space.xs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text('Friendship level', style: context.type.subheadline.copyWith(fontWeight: FontWeight.w600)),
+                    Semantics(
+                      label: 'level $level of ${FriendshipHearts.count}',
+                      child: FriendshipHearts(level: level),
+                    ),
+                    Text('${progress.affectionPoints} points', style: context.type.footnote),
+                  ],
+                ),
+              ),
+            ),
+            for (final id in AchievementID.values) _AchievementRow(id: id, progress: progress),
+            ActionsRow(
+              children: [
+                OutlinedButton(
+                  onPressed: () => _reset(context),
+                  style: OutlinedButton.styleFrom(foregroundColor: p.danger),
+                  child: const Text('Reset Progress…'),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// One achievement: earned or not, what it takes, what it unlocks, and when it was earned.
+class _AchievementRow extends StatelessWidget {
+  const _AchievementRow({required this.id, required this.progress});
+
+  final AchievementID id;
+  final ProgressState progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final at = progress.unlocked[id.name];
+    final reward = id.reward;
+    final detail = id.criteria + (reward == null ? '' : ' Unlocks: ${reward.title}.');
+    // Read as one: the achievement, what it takes, and whether (and when) it was earned.
+    return Semantics(
+      container: true,
+      label: '${id.title}. $detail ${at == null ? 'Not earned yet.' : 'Earned on ${fullDate(at.toLocal())}.'}',
+      excludeSemantics: true,
+      child: Padding(
+        padding: rowPadding,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(at == null ? Icons.verified_outlined : Icons.verified_rounded, size: 20, color: at == null ? p.inkSecondary : p.success),
+            const SizedBox(width: Space.s),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(id.title, style: context.type.subheadline.copyWith(fontWeight: FontWeight.w600)),
+                  Text(detail, style: context.type.caption),
+                ],
+              ),
+            ),
+            if (at != null) ...[const SizedBox(width: Space.s), Text(fullDate(at.toLocal()), style: context.type.caption)],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Settings › Fun › Growing up (the Mac's): Mochi grows from a kitten as your friendship grows, and what it takes next.
+class _GrowingUpGroup extends StatelessWidget {
+  const _GrowingUpGroup({required this.host});
+
+  final SettingsHost host;
+
+  @override
+  Widget build(BuildContext context) {
+    final world = host.desktop.world;
+    final settings = host.desktop.settings;
+    final pet = host.pet;
+    return ListenableBuilder(
+      listenable: world,
+      builder: (context, _) {
+        final stage = world.stage;
+        final next = settings.lifeStages ? LifeStage.nextStep(world.world.progress, host.now) : null;
+        final now = switch (stage) {
+          LifeStage.kitten => '$pet is a kitten.',
+          LifeStage.young => '$pet is a young cat.',
+          LifeStage.grownUp => settings.lifeStages ? '$pet is all grown up.' : '$pet is drawn grown up.',
+        };
+        return SettingsGroup(
+          title: 'Growing up',
+          footer: 'Kitten, then young, then grown-up as your friendship grows. It never goes backwards.',
+          children: [
+            ToggleRow(title: '$pet grows up over time', value: settings.lifeStages, onChanged: (value) => settings.lifeStages = value),
+            NoteRow(text: next == null ? now : '$now $next.', icon: Icons.pets_rounded),
+          ],
+        );
+      },
     );
   }
 }
