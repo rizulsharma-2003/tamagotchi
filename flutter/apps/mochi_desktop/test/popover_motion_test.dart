@@ -63,6 +63,8 @@ void main() {
       expect(width(1), lessThan(panel.width * 0.2), reason: 'a thin neck at Mochi');
     });
 
+    test('24 strips: enough for smooth edges, little to draw', () => expect(genie.strips, 24));
+
     test('the mesh: one strip per step, sampling the picture top to bottom', () {
       final vertices = genie.vertices(0.6, const Size(720, 1080));
       expect(vertices, isA<Vertices>());
@@ -79,6 +81,21 @@ void main() {
       expect((leap.scale(0), leap.scale(1)), (leap.fromScale, leap.toScale));
       final top = [for (var k = 0; k <= 100; k++) leap.feet(k / 100).dy].reduce(min);
       expect(top, lessThan(leap.to.dy - 20), reason: 'it rises above where it lands');
+    });
+
+    test('a true parabola through the air: steady across, steady gravity down, peaking just above the higher end', () {
+      const start = Leap.crouch, end = 1 - Leap.land, steps = 20;
+      final feet = [for (var k = 0; k <= steps; k++) leap.feet(start + (end - start) * k / steps)];
+      final across = [for (var k = 1; k <= steps; k++) feet[k].dx - feet[k - 1].dx];
+      expect(across.every((d) => (d - across.first).abs() < 1e-6), isTrue, reason: 'steady across');
+      final gravity = [for (var k = 2; k <= steps; k++) feet[k].dy - 2 * feet[k - 1].dy + feet[k - 2].dy];
+      expect(gravity.every((d) => (d - gravity.first).abs() < 1e-6), isTrue, reason: 'steady gravity');
+      expect(gravity.first, greaterThan(0), reason: 'pulling down (screen y grows downwards)');
+      final top = [for (var k = 0; k <= 2000; k++) leap.feet(k / 2000).dy].reduce(min);
+      expect(top, closeTo(leap.to.dy - leap.height, 0.5), reason: 'it peaks just above the room, then drops into it');
+      const back = Leap(from: Offset(200, 450), to: Offset(250, 900), fromScale: 1.06, toScale: 0.56);
+      final up = [for (var k = 0; k <= 2000; k++) back.feet(k / 2000).dy].reduce(min);
+      expect(up, closeTo(back.from.dy - back.height, 0.5), reason: 'out of the room: up a little, then down onto the taskbar');
     });
 
     test('squashed to take off and to land, stretched in the air, then still; dust once it lands', () {

@@ -11,7 +11,7 @@ import 'dart:ui';
 
 /// Where a genie runs: the panel's rect and Mochi's spot (the neck), in the same coordinates.
 class Genie {
-  const Genie({required this.panel, required this.spot, this.strips = 48});
+  const Genie({required this.panel, required this.spot, this.strips = 24});
 
   /// The panel when it's all the way out.
   final Rect panel;
@@ -19,7 +19,7 @@ class Genie {
   /// Mochi's spot on the taskbar: where the neck narrows to (its x) and where the panel comes from (its y).
   final Offset spot;
 
-  /// How many horizontal strips the warp has.
+  /// How many horizontal strips the warp has (24 keep the funnel's edges smooth; more only cost time).
   final int strips;
 
   static double _clamp(double x) => x.clamp(0.0, 1.0).toDouble();
@@ -100,9 +100,9 @@ class Genie {
   }
 }
 
-/// Mochi's leap between its spot on the taskbar and its place in the popover's room: an arc, squashed on take-off,
-/// stretched in the air, squashed again on landing (with a puff of dust), growing or shrinking between the taskbar's
-/// size and the room's.
+/// Mochi's leap between its spot on the taskbar and its place in the popover's room: a true parabola (steady across,
+/// steady "gravity" down), squashed on take-off, stretched in the air, squashed again on landing (with a puff of dust),
+/// growing or shrinking between the taskbar's size and the room's.
 class Leap {
   const Leap({required this.from, required this.to, required this.fromScale, required this.toScale, this.height = 46});
 
@@ -114,6 +114,13 @@ class Leap {
   /// How far above the higher end the arc peaks.
   final double height;
 
+  /// The arc's "gravity": y(τ) = from + dτ − kτ(1 − τ) through the air (τ from 0 to 1) peaks [height] above the higher
+  /// end when k = |d| + 2h + 2√(h(|d| + h)).
+  double get _gravity {
+    final rise = (to.dy - from.dy).abs();
+    return rise + 2 * height + 2 * math.sqrt(height * (rise + height));
+  }
+
   /// The part of the leap spent crouching before take-off, and squashing after landing.
   static const double crouch = 0.14;
   static const double land = 0.18;
@@ -121,11 +128,8 @@ class Leap {
   /// Where Mochi's feet are at [p] (0…1 through the leap).
   Offset feet(double p) {
     final air = Genie._clamp((p - crouch) / (1 - crouch - land));
-    final x = Genie._lerp(from.dx, to.dx, Genie._smooth(air));
-    final straight = Genie._lerp(from.dy, to.dy, air);
-    final peak = math.min(from.dy, to.dy) - height;
-    final lift = (straight - peak) * 4 * air * (1 - air);
-    return Offset(x, straight - lift);
+    final x = Genie._lerp(from.dx, to.dx, air);
+    return Offset(x, from.dy + (to.dy - from.dy) * air - _gravity * air * (1 - air));
   }
 
   /// Mochi's size at [p].
