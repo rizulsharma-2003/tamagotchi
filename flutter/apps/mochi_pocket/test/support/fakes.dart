@@ -253,6 +253,21 @@ class FakeBridge implements PlatformBridge, AudioFocus {
 
   @override
   Future<String?> filesDir() async => null;
+
+  /// "Talk to Mochi" in Quick Settings, and what Android answers when asked to add it.
+  TalkTileState tile = const TalkTileState();
+  String tileAnswer = 'added';
+  int tileRequests = 0;
+
+  @override
+  Future<TalkTileState> talkTile() async => tile;
+
+  @override
+  Future<String> addTalkTile() async {
+    tileRequests++;
+    if (tileAnswer == 'added' || tileAnswer == 'already') tile = TalkTileState(added: true, canAsk: tile.canAsk);
+    return tileAnswer;
+  }
 }
 
 class FakeOpener implements LinkOpener {

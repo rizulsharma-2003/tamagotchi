@@ -16,6 +16,9 @@ internal class WidgetView(private val json: JSONObject) {
 
     val paired get() = json.optBoolean("paired", false)
     val petName get() = string("petName") ?: "Mochi"
+
+    /** The computer, as the app names it ("your Mac", "your PC"); null before pairing. */
+    val host get() = if (paired) string("host") else null
     val title get() = string("title") ?: "Mochi & Claude"
     val text get() = string("text") ?: ""
     val art get() = string("art") ?: "idle"

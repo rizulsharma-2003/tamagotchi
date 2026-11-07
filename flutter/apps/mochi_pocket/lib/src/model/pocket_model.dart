@@ -295,6 +295,28 @@ class PocketModel extends ChangeNotifier {
   /// "Check now" went to the computer, which didn't pick it up in time ([macSilence]), so Mochi Cloud is checking.
   Stream<void> get cloudTookOver => _cloudTookOver.stream;
 
+  /// The relay has sent the room's state since the app started (the card, Mochi Cloud's trigger).
+  bool get synced => _link?.lastSync != null;
+
+  /// Waits until [test] holds (checked whenever the model changes), at most [timeout]: for a shortcut or Hey Google
+  /// that opened the app, until the room has said what's waiting or how to check. Whether it held.
+  Future<bool> until(bool Function() test, {Duration timeout = const Duration(seconds: 4)}) async {
+    if (test()) return true;
+    final held = Completer<bool>();
+    void check() {
+      if (!held.isCompleted && test()) held.complete(true);
+    }
+
+    addListener(check);
+    final timer = Timer(timeout, () {
+      if (!held.isCompleted) held.complete(false);
+    });
+    final result = await held.future;
+    timer.cancel();
+    removeListener(check);
+    return result;
+  }
+
   bool isDone(String id) => _done.isDone(id);
 
   /// When [id] was marked done (Unix time), if it is.

@@ -5,6 +5,7 @@ import '../model/pocket_model.dart';
 import '../model/updates_history.dart';
 import '../services/link_opener.dart';
 import '../theme.dart';
+import '../voice/agent_speech.dart';
 import '../voice/updates_reader.dart';
 import '../widgets/agent_card.dart';
 import '../widgets/clay.dart';
@@ -14,9 +15,18 @@ import 'home_screen.dart' show spokenTimeFor;
 /// updates by day ("Earlier today", "Yesterday", "Tuesday, 4 Nov"): what came in and when, and what you or your
 /// computer marked done, where and when. Pull down to ask your computer to check again. Each update is its own small
 /// clay card, in a lazily built list. "Read aloud" reads what's waiting; leaving the screen stops it, as on the iPhone.
-/// With Mochi Cloud set up, an email's long-press menu has "Draft a reply…".
+/// With Mochi Cloud set up, an email's long-press menu has "Draft a reply…". Opened by "What's waiting?" (a shortcut or
+/// Hey Google), Mochi reads [readAloud] as soon as it's open.
 class UpdatesScreen extends StatefulWidget {
-  const UpdatesScreen({super.key, required this.model, required this.opener, required this.reader, required this.checkNow, this.draft});
+  const UpdatesScreen({
+    super.key,
+    required this.model,
+    required this.opener,
+    required this.reader,
+    required this.checkNow,
+    this.draft,
+    this.readAloud,
+  });
 
   final PocketModel model;
   final LinkOpener opener;
@@ -26,6 +36,9 @@ class UpdatesScreen extends StatefulWidget {
   /// "Draft a reply…" for an email (null: Mochi Cloud isn't set up).
   final void Function(AgentNote note)? draft;
 
+  /// What to read out once it's open, in Mochi's voice (TalkBack reads it when it's on).
+  final List<AgentNote>? readAloud;
+
   @override
   State<UpdatesScreen> createState() => _UpdatesScreenState();
 }
@@ -34,6 +47,18 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
   PocketModel get model => widget.model;
   LinkOpener get opener => widget.opener;
   VoidCallback get checkNow => widget.checkNow;
+
+  @override
+  void initState() {
+    super.initState();
+    final items = widget.readAloud;
+    if (items == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final script = AgentSpeech.script(items, time: spokenTimeFor(context));
+      widget.reader.say(script, talkBack: MediaQuery.accessibleNavigationOf(context));
+    });
+  }
 
   @override
   void dispose() {

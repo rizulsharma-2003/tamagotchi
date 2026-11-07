@@ -200,6 +200,7 @@ class _MochiAppState extends State<MochiApp> {
             reader: widget.reader,
             live: widget.live,
             homeWidget: widget.homeWidget,
+            bridge: widget.bridge,
             places: _places.stream,
             talk: _talk,
           ),

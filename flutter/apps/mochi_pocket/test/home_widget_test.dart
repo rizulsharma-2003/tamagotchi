@@ -52,6 +52,7 @@ void main() {
       expect(view['staleAtMs'], ((t + 30 * 60) * 1000).round());
       expect([view['restTitle'], view['restText'], view['restArt']], ['Claude is idle', 'On your Mac', 'idle']);
       expect(view['sessionsTitle'], 'Claude on your Mac');
+      expect(view['host'], 'your Mac', reason: "the Quick Settings tile's description names it too");
       expect(view['sessions'], [
         {'project': 'mochi-link', 'status': 'Working', 'phase': 'working'},
         {'project': 'mac-Tamagotchi', 'status': 'Finished', 'phase': 'done'},

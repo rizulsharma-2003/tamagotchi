@@ -1,7 +1,10 @@
 package com.insideedge.mochi
 
+import android.app.StatusBarManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.Icon
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -15,9 +18,10 @@ import io.flutter.plugin.common.MethodChannel
  * the pairing link the app was opened with (`mochi://pair?…`, from a QR code app, a browser or `adb`), links that
  * arrive while it runs (`link`, sent to Dart), this phone's model for the Mac's device list, the app's files folder,
  * audio focus while Mochi reads aloud (`audioFocusLost` tells Dart when a call or another app takes the audio), and
- * where the app should open (`place`): `home`, `sessions` or `updates`, from the home-screen widget (`mochi://<place>`)
- * or the buttons of Mochi's ongoing notification (Open, Open the Session). Hold to talk has a channel of its own
- * ([SpeechChannel]).
+ * where the app should open (`place`): `home`, `sessions` or `updates` from the home-screen widget (`mochi://<place>`)
+ * and the buttons of Mochi's ongoing notification (Open, Open the Session); `talk`, `waiting` or `check` from the
+ * Quick Settings tile ([TalkTileService]), the app shortcuts and Google Assistant (res/xml/shortcuts.xml). It also asks
+ * Android to add the tile to Quick Settings (`addTalkTile`). Hold to talk has a channel of its own ([SpeechChannel]).
  */
 class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
@@ -65,6 +69,8 @@ class MainActivity : FlutterActivity() {
                         abandonAudioFocus()
                         result.success(null)
                     }
+                    "talkTile" -> result.success(mapOf("added" to TalkTileService.isAdded(this), "canAsk" to (Build.VERSION.SDK_INT >= 33)))
+                    "addTalkTile" -> addTalkTile(result)
                     else -> result.notImplemented()
                 }
             }
@@ -138,17 +144,64 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * Where the app was opened to: a `mochi://<place>` link from the widget (explicit intents only: there's no intent
-     * filter for them, so a web page can't open one), or Mochi's ongoing notification's button (plugins/mochi_live_update:
-     * `open` is home, `session` is Claude's sessions). Not when Android reopens the app from Recents with the intent
-     * that first started it: that place was already visited.
+     * Where the app was opened to: a `mochi://<place>` link from the widget, the Quick Settings tile, an app shortcut
+     * or Google Assistant (explicit intents only: there's no intent filter for them, so a web page can't open one); a
+     * feature Assistant names ("open what's waiting in Mochi"); or Mochi's ongoing notification's button
+     * (plugins/mochi_live_update: `open` is home, `session` is Claude's sessions). Assistant's own links carry `voice=1`
+     * and arrive as `<place>:voice`, so Mochi answers out loud. Not when Android reopens the app from Recents with the
+     * intent that first started it: that place was already visited.
      */
     private fun place(intent: Intent?): String? {
         if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
         intent.getStringExtra(LIVE_ACTION)?.let { return if (it == "session") "sessions" else "home" }
-        val data = intent.data ?: return null
-        if (intent.action != Intent.ACTION_VIEW || data.scheme != "mochi") return null
-        return data.host?.takeIf { it in PLACES }
+        if (intent.action != Intent.ACTION_VIEW) return null
+        val data = intent.data
+        if (data == null) return intent.getStringExtra("feature")?.let(::feature)
+        if (data.scheme != "mochi") return null
+        val place = data.host?.takeIf { it in PLACES } ?: return null
+        return if (data.getQueryParameter("voice") == "1") "$place:voice" else place
+    }
+
+    /** A feature Assistant matched to none of the shortcuts' names, by its words. */
+    private fun feature(words: String): String {
+        val text = words.lowercase()
+        return when {
+            "talk" in text || "speak" in text || "voice" in text -> "talk"
+            "wait" in text || "pending" in text || "new" in text -> "waiting"
+            "check" in text || "refresh" in text -> "check"
+            "update" in text || "history" in text -> "updates"
+            "session" in text || "claude" in text -> "sessions"
+            else -> "home"
+        }
+    }
+
+    /** Android 13+: Android asks whether to add "Talk to Mochi" to Quick Settings. Answers how it went. */
+    private fun addTalkTile(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < 33) return result.success("unsupported")
+        val statusBar = getSystemService(StatusBarManager::class.java) ?: return result.success("unsupported")
+        try {
+            statusBar.requestAddTileService(
+                ComponentName(this, TalkTileService::class.java),
+                getString(R.string.mochi_tile_talk),
+                Icon.createWithResource(this, R.drawable.ic_stat_mochi),
+                mainExecutor,
+            ) { code ->
+                val answer = when (code) {
+                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "added"
+                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "already"
+                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> "declined"
+                    else -> "unavailable"
+                }
+                if (code == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED ||
+                    code == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED
+                ) {
+                    getSharedPreferences(TalkTileService.PREFS, Context.MODE_PRIVATE).edit().putBoolean(TalkTileService.ADDED, true).apply()
+                }
+                result.success(answer)
+            }
+        } catch (error: Exception) {
+            result.success("unavailable")
+        }
     }
 
     private fun pairingLink(intent: Intent?): String? {
@@ -175,6 +228,6 @@ class MainActivity : FlutterActivity() {
         const val LIVE_ACTION = "com.insideedge.mochi.LIVE_ACTION"
 
         /** The places `mochi://<place>` can open (the app's `AppPlace`). */
-        val PLACES = setOf("home", "sessions", "updates")
+        val PLACES = setOf("home", "sessions", "updates", "talk", "waiting", "check")
     }
 }

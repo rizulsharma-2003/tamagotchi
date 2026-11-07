@@ -40,6 +40,7 @@ class HomeScreen extends StatefulWidget {
     this.places,
     this.talk,
     this.homeWidget,
+    this.bridge,
   });
 
   final PocketModel model;
@@ -62,6 +63,9 @@ class HomeScreen extends StatefulWidget {
 
   /// The home-screen widget (for Settings).
   final HomeWidget? homeWidget;
+
+  /// The Quick Settings tile (for Settings).
+  final PlatformBridge? bridge;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -103,17 +107,70 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Opened to a place: the top (the widget, Open), Claude's sessions (Open the Session when Claude needs you, the
-  /// widget's sessions), or Updates (the widget's "Waiting for you").
-  void _open(String place) {
+  /// widget's sessions), Updates (the widget's "Waiting for you"), or hands-free (A4): Talk to Mochi (the Quick
+  /// Settings tile, a shortcut, Hey Google), What's waiting (read out in Mochi's voice) and Check now. When Hey Google
+  /// asked ([AppPlace.voice]), Mochi answers Check now out loud too.
+  void _open(String raw) {
+    final (place, voice) = AppPlace.parse(raw);
     Navigator.of(context).popUntil((route) => route.isFirst);
     switch (place) {
       case AppPlace.sessions:
         WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSessions());
       case AppPlace.updates:
         _openUpdates();
+      case AppPlace.waiting:
+        unawaited(_whatsWaiting());
+      case AppPlace.talk:
+        _toTop();
+        final talk = widget.talk;
+        if (talk != null && !talk.isBusy) unawaited(talk.earHeld(byTap: true));
+      case AppPlace.check:
+        _toTop();
+        unawaited(_checkFromOutside(voice: voice));
       default:
-        if (_scroll.hasClients) _scroll.jumpTo(0);
+        _toTop();
     }
+  }
+
+  void _toTop() {
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  /// "What's waiting?" (the iPhone's `WhatsWaitingIntent`): Updates opens and Mochi reads what's waiting, in its own
+  /// voice (TalkBack reads it instead when it's on).
+  Future<void> _whatsWaiting() async {
+    final items = await _waitingNow();
+    if (mounted) _openUpdates(readAloud: items);
+  }
+
+  /// What's waiting right now (the iPhone's `waitingNow`): the room's card once it has come (a moment after the app
+  /// starts), else what the home-screen widget last showed, leaving out what's done and meetings that have started.
+  Future<List<AgentNote>> _waitingNow() async {
+    await model.until(() => model.agent != null);
+    if (model.agent != null) return model.waiting;
+    final snapshot = await widget.homeWidget?.read();
+    if (snapshot == null || snapshot.room != model.credentials?.room) return const [];
+    final now = DateTime.now().millisecondsSinceEpoch / 1000;
+    return [
+      for (final note in snapshot.card?.items ?? const <AgentNote>[])
+        if (!model.isDone(note.id) && (note.due == null || note.due! > now - 600)) note,
+    ];
+  }
+
+  /// Check now from a shortcut or Hey Google: once the room has said whether Mochi Cloud is set up, the same as the
+  /// card's button. Asked by voice, Mochi says what it did (the iPhone's `CheckNowIntent`).
+  Future<void> _checkFromOutside({required bool voice}) async {
+    await model.until(() => model.synced);
+    if (!mounted) return;
+    final route = await _checkNow();
+    if (!voice || !mounted) return;
+    final words = switch (route) {
+      CheckRoute.cloud || CheckRoute.busy => "Checking now. I'll send you a notification in a minute or two.",
+      CheckRoute.computer =>
+        model.macOnline ? 'Asking ${model.host.yours} now.' : "${model.host.yoursCapitalized} is away. I'll pass it on when it wakes.",
+      CheckRoute.failed => model.cloudError ?? "That didn't go. Try again in a moment.",
+    };
+    unawaited(widget.reader.say(words, talkBack: MediaQuery.accessibleNavigationOf(context)));
   }
 
   /// The list builds what's on screen only: until the section is built, jump towards the end, then bring it in.
@@ -217,9 +274,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// "Check now" (the iPhone's `checkForUpdates`): straight to Mochi Cloud when that's on and set up, otherwise the
   /// computer first. Mochi says where it went.
-  Future<void> _checkNow() async {
+  Future<CheckRoute> _checkNow() async {
     final route = await model.checkNow(useCloud: widget.settings.checkNowUsesCloud);
-    if (!mounted) return;
+    if (!mounted) return route;
     switch (route) {
       case CheckRoute.cloud:
         _say('Asking Mochi Cloud… your news arrives as a notification in a minute or two.', seconds: 8);
@@ -228,6 +285,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case CheckRoute.computer || CheckRoute.busy || CheckRoute.failed:
         break;
     }
+    return route;
   }
 
   /// "Draft a reply…" on an email: Mochi Cloud writes it into Gmail Drafts.
@@ -242,18 +300,20 @@ class _HomeScreenState extends State<HomeScreen> {
         reader: widget.reader,
         live: widget.live,
         homeWidget: widget.homeWidget,
+        bridge: widget.bridge,
       ),
     ),
   );
 
-  void _openUpdates() => Navigator.of(context).push(
+  void _openUpdates({List<AgentNote>? readAloud}) => Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (_) => UpdatesScreen(
         model: model,
         opener: widget.opener,
         reader: widget.reader,
-        checkNow: _checkNow,
+        checkNow: () => unawaited(_checkNow()),
         draft: model.draftsAvailable ? _draft : null,
+        readAloud: readAloud,
       ),
     ),
   );

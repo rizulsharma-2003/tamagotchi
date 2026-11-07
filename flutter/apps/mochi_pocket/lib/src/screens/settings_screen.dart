@@ -9,6 +9,7 @@ import '../live/live_updates.dart';
 import '../model/app_settings.dart';
 import '../model/pocket_model.dart';
 import '../services/alert_notifier.dart';
+import '../services/platform_bridge.dart';
 import '../theme.dart';
 import '../voice/mochi_voice.dart';
 import '../voice/updates_reader.dart';
@@ -31,6 +32,7 @@ class SettingsScreen extends StatefulWidget {
     required this.reader,
     this.live,
     this.homeWidget,
+    this.bridge,
   });
 
   final PocketModel model;
@@ -44,6 +46,9 @@ class SettingsScreen extends StatefulWidget {
   /// The home-screen widget: whether it's there, and Add to Home Screen.
   final HomeWidget? homeWidget;
 
+  /// "Talk to Mochi" in Quick Settings: whether it's there, and Add to Quick Settings.
+  final PlatformBridge? bridge;
+
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -53,6 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   late Future<List<VoiceInfo>> _voices = widget.reader.voices();
   LiveUpdateStatus? _liveStatus;
   HomeWidgetPlacement? _widgetPlacement;
+  TalkTileState? _tile;
   String _samplePhase = 'working';
   bool _sampleShown = false;
 
@@ -87,11 +93,13 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
     final on = await widget.notifier.enabled();
     final live = await widget.live?.notifier.status();
     final placement = await widget.homeWidget?.surface.status();
+    final tile = await widget.bridge?.talkTile();
     if (mounted) {
       setState(() {
         _notificationsOn = on;
         _liveStatus = live;
         _widgetPlacement = placement;
+        _tile = tile;
       });
     }
   }
@@ -147,6 +155,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
             _notifications(),
             if (widget.live != null) ...[const SizedBox(height: Space.l), _lockScreen()],
             if (widget.homeWidget != null) ...[const SizedBox(height: Space.l), _homeScreen()],
+            if (widget.bridge != null) ...[const SizedBox(height: Space.l), _handsFree()],
             const SizedBox(height: Space.l),
             _appearance(),
             const SizedBox(height: Space.l),
@@ -506,6 +515,85 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
         ],
       ),
     );
+  }
+
+  // MARK: Hands-free
+
+  /// Mochi without opening Mochi (A4; the iPhone's Siri phrases and Shortcuts): "Talk to Mochi" in Quick Settings, the
+  /// app shortcuts on Mochi's icon, and Hey Google.
+  Widget _handsFree() {
+    final p = context.palette;
+    final tile = _tile;
+    final added = tile?.added ?? false;
+    return ClayCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          OverflowBar(
+            alignment: MainAxisAlignment.spaceBetween,
+            overflowAlignment: OverflowBarAlignment.start,
+            spacing: Space.s,
+            overflowSpacing: Space.s,
+            children: [
+              Semantics(header: true, child: Text('Hands-free', style: context.type.headline)),
+              if (tile != null)
+                Tag(
+                  text: added ? 'Tile added' : 'No tile yet',
+                  icon: added ? Icons.check_rounded : Icons.mic_none_rounded,
+                  tint: added ? p.success : p.inkSecondary,
+                ),
+            ],
+          ),
+          const SizedBox(height: Space.s),
+          Text(
+            '“Talk to Mochi” in Quick Settings opens ${model.petName} listening, from anywhere: swipe down, tap it, say what '
+            'you need, then Send. It goes to ${model.host.yours}, as when you hold ${model.petName}.',
+            style: context.type.footnote,
+          ),
+          const SizedBox(height: Space.m),
+          if ((tile?.canAsk ?? false) && !added)
+            FilledButton.icon(
+              onPressed: _addTile,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Add to Quick Settings'),
+            )
+          else if (!added)
+            NoteLabel(
+              text: 'To add it: swipe down from the top twice, tap the pencil, and drag “Talk to Mochi” in.',
+              icon: Icons.edit_rounded,
+              tint: p.tint,
+              textColor: p.ink,
+            ),
+          const SizedBox(height: Space.m),
+          NoteLabel(
+            text: 'Press and hold ${model.petName}’s icon for Talk to Mochi, What’s waiting and Check now.',
+            icon: Icons.touch_app_rounded,
+            tint: p.tint,
+            textColor: p.ink,
+          ),
+          const SizedBox(height: Space.s),
+          NoteLabel(
+            text:
+                '“Hey Google, what’s waiting on Mochi?”, “Hey Google, check Mochi” and “Hey Google, talk to Mochi” work once '
+                'Mochi comes from Google Play. ${model.petName} answers in its own voice.',
+            icon: Icons.record_voice_over_rounded,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addTile() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final answer = await widget.bridge!.addTalkTile();
+    final words = switch (answer) {
+      'added' => 'Added “Talk to Mochi” to Quick Settings.',
+      'already' => '“Talk to Mochi” is already in Quick Settings.',
+      'declined' => null,
+      _ => 'Android didn’t add it. Swipe down twice, tap the pencil, and drag “Talk to Mochi” in.',
+    };
+    if (words != null) messenger.showSnackBar(SnackBar(content: Text(words)));
+    await _checkNotifications();
   }
 
   // MARK: Appearance

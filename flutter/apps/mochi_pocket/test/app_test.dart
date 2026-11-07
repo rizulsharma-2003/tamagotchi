@@ -424,6 +424,8 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+    // Further down the page, under Hands-free.
+    await tester.scrollUntilVisible(find.text('Hear a sample'), 300, scrollable: find.byType(Scrollable).last);
     for (final title in ['Mochi', 'Tiny', 'Calm', 'Plain']) {
       expect(find.widgetWithText(ChoiceChip, title), findsOneWidget);
     }

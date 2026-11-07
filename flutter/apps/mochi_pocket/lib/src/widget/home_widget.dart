@@ -258,6 +258,8 @@ abstract final class HomeWidgetView {
       'v': 1,
       'paired': true,
       'petName': pet,
+      // The computer, by name ("your Mac"), for the Quick Settings tile's description too.
+      'host': host,
       'title': title,
       'text': text,
       'art': art,

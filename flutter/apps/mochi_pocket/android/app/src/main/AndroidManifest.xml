@@ -38,6 +38,9 @@
             <!-- MainActivity hands Mochi's links (pairing, the widget's places) to the app itself; Flutter's own deep
                  linking would treat them as routes. Flutter reads this here, on the activity. -->
             <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
+            <!-- Press and hold Mochi's icon: Talk to Mochi, What's waiting, Check now; and what Google Assistant can
+                 ask Mochi (A4). -->
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts"/>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -55,6 +58,21 @@
         <receiver
             android:exported="false"
             android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"/>
+        <!-- "Talk to Mochi" in Quick Settings (TalkTileService.kt): opens Mochi listening. Only Android's Quick Settings
+             can bind it. -->
+        <service
+            android:name=".TalkTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_stat_mochi"
+            android:label="@string/mochi_tile_talk"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="false"/>
+        </service>
         <!-- The home-screen widget, "Mochi & Claude" (widget/MochiWidgetProvider.kt). Only Android talks to it. -->
         <receiver
             android:name=".widget.MochiWidgetProvider"
