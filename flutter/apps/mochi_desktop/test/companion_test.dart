@@ -198,7 +198,7 @@ void main() {
       expect(frame.companion.toJson(), track.at(1).companion.toJson());
       expect(director.describe('Patch'), 'Patch and Mochi: high five');
       expect(director.scene(seconds + track.length + 0.1), isNull, reason: 'it ends');
-      expect(director.burstAt(seconds + Celebration.length + 0.1), isNull);
+      expect(director.burstAt(seconds + CelebrationArt.length + 0.1), isNull);
     });
 
     patchTest('a long turn gets a victory dance, a passing test run a tiny trophy', (tester) async {

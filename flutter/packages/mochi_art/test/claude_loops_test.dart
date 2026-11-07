@@ -51,7 +51,7 @@ void main() {
   test('the celebration bursts for 2.6 s and then draws nothing', () async {
     Future<int> inked(double elapsed) async {
       final recorder = ui.PictureRecorder();
-      Celebration.draw(
+      CelebrationArt.draw(
         GContext(Canvas(recorder)),
         elapsed,
         center: const Offset(60, 40),
@@ -69,7 +69,7 @@ void main() {
     }
 
     expect(await inked(0.3), greaterThan(20));
-    expect(await inked(Celebration.length + 0.1), 0);
+    expect(await inked(CelebrationArt.length + 0.1), 0);
     expect(await inked(-0.1), 0);
   });
 }

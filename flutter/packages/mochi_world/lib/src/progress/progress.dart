@@ -322,6 +322,10 @@ enum LifeStage implements Comparable<LifeStage> {
   const LifeStage(this.title);
   final String title;
 
+  /// A stored stage: Swift encodes it as its Int raw value (kitten 0, young 1, grownUp 2); a name works too.
+  static LifeStage? fromJson(Object? value) =>
+      value is int && value >= 0 && value < values.length ? values[value] : enumByName(values, value);
+
   @override
   int compareTo(LifeStage other) => index - other.index;
 

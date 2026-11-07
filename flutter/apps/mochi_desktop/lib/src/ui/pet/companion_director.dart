@@ -313,7 +313,7 @@ class CompanionDirector extends ChangeNotifier {
     }
     if (shot != null && !_playingShot(t)) shot = null;
     final b = burst;
-    if (b != null && t - b.start >= Celebration.length) burst = null;
+    if (b != null && t - b.start >= CelebrationArt.length) burst = null;
     // A visit Mochi never came to (it couldn't get over): let it go.
     if (pending != null && _pendingSince != null && t - _pendingSince! > 12) {
       pending = null;
@@ -442,7 +442,7 @@ class CompanionDirector extends ChangeNotifier {
     final b = burst;
     if (b == null) return null;
     final elapsed = t - b.start;
-    return elapsed >= 0 && elapsed < Celebration.length ? elapsed : null;
+    return elapsed >= 0 && elapsed < CelebrationArt.length ? elapsed : null;
   }
 
   /// The Mac's ambient scheduler (`InteractionScheduler.nextInteraction`): every couple of minutes or so, when nothing

@@ -469,7 +469,7 @@ class _MochiPainter extends CustomPainter {
     _paintBadge(canvas, Offset(size.width / 2, baseline), PetRenderer.bodyHeight * scale);
     final elapsed = burst ? patch?.burstAt(patch.time) : null;
     if (elapsed != null) {
-      Celebration.draw(
+      CelebrationArt.draw(
         g,
         elapsed,
         center: Offset(size.width / 2, baseline),
@@ -542,7 +542,7 @@ class _MochiPainter extends CustomPainter {
     }
     final elapsed = burst ? patch.burstAt(t) : null;
     if (elapsed != null) {
-      Celebration.draw(
+      CelebrationArt.draw(
         g,
         elapsed,
         center: Offset(layout.local((home.petHome + home.deskX) / 2), baseline),

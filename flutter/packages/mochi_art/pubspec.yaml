@@ -14,6 +14,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # The pose, animation and room model (one set of types for the art and Mochi's world).
+  mochi_world:
+    path: ../mochi_world
 
 dev_dependencies:
   flutter_test:

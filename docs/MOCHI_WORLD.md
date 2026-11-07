@@ -144,7 +144,7 @@ seasons.refresh(DateTime.now(), settings: seasonal, adopted: world.progress.firs
 final growth = Growth.check(world.progress, DateTime.now(), lifeStages: world.settings.lifeStages, seen: lifeStageSeen, petName: name);
 ```
 
-`mochi_art` has some of the same names: `SeasonalEvent`, `TreatStyle`, `Wearer`, `FurnitureKind`, `FurnitureCatalog`, `PlacedFurniture`, `RoomLayout` and `FurniturePlacement`. They have the same values and JSON. Import one of the two packages with a prefix, as for the poses; `art.RoomLayout.fromJson(room.toJson())` hands a room to the painters.
+`mochi_art` draws these very types (`SeasonalEvent`, `TreatStyle`, `Wearer`, the furniture and `RoomLayout` are re-exported by it), so a `RoomLayout` goes to the painters as it is; see "Rendering with `mochi_art`" below.
 
 ## Celebrations (G2)
 
@@ -252,13 +252,8 @@ The engine needs 64-bit integers, so it runs on Windows, Android and the Dart VM
 
 ## Rendering with `mochi_art`
 
-`mochi_world` has its own copy of the pose model. `PetPose`, `CompanionPose`, `Effect`, `SceneProp` and the animation enums have the same names, fields and JSON as `mochi_art`'s, so `mochi_art`, which depends on Flutter, could stay untouched while other work was going on. Until the two are merged, convert at the boundary:
+`mochi_art` depends on `mochi_world` and draws its types: the poses (`PetPose`, `CompanionPose`, `Effect`, `SceneProp` and their enums), `Ease`, the animation and interaction enums, `Accessory`, `LifeStage`, `SeasonalEvent`, `TreatStyle`, `Wearer`, `SeasonDecor` and the room's furniture (`FurnitureCatalog`, `FurnitureKind`, `PlacedFurniture`, `RoomLayout`) are `mochi_world`'s, re-exported by `mochi_art`. So `world.frame().pet` goes straight to `PetRenderer.draw`, with no conversion, and an app can import both packages without a prefix. Only the drawing-side settings (`PetColor`, `OfficeTheme`, `RenderDetail`) are `mochi_art`'s own.
 
-```dart
-import 'package:mochi_art/mochi_art.dart' as art;
-import 'package:mochi_world/mochi_world.dart' as world;
+Two drawing classes were renamed so the names stay unique: the confetti burst is `CelebrationArt` (mochi_world's `Celebration` is G2's decision), and the holiday decorations are `SeasonDecorArt` (mochi_world's `SeasonDecor` says which costume and how many candles). `PetPose.lerp`, `CompanionPose.lerp` and `Effect.lerp` moved into `mochi_world` with the types. `SceneConfig.fromJson` still reads a room whose pieces have no id (the Swift reference scenes), as before; `RoomLayout.fromJson` itself is strict, like the Mac's settings.
 
-art.PetPose.fromJson(frame.pet.toJson());   // likewise CompanionPose and SceneProp
-```
-
-That costs a few microseconds per frame. A follow-up removes it: make `mochi_art` depend on `mochi_world`, and replace its `model/poses.dart`, `ease.dart` and the animation, interaction and accessory enums in `model/world.dart` with re-exports. The APIs are a superset of `mochi_art`'s, with `copy()` no longer going through JSON. Do it once the apps aren't being edited in parallel.
+Apps that have their own types with the world's names (`mochi_desktop` has its own `NotificationCategory`, `SoundCue`, `SystemActivity`, `CompanionVisibility` and others from W1 and W2) import `mochi_world` with a prefix (`as w`) in the files that use both.

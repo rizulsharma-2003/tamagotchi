@@ -82,9 +82,9 @@ void main() {
 
   test('the room snaps furniture into its band and draws back to front', () {
     final room = RoomLayout();
-    final rug = room.add(FurnitureCatalog.kind('rug')!, 0.5, 0.5)!;
-    final shelf = room.add(FurnitureCatalog.kind('bookshelf')!, -1, 2)!;
-    final clock = room.add(FurnitureCatalog.kind('clock')!, 0.5, 0.9)!;
+    final rug = room.add(FurnitureCatalog.kind('rug')!, x: 0.5, y: 0.5)!;
+    final shelf = room.add(FurnitureCatalog.kind('bookshelf')!, x: -1, y: 2)!;
+    final clock = room.add(FurnitureCatalog.kind('clock')!, x: 0.5, y: 0.9)!;
     expect(rug.y, RoomLayout.rugBand.$1);
     expect(shelf.y, RoomLayout.floorBand.$2);
     expect(shelf.x, closeTo(20 / 360, 1e-9));
