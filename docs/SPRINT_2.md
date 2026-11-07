@@ -3,7 +3,7 @@
 **Goal:** Every feature of the Mac app is built into Mochi for Windows, and the Android app closes its remaining gaps with Mochi Pocket for iPhone.
 
 **Planned:** 2026-11-07.
-**Code:** Windows is `flutter/apps/mochi_desktop`. Android is `flutter/apps/mochi_pocket`. Shared Dart packages are `mochi_link`, `mochi_art`, `mochi_ui` and `mochi_wire`.
+**Code:** Windows is `flutter/apps/mochi_desktop`. Android is `flutter/apps/mochi_pocket`. Shared Dart packages are `mochi_link`, `mochi_art`, `mochi_ui`, `mochi_wire` and `mochi_world`.
 **Reference:** the Mac app (`Sources/App`, `Sources/TamagotchiCore`) and the [README feature list](../README.md#features).
 
 ---
@@ -14,6 +14,7 @@
 | 2026-11-07 | **W29** install and signed auto-update (Windows 0.2.0, 0.2.1 on the user's PC) · **A6** Updates history · **A8** notification actions (Android) |
 | 2026-11-08 | **W1** Windows toasts · **W2** the PC's rhythm · **W3** notify only when away · **W4** global shortcuts · **W10** summaries parity (Windows 0.2.2) |
 | 2026-11-08 | **A1** Mochi on the Android lock screen while Claude works (relay 1.4.0 deployed; reached the Realme by FCM with the app closed) · **A3** hold to talk (Android) |
+| 2026-11-08 | **G1** Mochi's world in Dart (`mochi_world`, matching the Mac on golden fixtures from Swift) · **G2** celebrations from real Claude events (the classifier; wiring into Windows and Android still to do) |
 | Parked | Multi-host rooms (docs/MULTI_HOST_PLAN.md), by the user's decision |
 
 ## Where Sprint 1 left us
@@ -51,11 +52,30 @@ Port the Mac's pet-life engine from `Sources/TamagotchiCore` to a pure-Dart pack
   - **Friendship and achievements** (local, never decreasing, daily caps) and **growing up** (kitten → young → grown-up).
 - **How:** pure Dart with no Flutter, golden-tested against the Swift behaviour using the same seeds (shared fixtures in `link-spec/` style).
 - **Acceptance:** the same seed gives the same script choices as the Mac; the Windows pet and the room run on it; Android can opt in (A5).
+- **Built (2026-11-08; not yet wired into the apps):**
+  - **What's ported.** `flutter/packages/mochi_world`, pure Dart with no dependencies. `MochiWorld` is `CompanionWorld` without the menu-bar roamer. It also has:
+    - both animation state machines, and every pet and companion pose with follow-through, every play, treat and petting variant;
+    - the 16 interaction scripts and their seeded scheduler;
+    - sessions, reactions and the notification policy;
+    - friendship, achievements and growing up;
+    - persistence of progress and the recent event history.
+  - **Golden fixtures.** `Tests/TamagotchiCoreTests/WorldFixture*.swift` writes `link-spec/world/*.json` from the Swift engine and fails if they drift. The Dart tests replay them (103 tests):
+    - every pose in many contexts;
+    - 14,200 scheduler steps;
+    - progress step by step;
+    - 5 whole world timelines with 165 snapshots of state, effects and frames.
+  - **Not ported** (each its own item): the roamer and den, adventures (W19), speech lines (W11), games (W14), the focus timer (W15), the daily recap (W16), seasons and the room catalogue.
+  - **How the apps drive it:** docs/MOCHI_WORLD.md.
 
 ### G2 · Celebrations from real Claude events · M
 Port the event classification behind celebrations (`commandKind`: build/test detection, long-turn detection, repeated tool errors).
 - High five for a finished turn, victory dance for a long turn (only when both ends were seen live), **trophy for real build/test results**, detective mode → case closed, graduation for milestones.
 - Never for simulated or late events.
+- **Built (2026-11-08; the classifier only, wiring still to do):**
+  - **Where it lives.** In `mochi_world` (`Celebrations`, on the same `SessionRegistry` and `EventToAnimationMapper` the world uses), because the decision needs the session's turn, its tool errors and its build/test results, not just the hook event. `mochi_wire` stays the transport.
+  - **What it answers.** It tells why an event celebrates: turn finished, long turn, build/test passed, investigating, case closed, first milestone, milestone or commit. It never answers for simulated, late or restored events.
+  - **Checked against Swift.** `link-spec/world/celebrations.json` holds 17 timelines, with their transitions, reactions, notification decisions and celebrations, plus 40 commands. `mochi_wire`'s `CommandClassifier` is checked against the same commands.
+  - **Still to do.** Use it in the Windows pet and room (W11–W18), and on Android (A5).
 
 ---
 
