@@ -96,6 +96,7 @@ class DesktopWorld extends ChangeNotifier {
     required this.sounds,
     required this.toasts,
     WorldStore? store,
+    w.FreshLineWriter? freshLines,
     bool Function()? reducedMotion,
     DateTime Function()? clock,
     double Function()? uptime,
@@ -133,7 +134,7 @@ class DesktopWorld extends ChangeNotifier {
         if (w.eventFromJson(json) case final event?) celebrations.observe(event.withDelivery(w.EventDelivery.restored));
       }
     }
-    speech = w.SpeechDirector(world);
+    speech = w.SpeechDirector(world, writer: freshLines);
     _growth(announce: false);
     _signature = _currentSignature();
     settings.addListener(_settingsChanged);
@@ -160,6 +161,13 @@ class DesktopWorld extends ChangeNotifier {
 
   /// When Mochi and Patch speak (W11).
   late final w.SpeechDirector speech;
+
+  /// What Mochi or Patch is saying right now (W11), for the bubbles on the taskbar, the desktop and in the room.
+  final ValueNotifier<w.SpeechBubble?> speechNow = ValueNotifier(null);
+
+  /// The note at the top of the scene right now (an achievement, a new friendship level, growing up), for the room
+  /// and the pet's bubble.
+  final ValueNotifier<w.WorldToast?> toastNow = ValueNotifier(null);
 
   /// Why Claude's real moments celebrate (G2), fed every event in order.
   late final w.Celebrations celebrations;
@@ -469,6 +477,10 @@ class DesktopWorld extends ChangeNotifier {
   /// What the views show changed (a new moment, a bubble, a note, progress, the stage, Patch arriving): listeners hear
   /// about it once, not every tick.
   void _changed({bool force = false}) {
+    final speaking = world.activeSpeech;
+    if (speaking?.id != speechNow.value?.id) speechNow.value = speaking;
+    final toast = world.activeToast;
+    if (toast?.title != toastNow.value?.title || toast?.until != toastNow.value?.until) toastNow.value = toast;
     final signature = _currentSignature();
     if (!force && signature == _signature) return;
     _signature = signature;
@@ -504,6 +516,8 @@ class DesktopWorld extends ChangeNotifier {
     settings.removeListener(_settingsChanged);
     rhythm.removeListener(_rhythmChanged);
     unawaited(_celebrated.close());
+    speechNow.dispose();
+    toastNow.dispose();
     super.dispose();
   }
 }

@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_ui/mochi_ui.dart';
+import 'package:mochi_world/mochi_world.dart' show Chattiness;
 
 import '../../core/desktop_settings.dart';
 import '../../core/hotkeys.dart';
@@ -675,6 +676,7 @@ class FunPane extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _TalkingGroup(host: host),
         SettingsGroup(
           title: 'Holidays',
           footer:
@@ -713,7 +715,6 @@ class FunPane extends StatelessWidget {
         SettingsGroup(
           title: 'From the Mac',
           children: [
-            SoonRow(title: 'Talking in speech bubbles', detail: '$pet and ${host.companion} chatting as they work, as often as you like. Here $pet speaks up only for Claude’s moments.'),
             SoonRow(title: 'Growing up', detail: 'Kitten, then young, then grown-up as your friendship grows.'),
             SoonRow(title: 'Games', detail: 'Catch and rock-paper-scissors with $pet.'),
             SoonRow(title: 'Adventures', detail: '$pet heads out to explore your desktop and comes back with stories.'),
@@ -721,6 +722,64 @@ class FunPane extends StatelessWidget {
             SoonRow(title: 'Daily recap', detail: 'A card of what you and Claude did today.'),
             SoonRow(title: 'Room furniture', detail: 'Arrange furniture in $pet’s room.'),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Settings › Fun › Talking (the Mac's): Mochi and Patch say a word now and then in speech bubbles, as chatty as you
+/// like, and (with Claude Code on this PC) now and then a fresh line from Claude Haiku.
+class _TalkingGroup extends StatefulWidget {
+  const _TalkingGroup({required this.host});
+
+  final SettingsHost host;
+
+  @override
+  State<_TalkingGroup> createState() => _TalkingGroupState();
+}
+
+class _TalkingGroupState extends State<_TalkingGroup> {
+  /// Where Claude Code is on this PC (fresh lines need it), looked for once.
+  late final String? _claude = widget.host.desktop.locateClaude();
+
+  @override
+  Widget build(BuildContext context) {
+    final host = widget.host;
+    final settings = host.desktop.settings;
+    final pet = host.pet;
+    final talking = settings.speechEnabled;
+    return SettingsGroup(
+      title: 'Talking',
+      footer: switch (settings.chattiness) {
+        Chattiness.quiet => 'Quiet: only what matters (Claude needs you, a finished turn, green tests).',
+        Chattiness.normal => 'Greetings, Claude’s moments, petting and the odd sleepy mumble.',
+        Chattiness.chatty => 'Chatty: more often, and musings while nothing’s going on.',
+      },
+      children: [
+        ToggleRow(
+          title: '$pet and ${host.companion} talk in speech bubbles',
+          value: talking,
+          onChanged: (value) => settings.speechEnabled = value,
+        ),
+        ChoiceRow<Chattiness>(
+          label: 'Chattiness',
+          selected: settings.chattiness,
+          onSelected: talking ? (value) => settings.chattiness = value : null,
+          choices: const [
+            (Chattiness.quiet, 'Quiet', Icons.volume_mute_rounded),
+            (Chattiness.normal, 'Normal', Icons.chat_bubble_outline_rounded),
+            (Chattiness.chatty, 'Chatty', Icons.forum_rounded),
+          ],
+        ),
+        ToggleRow(
+          title: 'Fresh lines from Claude Haiku',
+          subtitle: _claude == null
+              ? 'Needs Claude Code on this PC (Settings › Claude Code).'
+              : 'Now and then a line written for the moment, through Claude Code on this PC, every couple of hours while '
+                    'it’s on. Only the kind of moment is sent, never anything about your work.',
+          value: settings.speechFreshLines && _claude != null,
+          onChanged: talking && _claude != null ? (value) => settings.speechFreshLines = value : null,
         ),
       ],
     );

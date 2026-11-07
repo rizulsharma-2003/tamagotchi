@@ -14,15 +14,17 @@ import '../../core/notifications.dart' show NotificationCategory;
 import '../../core/pet_cues.dart';
 import '../../core/sessions.dart' show Attention;
 import '../../desktop.dart';
+import '../../platform/taskbar.dart' show HomeStage;
 import '../../update/updater.dart';
 import '../shell.dart';
 import 'companion_director.dart';
 import 'mochi_view.dart';
 import 'pet_director.dart';
+import 'speech_bubble.dart';
 import 'taskbar_stroll.dart';
 
 /// The desktop pet: Mochi on a transparent, always-on-top window, with a speech bubble when Claude needs you or
-/// finishes. On Windows it strolls inside the taskbar ([stroll]), at the taskbar's size. Click to pet, double-click (or
+/// finishes, and for what Mochi and Patch say now and then (W11) and the world's notes (an achievement, growing up). On Windows it strolls inside the taskbar ([stroll]), at the taskbar's size. Click to pet, double-click (or
 /// Enter) to open Mochi, drag to move (off the taskbar: it stays where it's dropped), right-click (or Shift+F10) for
 /// the menu.
 ///
@@ -82,6 +84,8 @@ class _PetSurfaceState extends State<PetSurface> {
   void initState() {
     super.initState();
     _cues = widget.desktop.cues.listen(_cue);
+    widget.desktop.world.speechNow.addListener(_worldSays);
+    widget.desktop.world.toastNow.addListener(_worldSays);
     // Celebrations from Claude's real moments (G2), said for the screen reader as they play.
     _celebrations = widget.desktop.world.celebrated.listen((celebration) {
       final settings = widget.desktop.settings;
@@ -132,6 +136,24 @@ class _PetSurfaceState extends State<PetSurface> {
     }
   }
 
+  /// Mochi or Patch started or stopped talking, or a note came or went.
+  void _worldSays() {
+    if (mounted) setState(() {});
+  }
+
+  /// The world's note (its title), or what Mochi or Patch is saying (by Patch's name when he isn't beside Mochi), and
+  /// who's speaking.
+  ({String text, bool patch})? _worldLine({required bool patchShown}) {
+    final world = widget.desktop.world;
+    final note = world.toastNow.value;
+    if (note != null) return (text: note.title, patch: false);
+    final speech = world.speechNow.value;
+    if (speech == null) return null;
+    final patch = speech.speaker.name == 'companion';
+    if (patch && !patchShown) return (text: '${widget.desktop.settings.companionName}: ${speech.text}', patch: false);
+    return (text: speech.text, patch: patch);
+  }
+
   /// "session started" → "Session started" (a caption led by a project's name keeps it as it is).
   static String sentence(String caption) =>
       caption.contains(' · ') ? caption : '${caption[0].toUpperCase()}${caption.substring(1)}';
@@ -149,6 +171,8 @@ class _PetSurfaceState extends State<PetSurface> {
   void dispose() {
     unawaited(_cues?.cancel());
     unawaited(_celebrations?.cancel());
+    widget.desktop.world.speechNow.removeListener(_worldSays);
+    widget.desktop.world.toastNow.removeListener(_worldSays);
     widget.desktop.hotkeys.removeListener(_shortcutsChanged);
     _bubbleTimer?.cancel();
     super.dispose();
@@ -221,7 +245,10 @@ class _PetSurfaceState extends State<PetSurface> {
         _mood == PetMood.needsYou && !settings.pauseReactions && settings.delivery(NotificationCategory.needsAttention).animate;
     final duo = widget.stroll.onTaskbar ? widget.stroll.duo : null;
     final companion = widget.companion;
-    final bubble = needsYou ? _needsYou(patch: duo != null) : _bubble;
+    final world = needsYou || _bubble != null ? null : _worldLine(patchShown: duo != null && (companion?.visible ?? false));
+    final bubble = needsYou ? _needsYou(patch: duo != null) : _bubble ?? world?.text;
+    // Patch's own lines rise over his desk.
+    final overPatch = world?.patch ?? false;
     if ((bubble != null) != _bubbleShown) {
       _bubbleShown = bubble != null;
       // The taskbar window makes room for it (after this frame: never during a build).
@@ -326,10 +353,13 @@ class _PetSurfaceState extends State<PetSurface> {
                     builder: (context, constraints) {
                       // Over Mochi's place beside Patch (kept inside the window), or centred over Mochi alone.
                       final width = constraints.maxWidth;
-                      final span = math.min(_Bubble.maxWidth, width);
-                      final centre = duo == null
+                      final span = math.min(MochiBubble.maxWidth, width);
+                      final anchor = duo == null
                           ? width / 2
-                          : (duo.local(duo.home.petHome) - 4).clamp(span / 2, math.max(span / 2, width - span / 2));
+                          : overPatch
+                          ? duo.local(duo.home.deskX + HomeStage.bodyX * duo.home.unit) - 4
+                          : duo.local(duo.home.petHome) - 4;
+                      final centre = duo == null ? anchor : anchor.clamp(span / 2, math.max(span / 2, width - span / 2));
                       return Stack(
                         children: [
                           Positioned(
@@ -339,7 +369,7 @@ class _PetSurfaceState extends State<PetSurface> {
                             bottom: 0,
                             child: Align(
                               alignment: Alignment.bottomCenter,
-                              child: _Bubble(text: bubble, urgent: needsYou),
+                              child: MochiBubble(text: bubble, urgent: needsYou),
                             ),
                           ),
                         ],
@@ -361,31 +391,4 @@ class _PetIntent extends Intent {
 
 class _MenuIntent extends Intent {
   const _MenuIntent();
-}
-
-/// A small clay speech bubble with a tail.
-class _Bubble extends StatelessWidget {
-  const _Bubble({required this.text, required this.urgent});
-
-  final String text;
-  final bool urgent;
-
-  static const double maxWidth = 168;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.palette;
-    return Container(
-      constraints: const BoxConstraints(maxWidth: maxWidth),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: claySurface(p, radius: 14, outline: urgent ? p.warning : null),
-      child: Text(
-        text,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: context.type.caption.copyWith(color: p.ink, fontWeight: FontWeight.w700),
-      ),
-    );
-  }
 }

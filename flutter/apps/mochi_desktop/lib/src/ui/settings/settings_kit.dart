@@ -338,7 +338,9 @@ class ChoiceRow<T> extends StatelessWidget {
 
   final String label;
   final T selected;
-  final ValueChanged<T> onSelected;
+
+  /// Null: shown but can't be changed now.
+  final ValueChanged<T>? onSelected;
   final List<(T, String, IconData)> choices;
 
   @override
@@ -365,7 +367,7 @@ class ChoiceRow<T> extends StatelessWidget {
                   labelStyle: context.type.label.copyWith(fontSize: 13, color: value == selected ? p.onTint : p.ink),
                   backgroundColor: p.sunken,
                   side: BorderSide(color: p.stroke),
-                  onSelected: (_) => onSelected(value),
+                  onSelected: onSelected == null ? null : (_) => onSelected!(value),
                 ),
             ],
           ),

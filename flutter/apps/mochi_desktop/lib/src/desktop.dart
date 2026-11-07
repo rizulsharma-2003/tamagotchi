@@ -9,6 +9,7 @@ import 'core/ask_mochi.dart';
 import 'core/claude_cli.dart';
 import 'core/desktop_settings.dart';
 import 'core/desktop_world.dart';
+import 'core/fresh_lines.dart';
 import 'core/hook_setup.dart';
 import 'core/hotkeys.dart';
 import 'core/pc_rhythm.dart';
@@ -87,6 +88,7 @@ class MochiDesktop {
       sounds: sounds,
       toasts: this.toasts,
       store: worldStore,
+      freshLines: HaikuLineWriter(claude).call,
       reducedMotion: () => motion.reduced,
       clock: clock,
       uptime: uptime,
