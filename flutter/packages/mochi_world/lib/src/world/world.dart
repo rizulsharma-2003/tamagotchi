@@ -147,19 +147,50 @@ class SpeechBubble {
 
 enum FocusPhase { focus, shortBreak, longBreak }
 
-/// The focus buddy's current phase (Swift `FocusStatus`, the part the world reads).
+/// The focus buddy's current phase (Swift `FocusStatus`). The world reads [phase] and [petNaps]; `FocusTimer.status`
+/// fills in the rest for a timer display.
 class FocusStatus {
-  const FocusStatus({required this.phase, required this.petNaps});
+  const FocusStatus({required this.phase, required this.petNaps, this.startedAt, this.duration = 0, this.cycle = 1});
   final FocusPhase phase;
 
   /// Mochi naps through this phase.
   final bool petNaps;
 
-  @override
-  bool operator ==(Object other) => other is FocusStatus && other.phase == phase && other.petNaps == petNaps;
+  /// When the phase began (null when a host reports only the phase).
+  final DateTime? startedAt;
+
+  /// The phase's length in seconds.
+  final double duration;
+
+  /// 1-based focus block number.
+  final int cycle;
+
+  /// Seconds left at [date] (the whole [duration] without a [startedAt]).
+  double remaining(DateTime date) {
+    final start = startedAt;
+    if (start == null) return duration;
+    return math.max(0, duration - date.difference(start).inMicroseconds / 1e6);
+  }
+
+  /// 0…1 through the phase at [date].
+  double progress(DateTime date) {
+    final start = startedAt;
+    if (duration <= 0) return 1;
+    if (start == null) return 0;
+    return math.min(1, math.max(0, date.difference(start).inMicroseconds / 1e6 / duration));
+  }
 
   @override
-  int get hashCode => Object.hash(phase, petNaps);
+  bool operator ==(Object other) =>
+      other is FocusStatus &&
+      other.phase == phase &&
+      other.petNaps == petNaps &&
+      other.startedAt == startedAt &&
+      other.duration == duration &&
+      other.cycle == cycle;
+
+  @override
+  int get hashCode => Object.hash(phase, petNaps, startedAt, duration, cycle);
 }
 
 /// The scene's overall mood (Swift `MenuBarMood`): for a tray icon, a taskbar badge or a widget.

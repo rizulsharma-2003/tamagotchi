@@ -17,6 +17,7 @@ export 'src/animation/choreography.dart' show Curve, Track;
 export 'src/animation/companion_pose_evaluator.dart' show CompanionDetail, CompanionPoseEvaluator;
 export 'src/animation/pet_pose_evaluator.dart';
 export 'src/events/events.dart';
+export 'src/features/focus.dart';
 export 'src/features/games.dart';
 export 'src/features/moment.dart';
 export 'src/features/speech.dart';
