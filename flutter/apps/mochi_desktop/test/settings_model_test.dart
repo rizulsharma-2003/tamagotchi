@@ -68,11 +68,58 @@ void main() {
       expect((settings.petAccessory, settings.companionAccessory, settings.deskAccessory), (null, null, Accessory.plant));
       expect((settings.officeTheme, settings.holidays, settings.birthdayMonth), (OfficeTheme.cozyDesk, true, null));
       expect((settings.pauseReactions, settings.celebrateFinished, settings.showSnags), (false, true, true));
+      expect(
+        (settings.companionVisibility, settings.companionLingerMinutes, settings.companionSleepAfterMinutes, settings.companionOnTaskbar),
+        (CompanionVisibility.duringSessions, 10, 6, true),
+        reason: "the Mac's companion defaults, and Patch on the taskbar",
+      );
       expect(settings.adoptedAt, launch);
       expect(document.json!['v'], DesktopSettings.version);
       expect(document.json!['adoptedAt'], launch.toIso8601String());
       expect(document.json!['theme'], 'dark', reason: 'the old fields are kept');
       expect(document.json!['handledCommands'], ['c1', 'c2']);
+    });
+
+    test('a version 2 file gets the companion settings at their defaults', () {
+      final document = MemorySettingsDocument({'v': 2, 'adoptedAt': launch.toIso8601String(), 'companionName': 'Byte'});
+      final settings = DesktopSettings(document);
+      expect(settings.companionName, 'Byte');
+      expect((settings.companionVisibility, settings.companionOnTaskbar), (CompanionVisibility.duringSessions, true));
+      expect(document.json!['v'], 3);
+      expect(document.json!['companionOnTaskbar'], isTrue);
+    });
+
+    test('the companion settings read back as saved, and stay within the Mac’s ranges', () {
+      final first = DesktopSettings(MemorySettingsDocument(), clock: () => launch)
+        ..companionVisibility = CompanionVisibility.always
+        ..companionLingerMinutes = 45
+        ..companionSleepAfterMinutes = 12
+        ..companionOnTaskbar = false;
+      final again = DesktopSettings(MemorySettingsDocument(first.toJson()));
+      expect(
+        (again.companionVisibility, again.companionLingerMinutes, again.companionSleepAfterMinutes, again.companionOnTaskbar),
+        (CompanionVisibility.always, 45, 12, false),
+      );
+      again
+        ..companionLingerMinutes = 500
+        ..companionSleepAfterMinutes = 0;
+      expect((again.companionLingerMinutes, again.companionSleepAfterMinutes), (120, 1));
+      final odd = DesktopSettings(
+        MemorySettingsDocument({
+          'v': 3,
+          'adoptedAt': launch.toIso8601String(),
+          'companionVisibility': 'sometimes',
+          'companionLingerMinutes': -5,
+          'companionSleepAfterMinutes': 'soon',
+          'companionOnTaskbar': 'yes',
+        }),
+      );
+      expect(
+        (odd.companionVisibility, odd.companionLingerMinutes, odd.companionSleepAfterMinutes, odd.companionOnTaskbar),
+        (CompanionVisibility.duringSessions, 0, 6, true),
+      );
+      again.reset();
+      expect((again.companionVisibility, again.companionOnTaskbar), (CompanionVisibility.duringSessions, true));
     });
 
     test('a version 2 file reads back as it was saved', () {

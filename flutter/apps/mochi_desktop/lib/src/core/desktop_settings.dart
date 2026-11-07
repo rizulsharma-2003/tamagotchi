@@ -49,6 +49,17 @@ class MemorySettingsDocument implements SettingsDocument {
   void write(Map<String, Object?> json) => this.json = json;
 }
 
+/// When the coding companion is around (the Mac's `CompanionVisibility`).
+enum CompanionVisibility {
+  /// While a Claude Code session is open, and a while after the last one ends.
+  duringSessions('When Claude Code is active'),
+  always('Always'),
+  never('Never');
+
+  const CompanionVisibility(this.title);
+  final String title;
+}
+
 /// The app's settings (the Settings window), saved as they change. Every field has a safe default, so a file from an
 /// older version (or a damaged one) loads with the new fields at their defaults; names follow the Mac's AppSettings.
 class DesktopSettings extends ChangeNotifier {
@@ -62,14 +73,19 @@ class DesktopSettings extends ChangeNotifier {
   }
 
   /// The file's format. Version 1 had no number (theme, the pet, phones, Ask Mochi); 2 adds the names, the look,
-  /// holidays, reactions and the day Mochi arrived.
-  static const int version = 2;
+  /// holidays, reactions and the day Mochi arrived; 3 the companion (when he's around, and on the taskbar).
+  static const int version = 3;
 
   static const String defaultPetName = 'Mochi';
   static const String defaultCompanionName = 'Patch';
 
   /// The longest name the phones show in full.
   static const int maxNameLength = 24;
+
+  /// The Mac's companion steppers: how long he stays after the last session (0–120 minutes, by 5), and how long he
+  /// waits before a nap (1–60 minutes).
+  static const int maxLingerMinutes = 120;
+  static const int maxSleepAfterMinutes = 60;
 
   final SettingsDocument _document;
 
@@ -94,6 +110,10 @@ class DesktopSettings extends ChangeNotifier {
   bool _pauseReactions = false;
   bool _celebrateFinished = true;
   bool _showSnags = true;
+  CompanionVisibility _companionVisibility = CompanionVisibility.duringSessions;
+  int _companionLingerMinutes = 10;
+  int _companionSleepAfterMinutes = 6;
+  bool _companionOnTaskbar = true;
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -132,7 +152,13 @@ class DesktopSettings extends ChangeNotifier {
     _pauseReactions = flag('pauseReactions', false);
     _celebrateFinished = flag('celebrateFinished', true);
     _showSnags = flag('showSnags', true);
+    _companionVisibility = named(CompanionVisibility.values, json['companionVisibility']) ?? CompanionVisibility.duringSessions;
+    _companionLingerMinutes = _minutes(json['companionLingerMinutes'], 10, 0, maxLingerMinutes);
+    _companionSleepAfterMinutes = _minutes(json['companionSleepAfterMinutes'], 6, 1, maxSleepAfterMinutes);
+    _companionOnTaskbar = flag('companionOnTaskbar', true);
   }
+
+  static int _minutes(Object? value, int fallback, int min, int max) => value is int ? value.clamp(min, max) : fallback;
 
   static String _name(Object? value, String fallback) =>
       value is String ? value.substring(0, value.length.clamp(0, maxNameLength)) : fallback;
@@ -255,6 +281,23 @@ class DesktopSettings extends ChangeNotifier {
   bool get showSnags => _showSnags;
   set showSnags(bool value) => _set(() => _showSnags = value);
 
+  /// When the coding companion is around: while Claude Code is active (the Mac's default), always or never.
+  CompanionVisibility get companionVisibility => _companionVisibility;
+  set companionVisibility(CompanionVisibility value) => _set(() => _companionVisibility = value);
+
+  /// How long the companion stays after the last Claude Code session ends (minutes, 0–120).
+  int get companionLingerMinutes => _companionLingerMinutes;
+  set companionLingerMinutes(int value) => _set(() => _companionLingerMinutes = value.clamp(0, maxLingerMinutes));
+
+  /// How long the companion goes without news from Claude before he naps at his desk (minutes, 1–60).
+  int get companionSleepAfterMinutes => _companionSleepAfterMinutes;
+  set companionSleepAfterMinutes(int value) => _set(() => _companionSleepAfterMinutes = value.clamp(1, maxSleepAfterMinutes));
+
+  /// The companion keeps a little desk in the taskbar beside the pet while he's around (with "Roam along the
+  /// taskbar" on).
+  bool get companionOnTaskbar => _companionOnTaskbar;
+  set companionOnTaskbar(bool value) => _set(() => _companionOnTaskbar = value);
+
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
 
@@ -302,6 +345,10 @@ class DesktopSettings extends ChangeNotifier {
     'pauseReactions': _pauseReactions,
     'celebrateFinished': _celebrateFinished,
     'showSnags': _showSnags,
+    'companionVisibility': _companionVisibility.name,
+    'companionLingerMinutes': _companionLingerMinutes,
+    'companionSleepAfterMinutes': _companionSleepAfterMinutes,
+    'companionOnTaskbar': _companionOnTaskbar,
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
 
