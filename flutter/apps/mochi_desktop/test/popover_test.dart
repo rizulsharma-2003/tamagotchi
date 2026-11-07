@@ -122,7 +122,8 @@ void main() {
         for (final label in ['Pause reactions', 'Show the desktop pet', 'Mochi on the taskbar', 'Patch on the taskbar']) {
           expect(find.bySemanticsLabel(RegExp('^$label')), findsOneWidget, reason: label);
         }
-        expect(find.textContaining('Friendship'), findsNothing, reason: 'no friendship on Windows yet: no hearts');
+        expect(find.text('Friendship level 0'), findsOneWidget, reason: 'the Mac’s hearts (W13)');
+        expect(find.bySemanticsLabel(RegExp('^Mark a milestone')), findsOneWidget);
         expect(find.textContaining('Sound'), findsNothing, reason: 'no sounds on Windows yet: no switch for them');
         for (final button in ['Open Mochi', 'Ask Mochi', 'Settings']) {
           expect(find.text(button), findsOneWidget);

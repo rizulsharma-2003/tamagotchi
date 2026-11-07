@@ -23,6 +23,7 @@ import '../../core/session_store.dart';
 import '../../core/sessions.dart';
 import '../../desktop.dart';
 import '../pet/companion_director.dart';
+import '../settings/panes_pet.dart' show FriendshipHearts;
 import '../pet/room_view.dart';
 
 class PopoverView extends StatelessWidget {
@@ -109,6 +110,8 @@ class PopoverView extends StatelessWidget {
                               Divider(height: Space.m, color: p.stroke),
                               const SizedBox(height: Space.xs),
                               _PetControls(desktop: desktop),
+                              const SizedBox(height: Space.s),
+                              _Friendship(desktop: desktop),
                               const SizedBox(height: Space.s),
                               _Switches(settings: desktop.settings),
                             ],
@@ -611,6 +614,37 @@ class _PetControls extends StatelessWidget {
       ],
     );
   }
+}
+
+/// The Mac's friendship row: five hearts, the level, and the points to the next one.
+class _Friendship extends StatelessWidget {
+  const _Friendship({required this.desktop});
+
+  final MochiDesktop desktop;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: desktop.world,
+    builder: (context, _) {
+      final progress = desktop.world.world.progress;
+      final level = progress.friendshipLevel;
+      final next = progress.pointsToNextLevel;
+      return Semantics(
+        container: true,
+        label: 'Friendship level $level of ${FriendshipHearts.count}${next == null ? '' : ', $next points to the next'}',
+        excludeSemantics: true,
+        child: Row(
+          children: [
+            FriendshipHearts(level: level, size: 11),
+            const SizedBox(width: Space.xs),
+            Flexible(child: Text('Friendship level $level', overflow: TextOverflow.ellipsis, style: context.type.caption)),
+            const Spacer(),
+            if (next != null) Text('$next to next', style: context.type.caption.copyWith(color: context.palette.inkSecondary)),
+          ],
+        ),
+      );
+    },
+  );
 }
 
 class _ControlButton extends StatelessWidget {

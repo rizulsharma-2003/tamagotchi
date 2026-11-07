@@ -379,12 +379,15 @@ class ChoiceRow<T> extends StatelessWidget {
 
 /// A label and a menu of choices (accessories, the theme, a birthday).
 class MenuRow<T> extends StatelessWidget {
-  const MenuRow({super.key, required this.label, required this.value, required this.items, required this.onChanged});
+  const MenuRow({super.key, required this.label, required this.value, required this.items, required this.onChanged, this.locked = const {}});
 
   final String label;
   final T value;
   final List<(T, String)> items;
   final ValueChanged<T>? onChanged;
+
+  /// Items shown but not to be chosen now (an accessory not earned yet).
+  final Set<T> locked;
 
   @override
   Widget build(BuildContext context) {
@@ -403,7 +406,11 @@ class MenuRow<T> extends StatelessWidget {
           onChanged: onChanged == null ? null : (value) => onChanged!(value as T),
           items: [
             for (final (item, text) in items)
-              DropdownMenuItem<T>(value: item, child: Text(text, overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem<T>(
+                value: item,
+                enabled: !locked.contains(item),
+                child: Text(text, overflow: TextOverflow.ellipsis, style: locked.contains(item) ? TextStyle(color: p.inkSecondary) : null),
+              ),
           ],
         ),
       ),

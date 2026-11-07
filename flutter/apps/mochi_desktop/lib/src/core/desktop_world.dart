@@ -137,6 +137,7 @@ class DesktopWorld extends ChangeNotifier {
     speech = w.SpeechDirector(world, writer: freshLines);
     _growth(announce: false);
     _signature = _currentSignature();
+    _lifeStagesSeen = settings.lifeStages;
     settings.addListener(_settingsChanged);
     rhythm.addListener(_rhythmChanged);
     // The first launch: keep the seed, so Mochi's habits stay its own.
@@ -433,7 +434,8 @@ class DesktopWorld extends ChangeNotifier {
     );
   }
 
-  late bool _lifeStagesSeen = settings.lifeStages;
+  /// "Grows up" as last seen (a change re-checks the stage at once).
+  late bool _lifeStagesSeen;
 
   void _settingsChanged() {
     final pinned = world.settings.pinnedSessionID;
