@@ -93,7 +93,11 @@ class ArchiveUnzipper implements Unzipper {
 
   @override
   Future<void> extract(String zip, String destination) =>
-      background ? Isolate.run(() => _extract(zip, destination)) : Future.sync(() => _extract(zip, destination));
+      background ? _extractInBackground(zip, destination) : Future.sync(() => _extract(zip, destination));
+
+  /// A static function, so the closure sent to the isolate holds only these two strings (a closure made inside an
+  /// instance method can carry `this` along, and a ChangeNotifier can't cross to another isolate).
+  static Future<void> _extractInBackground(String zip, String destination) => Isolate.run(() => _extract(zip, destination));
 
   static void _extract(String zip, String destination) {
     final input = InputFileStream(zip);
@@ -371,7 +375,7 @@ class Updater extends ChangeNotifier {
         },
       );
       _set(UpdatePhase.verifying);
-      final digest = _hashInBackground ? await Isolate.run(() => UpdateSigning.sha256OfFile(zip)) : await UpdateSigning.sha256OfFile(zip);
+      final digest = _hashInBackground ? await _hashInIsolate(zip) : await UpdateSigning.sha256OfFile(zip);
       if (!UpdateSigning.sameDigest(digest, manifest.sha256)) {
         _delete(zip);
         _couldNotVerify('The download didn’t match the checksum in the signed manifest, so it was thrown away.');
@@ -409,6 +413,9 @@ class Updater extends ChangeNotifier {
       if (_phase != UpdatePhase.downloading) _progress = null;
     }
   }
+
+  /// The SHA-256 on another isolate (a static function: see ArchiveUnzipper._extractInBackground).
+  static Future<String> _hashInIsolate(String path) => Isolate.run(() => UpdateSigning.sha256OfFile(path));
 
   /// The folder with Mochi.exe: the zip's top level, or its one folder (`Mochi\`).
   String? _findRoot(String destination) {

@@ -76,6 +76,23 @@ void main() {
     }
   });
 
+  test("copies keep Windows' downloaded-from-the-internet mark; removeDownloadMarks takes it off", () {
+    final downloads = '${temp.path}\\Downloads\\Mochi';
+    Directory('$downloads\\data').createSync(recursive: true);
+    for (final name in ['Mochi.exe', 'data\\app.so']) {
+      File('$downloads\\$name').writeAsStringSync('x');
+      File('$downloads\\$name:Zone.Identifier').writeAsStringSync('[ZoneTransfer]\r\nZoneId=3\r\n');
+    }
+    final copy = '${temp.path}\\Programs\\Mochi.new';
+    copyDirectory(downloads, copy);
+    expect(File('$copy\\Mochi.exe:Zone.Identifier').existsSync(), isTrue, reason: 'Windows copies the mark along');
+    expect(removeDownloadMarks(copy), 2);
+    expect(File('$copy\\Mochi.exe:Zone.Identifier').existsSync(), isFalse);
+    expect(File('$copy\\data\\app.so:Zone.Identifier').existsSync(), isFalse);
+    expect(File('$copy\\Mochi.exe').readAsStringSync(), 'x');
+    expect(File('$downloads\\Mochi.exe:Zone.Identifier').existsSync(), isTrue, reason: 'the download itself is left as it is');
+  });
+
   test('the registry values the uninstall reads and removes (a scratch key)', () {
     final key = 'Software\\MochiTests\\Uninstall-${DateTime.now().microsecondsSinceEpoch}';
     addTearDown(() => Process.runSync('reg', ['delete', r'HKCU\Software\MochiTests', '/f']));

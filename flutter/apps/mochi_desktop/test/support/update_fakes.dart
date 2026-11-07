@@ -211,6 +211,7 @@ class UpdateRig {
     String? windowsVersion = '10.0.22631',
     int currentBuild = 1,
     String currentVersion = '0.1.0',
+    bool background = false,
   }) => Updater(
     files: files,
     layout: layout,
@@ -221,14 +222,14 @@ class UpdateRig {
     publicKey: publicKey ?? releasePublicKey,
     autoDownload: () => autoDownload,
     windowsVersion: windowsVersion,
-    unzip: const ArchiveUnzipper(background: false),
+    unzip: ArchiveUnzipper(background: background),
     processes: processes,
     helper: () => '${layout.installDirectory}$sep$helperName',
     processId: () => 4242,
     clock: () => DateTime(2026, 11, 7, 10, 42),
     firstCheckAfter: const Duration(days: 1),
     checkEvery: const Duration(days: 2),
-    hashInBackground: false,
+    hashInBackground: background,
   );
 
   void dispose() {

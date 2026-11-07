@@ -68,6 +68,28 @@ int copyDirectory(String from, String to) {
   return bytes;
 }
 
+/// Takes Windows' "downloaded from the internet" mark (the `Zone.Identifier` stream a browser or an unzip of a
+/// downloaded zip leaves on each file) off every file under [directory]. Copies keep it, and an installed Mochi with
+/// it would get SmartScreen's warning again whenever it's started from the Start menu; installers' own files never
+/// carry it. Returns how many marks were removed. Does nothing elsewhere.
+int removeDownloadMarks(String directory) {
+  if (!Platform.isWindows) return 0;
+  var removed = 0;
+  for (final entity in Directory(directory).listSync(recursive: true)) {
+    if (entity is! File) continue;
+    final mark = File('${entity.path}:Zone.Identifier');
+    try {
+      if (mark.existsSync()) {
+        mark.deleteSync();
+        removed++;
+      }
+    } on FileSystemException {
+      // Only a warning dialog: carry on.
+    }
+  }
+  return removed;
+}
+
 /// How a swap ended.
 class SwapResult {
   const SwapResult.done() : ok = true, error = null, rolledBack = false;

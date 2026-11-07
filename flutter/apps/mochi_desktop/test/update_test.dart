@@ -288,6 +288,23 @@ void main() {
       expect(told, hasLength(1));
     });
 
+    test('hashes and unpacks on other isolates, as the app does (nothing of the updater has to cross)', () async {
+      rig.feed.publish(await Release.make());
+      final updater = rig.updater(background: true)..start();
+      addTearDown(updater.dispose);
+      await updater.check();
+      expect(updater.phase, UpdatePhase.ready, reason: updater.problem);
+      expect(read('${updater.ready!.root}${sep}Mochi.exe'), 'Mochi 0.2.0');
+
+      // The same for "Install Mochi": the copy runs on another isolate too.
+      final from = '${rig.temp.path}${sep}Downloads${sep}Mochi';
+      appFolder(from, '0.2.0');
+      Directory(rig.layout.installDirectory).deleteSync(recursive: true);
+      final installer = SelfInstaller(layout: rig.layout, executable: '$from${sep}Mochi.exe', version: '0.2.0', system: FakeInstallSystem());
+      expect(await installer.install(), isTrue, reason: installer.problem);
+      expect(read(rig.layout.exe), 'Mochi 0.2.0');
+    });
+
     test('never takes a manifest without a signature', () async {
       final release = await Release.make();
       rig.feed

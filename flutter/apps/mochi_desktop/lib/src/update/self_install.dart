@@ -106,7 +106,7 @@ class SelfInstaller extends ChangeNotifier {
       final source = runningFrom;
       final staging = layout.newDirectory;
       final target = layout.installDirectory;
-      final copy = _copyInBackground ? Isolate.run(() => _copy(source, staging)) : Future.value(_copy(source, staging));
+      final copy = _copyInBackground ? _copyInIsolate(source, staging) : Future.value(_copy(source, staging));
       final bytes = await copy;
       final swap = FolderSwap(retryFor: const Duration(seconds: 5)).swap(
         incoming: staging,
@@ -143,10 +143,16 @@ class SelfInstaller extends ChangeNotifier {
     }
   }
 
+  /// A static function, so the closure sent to the isolate holds only the two paths, never `this`.
+  static Future<int> _copyInIsolate(String source, String staging) => Isolate.run(() => _copy(source, staging));
+
   static int _copy(String source, String staging) {
     final folder = Directory(staging);
     if (folder.existsSync()) folder.deleteSync(recursive: true);
-    return copyDirectory(source, staging);
+    final bytes = copyDirectory(source, staging);
+    // Installed files don't say "downloaded from the internet" (or the Start menu would bring SmartScreen back).
+    removeDownloadMarks(staging);
+    return bytes;
   }
 
   /// The Start-menu shortcut (made again if it's gone) and the Settings › Apps entry (with this version and size).
