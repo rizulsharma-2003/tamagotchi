@@ -33,6 +33,12 @@
 //     move                        the same state, Mochi's next pose (the Mac does this every 6 s while Claude works)
 //     end [now]                   Claude's turn is over: it stays three minutes; `now` is End It (gone at once)
 //     ended                       `activityEnded`, as End It also writes it, for when the end push doesn't arrive
+//   cloud [url]                 Mochi Cloud's "check now" trigger, as the Mac's PhoneController.publishCloudTrigger
+//                               shares it, pointing at tool/fake_cloud.dart on this computer (default
+//                               http://127.0.0.1:8789/…, reached from the phone with `adb reverse tcp:8789 tcp:8789`;
+//                               only a debug build's test room accepts a trigger that isn't Anthropic's)
+//   nocloud                     the trigger taken away (Mochi Cloud not set up)
+//   cloudnews                   Mochi Cloud's answer to "Check now": a whole-day card (`cloud-manual`) and its news
 //   away | back                 the Mac disconnects (the phone shows "Mac away") or comes back
 //   invite                      a fresh pairing link
 //   quit                        delete the room and exit
@@ -92,6 +98,9 @@ Map<String, String> _options(List<String> arguments) {
 }
 
 double _now() => DateTime.now().millisecondsSinceEpoch / 1000;
+
+/// A made-up Gmail thread id (hex, like Gmail's), new for each run and [kind], so "Draft a reply" accepts it.
+String _threadId(double now, int kind) => '${(now * 1000).round().toRadixString(16)}$kind';
 
 class FakeMac {
   FakeMac({
@@ -357,7 +366,7 @@ class FakeMac {
       updatedAt: now + 1,
       items: [
         AgentNote(
-          id: 'mail:test-priya-$now',
+          id: 'mail:${_threadId(now, 1)}',
           source: AgentSource.gmail,
           title: 'Priya Sharma',
           detail: 'Can you send the November invoice?',
@@ -365,7 +374,7 @@ class FakeMac {
           at: now,
         ),
         AgentNote(
-          id: 'mail:test-aditi-$now',
+          id: 'mail:${_threadId(now, 2)}',
           source: AgentSource.gmail,
           title: 'Aditi Rao',
           detail: 'Notes on the onboarding flow?',
@@ -419,6 +428,52 @@ class FakeMac {
       threadId: 'mochi-agent',
     );
     print('sent a meeting heads-up');
+  }
+
+  /// Mochi Cloud's answer to "Check now" (`mochi_cloud.py` with `check now`): the whole day's card, from the cloud.
+  void cloudNews() {
+    final now = _now().roundToDouble();
+    final card = AgentPending(
+      enabled: true,
+      headline: 'Mochi Cloud looked while your Mac was away: Neha wants lunch, and the review moved to 5.',
+      lookedAt: now,
+      updatedAt: now + 1,
+      origin: 'cloud-manual',
+      items: [
+        AgentNote(
+          id: 'cal:review',
+          source: AgentSource.calendar,
+          title: 'Design review (moved)',
+          detail: 'With Aditi and Sam · Google Meet',
+          important: true,
+          at: now,
+          due: now + 3 * 3600,
+          link: 'https://meet.google.com/abc-defg-hij',
+        ),
+        AgentNote(
+          id: 'mail:${_threadId(now, 3)}',
+          source: AgentSource.gmail,
+          title: 'Neha Kapoor',
+          detail: 'Lunch on Thursday? The usual place.',
+          important: true,
+          at: now,
+          link: 'https://mail.google.com/mail/u/0/#inbox/testneha',
+          subject: 'Lunch?',
+          vip: true,
+        ),
+      ],
+    );
+    _link?.set(card.toValue(), LinkKey.agent);
+    _link?.sendAlert(
+      {
+        'title': '2 things waiting',
+        'body': 'Neha Kapoor needs you: Lunch?\nDesign review moved to 5',
+        'userInfo': {'kind': 'agent', 'origin': 'cloud-manual', 'quietIfKnown': false, 'pending': card.toJson()},
+      },
+      category: 'mochi-agent',
+      threadId: 'mochi-agent',
+    );
+    print("sent Mochi Cloud's answer to Check now");
   }
 
   /// Mochi Cloud's "Reply drafted" (`drafted` in mochi_cloud.py).
@@ -551,6 +606,16 @@ class FakeMac {
       case 'pet' || 'play' || 'treat':
         link?.set(LinkInteraction(id: RelayLink.newId(), kind: parts.first, at: _now()).toValue(), LinkKey.macInteraction);
         print('the Mac says: ${parts.first}');
+      case 'cloud':
+        final url = parts.length > 1 ? parts[1] : 'http://127.0.0.1:8789/v1/claude_code/routines/trig_fake/fire';
+        // A stand-in token: tool/fake_cloud.dart checks it; it opens nothing anywhere else.
+        link?.set(CloudTrigger(url: url, token: 'fake-cloud-token').toValue(), LinkKey.cloud);
+        print("shared Mochi Cloud's trigger: $url");
+      case 'nocloud':
+        link?.set(null, LinkKey.cloud);
+        print("took Mochi Cloud's trigger away");
+      case 'cloudnews':
+        cloudNews();
       case 'away':
         await link?.stop();
         print('the Mac went away');
