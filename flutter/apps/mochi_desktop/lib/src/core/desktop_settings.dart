@@ -94,6 +94,8 @@ class DesktopSettings extends ChangeNotifier {
   bool _pauseReactions = false;
   bool _celebrateFinished = true;
   bool _showSnags = true;
+  bool _autoUpdate = true;
+  bool _installDeclined = false;
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -132,6 +134,8 @@ class DesktopSettings extends ChangeNotifier {
     _pauseReactions = flag('pauseReactions', false);
     _celebrateFinished = flag('celebrateFinished', true);
     _showSnags = flag('showSnags', true);
+    _autoUpdate = flag('autoUpdate', true);
+    _installDeclined = flag('installDeclined', false);
   }
 
   static String _name(Object? value, String fallback) =>
@@ -255,6 +259,16 @@ class DesktopSettings extends ChangeNotifier {
   bool get showSnags => _showSnags;
   set showSnags(bool value) => _set(() => _showSnags = value);
 
+  /// Settings › About › Download updates automatically: Mochi downloads and verifies a new version in the background
+  /// (it's installed only when you restart Mochi, or at its next launch).
+  bool get autoUpdate => _autoUpdate;
+  set autoUpdate(bool value) => _set(() => _autoUpdate = value);
+
+  /// "Not now" on the offer to install Mochi: it runs from where it is and doesn't ask again at launch (Settings ›
+  /// About still offers it).
+  bool get installDeclined => _installDeclined;
+  set installDeclined(bool value) => _set(() => _installDeclined = value);
+
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
 
@@ -302,6 +316,8 @@ class DesktopSettings extends ChangeNotifier {
     'pauseReactions': _pauseReactions,
     'celebrateFinished': _celebrateFinished,
     'showSnags': _showSnags,
+    'autoUpdate': _autoUpdate,
+    'installDeclined': _installDeclined,
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
 

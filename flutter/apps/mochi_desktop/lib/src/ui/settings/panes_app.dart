@@ -9,6 +9,7 @@ import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_wire/mochi_wire.dart';
 
 import '../../desktop.dart';
+import '../../update/updater.dart';
 import 'previews.dart';
 import 'settings_kit.dart';
 import 'settings_tabs.dart';
@@ -42,12 +43,21 @@ class PrivacyPane extends StatelessWidget {
             ),
             _Point(
               icon: Icons.hub_outlined,
-              title: 'Your Mochi Link relay${link.paired ? '' : ' (not in use: no phone is paired)'}',
+              title: 'Your Mochi Link relay${link.paired || desktop.installer.installed ? '' : ' (not in use: no phone is paired)'}',
               text:
-                  'Only once you pair a phone. Everything between this PC and your phones goes through it, sealed with '
+                  'Phones: only once you pair one. Everything between this PC and your phones goes through it, sealed with '
                   'AES-256-GCM under a key only your devices have. The relay sees device ids, platforms, key names, sizes '
                   'and times; never what you said, Claude’s summaries, project or file names, or $pet’s look.',
             ),
+            if (desktop.installer.installed)
+              const _Point(
+                icon: Icons.system_update_alt_rounded,
+                title: 'Updates',
+                text:
+                    'At launch and every 6 hours this PC asks your relay whether there’s a newer Mochi. The relay sees this '
+                    'PC’s device id and when it asked. Updates are signed: Mochi installs only what Mochi’s release key '
+                    'signed, after checking the download’s checksum.',
+              ),
           ],
         ),
         SettingsGroup(
@@ -344,6 +354,7 @@ class AboutPane extends StatelessWidget {
             ),
           ],
         ),
+        UpdatesGroup(host: host),
         SettingsGroup(
           title: 'Links',
           children: [
@@ -369,12 +380,7 @@ class AboutPane extends StatelessWidget {
           children: [
             SelectableText.rich(
               TextSpan(
-                text:
-                    '1. Settings › Claude Code › Remove Mochi’s Hooks (takes out only Mochi’s entries, after a backup).\n'
-                    '2. Settings › Phones › Unpair This PC, if you paired a phone.\n'
-                    '3. Settings › General: switch off Start Mochi with Windows.\n'
-                    '4. Quit Mochi from the tray, then uninstall it in Windows Settings › Apps (or delete its folder).\n'
-                    '5. If you like, delete ${desktop.paths.home}.',
+                text: uninstallSteps(desktop),
                 style: context.type.footnote.copyWith(color: context.palette.ink, height: 1.6),
               ),
             ).withPadding(rowPadding),
@@ -391,6 +397,145 @@ class AboutPane extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Settings › About › Uninstall, for how this copy runs: installed (Windows Settings › Apps does the rest), or from a
+/// folder of its own.
+String uninstallSteps(MochiDesktop desktop) {
+  const hooks = '1. Settings › Claude Code › Remove Mochi’s Hooks (takes out only Mochi’s entries, after a backup).\n';
+  const unpair = '2. Settings › Phones › Unpair This PC, if you paired a phone.\n';
+  if (desktop.installer.installed) {
+    return '$hooks$unpair'
+        '3. Uninstall Mochi in Windows Settings › Apps › Installed apps. It quits Mochi and removes its folder, its '
+        'Start-menu shortcut and its startup entry.\n'
+        '4. If you like, delete ${desktop.paths.home} (your settings and this PC’s link).';
+  }
+  return '$hooks$unpair'
+      '3. Settings › General: switch off Start Mochi with Windows.\n'
+      '4. Quit Mochi from the tray, then delete its folder${desktop.installer.supported ? ' (${desktop.installer.runningFrom})' : ''}.\n'
+      '5. If you like, delete ${desktop.paths.home} (your settings and this PC’s link).';
+}
+
+/// Settings › About › Updates: this version, where updates stand, automatic downloads, what's new, and installing
+/// Mochi when it runs from somewhere else.
+class UpdatesGroup extends StatelessWidget {
+  const UpdatesGroup({super.key, required this.host});
+
+  final SettingsHost host;
+
+  /// The status line: a title, whether all is well, and a word on it.
+  static (String, bool, String) status(Updater updater, {required String runningFrom, required String Function(DateTime) time}) {
+    final version = updater.newVersion;
+    final problem = updater.problem;
+    final checked = updater.checkedAt;
+    return switch (updater.phase) {
+      UpdatePhase.unsupported => (
+        'Updates',
+        false,
+        Platform.isWindows ? 'This build can’t verify updates, so it never installs one' : 'Mochi for Windows updates itself',
+      ),
+      UpdatePhase.notInstalled => ('Updates are off', false, 'Mochi isn’t installed'),
+      UpdatePhase.idle => ('Not checked yet', true, 'Soon after launch'),
+      UpdatePhase.checking => ('Checking for updates…', true, ''),
+      UpdatePhase.upToDate => ('Mochi is up to date', true, checked == null ? '' : 'Checked ${time(checked)}'),
+      UpdatePhase.available => ('Mochi $version is available', true, 'Not downloaded yet'),
+      UpdatePhase.downloading => ('Downloading Mochi $version…', true, '${((updater.progress ?? 0) * 100).floor()}%'),
+      UpdatePhase.verifying => ('Checking Mochi $version…', true, 'Signature and checksum'),
+      UpdatePhase.ready => ('Mochi $version is ready: restart to update', true, 'Or at Mochi’s next launch'),
+      UpdatePhase.couldNotVerify => ('Couldn’t verify the update', false, problem ?? 'It was thrown away'),
+      UpdatePhase.offline => ('Couldn’t check for updates: offline', false, problem ?? 'Mochi tries again later'),
+      UpdatePhase.failed => ('Couldn’t update', false, problem ?? 'Mochi tries again later'),
+      UpdatePhase.applying => ('Restarting to update…', true, ''),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final desktop = host.desktop;
+    final updater = desktop.updater;
+    final installer = desktop.installer;
+    return ListenableBuilder(
+      listenable: Listenable.merge([updater, installer, desktop.settings]),
+      builder: (context, _) {
+        final p = context.palette;
+        final settings = desktop.settings;
+        final phase = updater.phase;
+        String time(DateTime at) => MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(at.toLocal()));
+        final (title, ok, detail) = status(updater, runningFrom: installer.runningFrom, time: time);
+        final busy = phase == UpdatePhase.checking || phase == UpdatePhase.downloading || phase == UpdatePhase.verifying;
+        final notes = updater.notes;
+        return SettingsGroup(
+          title: 'Updates',
+          footer: installer.installed
+              ? 'Mochi checks your own Mochi Link relay at launch and every 6 hours. Updates are signed with Mochi’s release '
+                    'key and checked before they’re installed, and they never interrupt you: a new version goes in when '
+                    'you restart Mochi, or at its next launch.'
+              : null,
+          children: [
+            InfoRow(label: 'Version', value: '$appVersion (build $appBuild)'),
+            StatusRow(
+              title: title,
+              ok: ok,
+              detail: detail,
+              icon: switch (phase) {
+                UpdatePhase.couldNotVerify => Icons.gpp_bad_outlined,
+                UpdatePhase.offline => Icons.cloud_off_rounded,
+                UpdatePhase.ready => Icons.system_update_alt_rounded,
+                _ => null,
+              },
+              tint: switch (phase) {
+                UpdatePhase.couldNotVerify || UpdatePhase.failed => p.danger,
+                UpdatePhase.offline => p.warning,
+                _ => null,
+              },
+            ),
+            if (phase == UpdatePhase.downloading)
+              Padding(
+                padding: rowPadding,
+                child: LinearProgressIndicator(value: updater.progress, semanticsLabel: 'Downloading the update'),
+              ),
+            if (notes.isNotEmpty && (phase == UpdatePhase.available || busy || phase == UpdatePhase.ready))
+              TextRow('What’s new in Mochi ${updater.newVersion}:\n$notes', secondary: true),
+            if (phase == UpdatePhase.notInstalled) ...[
+              NoteRow(
+                text:
+                    'Mochi is running from ${installer.runningFrom}, so it can’t update itself. Install it for this user '
+                    '(no admin rights needed): it moves to ${installer.layout.installDirectory}, gets a Start-menu entry, '
+                    'and keeps itself up to date. Your settings stay as they are.',
+                icon: Icons.download_for_offline_outlined,
+              ),
+              if (installer.problem != null)
+                NoteRow(text: installer.problem!, icon: Icons.error_outline_rounded, tint: p.danger, textColor: p.danger),
+              ActionsRow(
+                children: [
+                  FilledButton(onPressed: installer.busy || host.onInstall == null ? null : host.onInstall, child: Text(installer.busy ? 'Installing…' : 'Install Mochi')),
+                ],
+              ),
+            ],
+            if (installer.installed) ...[
+              ToggleRow(
+                title: 'Download updates automatically',
+                subtitle: 'In the background, checked before they’re kept. Off: Mochi tells you about a new version and waits.',
+                value: settings.autoUpdate,
+                onChanged: (value) => settings.autoUpdate = value,
+              ),
+              if (updater.canCheck)
+                ActionsRow(
+                  children: [
+                    if (phase == UpdatePhase.ready)
+                      FilledButton(onPressed: host.onRestartToUpdate, child: const Text('Restart to Update')),
+                    if (phase == UpdatePhase.available)
+                      FilledButton(onPressed: updater.download, child: const Text('Download Update')),
+                    OutlinedButton(onPressed: busy || phase == UpdatePhase.applying ? null : updater.check, child: const Text('Check for Updates')),
+                  ],
+                ),
+              InfoRow(label: 'Installed in', value: installer.layout.installDirectory, selectable: true),
+            ],
+          ],
+        );
+      },
     );
   }
 }

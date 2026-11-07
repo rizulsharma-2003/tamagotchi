@@ -18,6 +18,8 @@ import 'package:mochi_desktop/src/platform/startup.dart';
 import 'package:mochi_desktop/src/platform/system.dart';
 import 'package:mochi_desktop/src/platform/taskbar.dart';
 import 'package:mochi_desktop/src/ui/shell.dart';
+import 'package:mochi_desktop/src/update/self_install.dart';
+import 'package:mochi_desktop/src/update/updater.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_wire/mochi_wire.dart';
 
@@ -163,6 +165,9 @@ class FakeShell implements DesktopShell {
   final List<({Surface surface, Offset? position, Size size})> shows = [];
   final StreamController<ShellAction> controller = StreamController.broadcast();
   final List<bool> trayRoaming = [];
+
+  /// "Restart to Update" in the tray, each time it was shown or hidden.
+  final List<bool> trayUpdate = [];
   int drags = 0;
   int menus = 0;
   bool quit_ = false;
@@ -191,6 +196,9 @@ class FakeShell implements DesktopShell {
 
   @override
   Future<void> setRoaming(bool roaming) async => trayRoaming.add(roaming);
+
+  @override
+  Future<void> setUpdateReady(bool ready) async => trayUpdate.add(ready);
 
   @override
   Future<void> popUpMenu() async => menus++;
@@ -396,6 +404,8 @@ class TestDesktop {
     String? home,
     FakeStartup? startup,
     String? claudePath = '/usr/local/bin/claude',
+    Updater? updater,
+    SelfInstaller? installer,
   }) {
     final temp = Directory.systemTemp.createTempSync('mochi_desktop_test');
     final paths = BridgePaths(home ?? '${temp.path}/mochi', windows: false);
@@ -437,6 +447,8 @@ class TestDesktop {
       startup: start,
       locateClaude: () => claudeInstalled ? claudePath : null,
       clock: clock,
+      updater: updater,
+      installer: installer,
     );
     return TestDesktop._(temp, desktop, sockets, api, claude, vault, document, start);
   }

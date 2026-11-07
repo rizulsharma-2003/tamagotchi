@@ -111,6 +111,10 @@ class PetDirector {
         _play(PetAnimation.concerned, time);
       case PetCue.needsYou:
         _play(PetAnimation.wave, time);
+      case PetCue.updateReady:
+        if (!_interacting(time)) _play(PetAnimation.wave, time);
+      case PetCue.updated:
+        _play(PetAnimation.happyBounce, time);
     }
   }
 

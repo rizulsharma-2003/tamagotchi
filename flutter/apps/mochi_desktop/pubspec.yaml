@@ -35,6 +35,12 @@ dependencies:
   # Win32 calls for the taskbar stroll: monitors, DPI, moving the pet's window (5.15.0: the version already in the
   # workspace's lock file, through mochi_pocket's flutter_secure_storage_windows; nothing new is downloaded).
   win32: 5.15.0
+  # Updates (lib/src/update): Ed25519 signatures and SHA-256 in pure Dart (2.9.0: 2025-11; already pinned by
+  # mochi_link), the relay's update feed over HTTPS (1.6.0: the version already in the lock file, through mochi_link),
+  # and unpacking the verified zip (4.0.7: 2025-04-23, with posix 6.0.3: 2025-06-28).
+  cryptography: 2.9.0
+  http: 1.6.0
+  archive: 4.0.7
 
 dev_dependencies:
   flutter_test:

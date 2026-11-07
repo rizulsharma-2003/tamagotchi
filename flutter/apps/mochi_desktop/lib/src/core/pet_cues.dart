@@ -21,4 +21,10 @@ enum PetCue {
 
   /// A turn ended with an error.
   snag,
+
+  /// A new Mochi is downloaded and verified: restart to update.
+  updateReady,
+
+  /// Mochi was just updated (this launch is the new version).
+  updated,
 }
