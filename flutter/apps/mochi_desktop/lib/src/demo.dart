@@ -29,7 +29,7 @@ class DemoLinkApi implements LinkApi {
   }
 
   @override
-  Future<PairingCode> invite(LinkCredentials credentials, {required String hostName}) async => PairingCode(
+  Future<PairingCode> invite(LinkCredentials credentials, {required String hostName, String? role}) async => PairingCode(
     relay: credentials.relay,
     room: credentials.room,
     invite: 'demo-invite-${DateTime.now().millisecondsSinceEpoch}',
@@ -39,6 +39,25 @@ class DemoLinkApi implements LinkApi {
 
   @override
   Future<void> deleteRoom(LinkCredentials credentials) async {}
+
+  /// A made-up Mochi Cloud (nothing leaves the PC in the demo).
+  @override
+  Future<LinkCredentials> join(PairingCode code, {required String role, required String platform, required String name}) async =>
+      LinkCredentials(
+        relay: code.relay,
+        room: code.room,
+        device: 'dev_demo_cloud',
+        secret: 'demo-secret',
+        key: code.key,
+        role: role,
+        peerName: code.name,
+      );
+
+  @override
+  Future<void> remove(String device, {required LinkCredentials from}) async {}
+
+  @override
+  Future<List<LinkPeer>> devices(LinkCredentials credentials) async => const [];
 }
 
 /// A pretend relay: answers `hello` with a room holding this PC and two phones, and acknowledges everything.

@@ -124,6 +124,17 @@ class FakeLinkApi implements LinkApi {
   final List<LinkCredentials> deleted = [];
   Object? failCreate;
 
+  /// The roles invitations were for, the devices that joined (role, platform, name) and the ones removed.
+  final List<String?> inviteRoles = [];
+  final List<({String role, String platform, String name})> joins = [];
+  final List<String> removed = [];
+
+  /// The room's devices as the relay lists them over HTTPS (null: it can't be reached).
+  List<LinkPeer>? listed;
+
+  /// Joining fails with this (once), as the relay can (`room_full`).
+  LinkPairingException? failJoin;
+
   @override
   Future<LinkCredentials> createRoom({required String relay, required String platform, required String name}) async {
     final failure = failCreate;
@@ -133,13 +144,43 @@ class FakeLinkApi implements LinkApi {
   }
 
   @override
-  Future<PairingCode> invite(LinkCredentials credentials, {required String hostName}) async {
+  Future<PairingCode> invite(LinkCredentials credentials, {required String hostName, String? role}) async {
     invites++;
+    inviteRoles.add(role);
     return PairingCode(relay: credentials.relay, room: credentials.room, invite: 'invite-$invites', key: credentials.key, name: hostName);
   }
 
   @override
   Future<void> deleteRoom(LinkCredentials credentials) async => deleted.add(credentials);
+
+  @override
+  Future<LinkCredentials> join(PairingCode code, {required String role, required String platform, required String name}) async {
+    final failure = failJoin;
+    if (failure != null) {
+      failJoin = null;
+      throw failure;
+    }
+    joins.add((role: role, platform: platform, name: name));
+    return LinkCredentials(
+      relay: code.relay,
+      room: code.room,
+      device: 'dev_cloud_${joins.length + 1}',
+      secret: 'cloud-secret-${joins.length + 1}',
+      key: code.key,
+      role: role,
+      peerName: code.name,
+    );
+  }
+
+  @override
+  Future<void> remove(String device, {required LinkCredentials from}) async => removed.add(device);
+
+  @override
+  Future<List<LinkPeer>> devices(LinkCredentials credentials) async {
+    final list = listed;
+    if (list == null) throw const LinkPairingException("Couldn't reach the relay.");
+    return list;
+  }
 }
 
 /// `claude`, answering with [output] (and recording what it was asked).
