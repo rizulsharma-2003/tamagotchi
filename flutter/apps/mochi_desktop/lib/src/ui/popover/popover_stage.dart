@@ -556,7 +556,7 @@ class _TransitionPainter extends CustomPainter {
     final now = desktop.sessions.now;
     final g = GContext(canvas)..opacity = opacity;
     final desk = Offset(home.deskX - origin.dx, feet.dy);
-    final pose = companion.pose(library, companion.time);
+    final pose = companion.pose(companion.time);
     CompanionRenderer.draw(
       pose,
       g,

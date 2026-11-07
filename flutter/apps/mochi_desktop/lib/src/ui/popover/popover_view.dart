@@ -15,7 +15,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mochi_art/mochi_art.dart' show SceneLayout;
-import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_wire/mochi_wire.dart' show HookStatus;
 
@@ -31,7 +30,6 @@ class PopoverView extends StatelessWidget {
     super.key,
     required this.desktop,
     required this.companion,
-    required this.library,
     required this.lastActivity,
     required this.onClose,
     required this.onOpenMain,
@@ -43,7 +41,6 @@ class PopoverView extends StatelessWidget {
 
   final MochiDesktop desktop;
   final CompanionDirector companion;
-  final PoseLibrary? library;
   final DateTime Function() lastActivity;
 
   /// Escape: back to the taskbar.
@@ -93,7 +90,7 @@ class PopoverView extends StatelessWidget {
                   children: [
                     SizedBox(
                       height: sceneHeight,
-                      child: _Scene(desktop: desktop, companion: companion, library: library, lastActivity: lastActivity, hidePet: hidePet),
+                      child: _Scene(desktop: desktop, companion: companion, lastActivity: lastActivity, hidePet: hidePet),
                     ),
                     Divider(height: 1, color: p.stroke),
                     Expanded(
@@ -135,11 +132,10 @@ class PopoverView extends StatelessWidget {
 // MARK: - Scene
 
 class _Scene extends StatelessWidget {
-  const _Scene({required this.desktop, required this.companion, required this.library, required this.lastActivity, this.hidePet = false});
+  const _Scene({required this.desktop, required this.companion, required this.lastActivity, this.hidePet = false});
 
   final MochiDesktop desktop;
   final CompanionDirector companion;
-  final PoseLibrary? library;
   final DateTime Function() lastActivity;
   final bool hidePet;
 
@@ -150,7 +146,6 @@ class _Scene extends StatelessWidget {
         child: RoomView(
           desktop: desktop,
           companion: companion,
-          library: library,
           lastActivity: lastActivity,
           // The Mac popover's room.
           layout: (size) => SceneLayout.popover(size.width, size.height),

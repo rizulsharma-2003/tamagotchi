@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart' show Accessory, AccessorySlot, OfficeTheme, PetColor, SeasonDecor, SeasonalEvent, Wearer;
+import 'package:mochi_world/mochi_world.dart' show Chattiness;
 
 import 'hotkeys.dart';
 import 'notifications.dart';
@@ -161,9 +162,11 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   /// notifications (quiet mode and hours, each category's animate/badge/banner/sound, sounds), naps that follow the
   /// PC, "only when I'm away" for the phones, and the global shortcuts; 5 the desktop pet's options (where Mochi lives,
   /// its spot and room, the size, always on top, clicks passing through, a place on each display, the tray icon's
-  /// animation, and Patch only for interesting moments). `roamTaskbar` is still written (whether Mochi is on the
-  /// taskbar) for an older Mochi reading the file.
-  static const int version = 5;
+  /// animation, and Patch only for interesting moments); 6 Mochi's world (Sprint 2: talking in speech bubbles, how
+  /// chatty, fresh lines from Claude Haiku, growing up and the last stage announced, under the Mac's keys `speech`,
+  /// `lifeStages` and `lifeStageSeen`). `roamTaskbar` is still written (whether Mochi is on the taskbar) for an older
+  /// Mochi reading the file.
+  static const int version = 6;
 
   /// The Mac's stepper for "Rests after … min without typing or clicking".
   static const int maxRestAfterMinutes = 60;
@@ -229,6 +232,11 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   String? _petDisplay;
   TrayAnimation _trayAnimation = TrayAnimation.subtle;
   bool _companionOnlyMoments = false;
+  bool _speechEnabled = true;
+  Chattiness _chattiness = Chattiness.normal;
+  bool _speechFreshLines = false;
+  bool _lifeStages = true;
+  int _lifeStageSeen = -1;
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -321,6 +329,14 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _companionOnTaskbar = flag('companionOnTaskbar', true);
     _autoUpdate = flag('autoUpdate', true);
     _installDeclined = flag('installDeclined', false);
+    final speech = json['speech'] is Map ? (json['speech']! as Map).cast<String, Object?>() : const <String, Object?>{};
+    _speechEnabled = speech['enabled'] is bool ? speech['enabled']! as bool : true;
+    _chattiness = named(Chattiness.values, speech['chattiness']) ?? Chattiness.normal;
+    // The Mac's key: there it's Apple Intelligence, here Claude Haiku. Off unless you turn it on (it runs `claude`).
+    _speechFreshLines = speech['useAppleIntelligence'] is bool ? speech['useAppleIntelligence']! as bool : false;
+    _lifeStages = flag('lifeStages', true);
+    final seen = json['lifeStageSeen'];
+    _lifeStageSeen = seen is int && seen >= -1 && seen <= 2 ? seen : -1;
   }
 
   static int _minutes(Object? value, int fallback, int min, int max) => value is int ? value.clamp(min, max) : fallback;
@@ -624,6 +640,27 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   bool get installDeclined => _installDeclined;
   set installDeclined(bool value) => _set(() => _installDeclined = value);
 
+  /// Mochi and Patch say a word now and then in speech bubbles (Settings › Fun › Talking; the Mac's `speech.enabled`).
+  bool get speechEnabled => _speechEnabled;
+  set speechEnabled(bool value) => _set(() => _speechEnabled = value);
+
+  /// How often they speak up: quiet (only what matters), normal or chatty.
+  Chattiness get chattiness => _chattiness;
+  set chattiness(Chattiness value) => _set(() => _chattiness = value);
+
+  /// Now and then a fresh line written for the moment by Claude Haiku through Claude Code on this PC (the Mac's
+  /// `speech.useAppleIntelligence`). Only the kind of moment is sent, never anything about your work.
+  bool get speechFreshLines => _speechFreshLines;
+  set speechFreshLines(bool value) => _set(() => _speechFreshLines = value);
+
+  /// Mochi grows up over time: kitten, young, grown-up, as your friendship grows (Settings › Fun › Growing up).
+  bool get lifeStages => _lifeStages;
+  set lifeStages(bool value) => _set(() => _lifeStages = value);
+
+  /// The last life stage Mochi announced (the Mac's `lifeStageSeen`: -1 before the first look, then 0–2).
+  int get lifeStageSeen => _lifeStageSeen;
+  set lifeStageSeen(int value) => _set(() => _lifeStageSeen = value.clamp(-1, 2));
+
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
 
@@ -634,11 +671,13 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   }
 
   /// Settings › General › Reset: every setting back to its default. The pairing (kept in the vault, not here), the
-  /// phone commands already handled and Mochi's birthday stay.
+  /// phone commands already handled, Mochi's birthday and the life stage it last announced stay.
   void reset() {
     final handled = List<String>.of(_handledCommands);
+    final seen = _lifeStageSeen;
     _load(const {});
     _handledCommands.addAll(handled);
+    _lifeStageSeen = seen;
     _save();
     notifyListeners();
   }
@@ -702,6 +741,9 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'companionOnTaskbar': _companionOnTaskbar,
     'autoUpdate': _autoUpdate,
     'installDeclined': _installDeclined,
+    'speech': {'enabled': _speechEnabled, 'useAppleIntelligence': _speechFreshLines, 'chattiness': _chattiness.name},
+    'lifeStages': _lifeStages,
+    'lifeStageSeen': _lifeStageSeen,
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
 

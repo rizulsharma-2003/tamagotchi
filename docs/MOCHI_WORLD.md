@@ -1,6 +1,6 @@
 # Mochi's world in Dart (`mochi_world`)
 
-Sprint 2 **G1** and **G2**, and the logic of **W11, W12, W14, W15, W16, W18 and W20**. `flutter/packages/mochi_world` is the Mac's pet-life engine (`Sources/TamagotchiCore`) in pure Dart, with no dependencies. Windows (W11–W20) and Android (A5) run it so that Mochi and Patch behave exactly as they do on the Mac. It isn't wired into `mochi_desktop` or `mochi_pocket` yet. This note says how to do that.
+Sprint 2 **G1** and **G2**, and the logic of **W11, W12, W14, W15, W16, W18 and W20**. `flutter/packages/mochi_world` is the Mac's pet-life engine (`Sources/TamagotchiCore`) in pure Dart, with no dependencies. Windows (W11–W20) and Android (A5) run it so that Mochi and Patch behave exactly as they do on the Mac. `mochi_desktop` runs it since Sprint 2 (G1: `lib/src/core/desktop_world.dart`); `mochi_pocket` doesn't yet. This note says how.
 
 ## What's in it
 
@@ -166,6 +166,8 @@ Two rules decide a long turn and a real result:
 - A build or test only counts when it's an explicit report, or when `mochi_wire` recognised a build/test command (`commandKind`) whose exit status is trustworthy (`commandReliable`: not piped, not backgrounded, not followed by `;`). The hook helper already sends both fields on Windows.
 
 ## Windows (`mochi_desktop`, W11–W20)
+
+How it's done (Sprint 2 G1): `DesktopWorld` (`lib/src/core/desktop_world.dart`) owns the one `MochiWorld`, ticks it at 4 Hz while the screen can be seen (no timer at all while it can't), and keeps `world.json` in Mochi's folder. Claude's moments keep their Windows notifications, sounds and badge in `Reactions` (W1, the same Mac rules): the world gets the user's per-category "Animate" and "Badge" but no sound or banner for those categories, so nothing is said twice; its own moments (achievements, petting, growing up, feature moments) go to the same toasts and sounds. The taskbar pet draws the world's poses through the W30 pictures (`ui/pet/world_poses.dart`): loops are played on a seamless 5-second ring, so their poses repeat and are drawn once; the world's moments carry on from the ring and are drawn from the art. The room in Mochi's window and the popover draws `frame()` as it is.
 
 What the app feeds in:
 

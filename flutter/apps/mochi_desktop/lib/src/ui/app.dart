@@ -90,25 +90,11 @@ class DesktopAppState extends State<DesktopApp> {
   late DateTime _lastActivity = widget.desktop.sessions.now;
   final List<StreamSubscription<Object?>> _subscriptions = [];
 
-  /// One clock (seconds) for the stroll and Patch, so a moment together starts when Mochi gets to him.
-  late final double Function() _clock = widget.strollClock ?? _monotonic();
-
-  static double Function() _monotonic() {
-    final watch = Stopwatch()..start();
-    return () => watch.elapsedMicroseconds / 1e6;
-  }
+  /// One clock (seconds) for the stroll and Mochi's world, so a moment carries on from where the stroll had Mochi.
+  late final double Function() _clock = widget.strollClock ?? desktop.world.now;
 
   /// Patch, Mochi's coding companion: on the taskbar beside Mochi and in the room in Mochi's window.
-  late final CompanionDirector _companion = CompanionDirector(
-    sessions: desktop.sessions,
-    settings: desktop.settings,
-    cues: desktop.cues,
-    lastActivity: () => _lastActivity,
-    clock: _clock,
-    random: widget.strollRandom,
-    reducedMotion: () => desktop.motion.reduced,
-    petAsleep: () => desktop.rhythm.asleep(now: desktop.sessions.now, lastActivity: _lastActivity),
-  );
+  late final CompanionDirector _companion = CompanionDirector(desktop.world);
   late final TaskbarStroll _stroll = TaskbarStroll(
     shell: widget.shell,
     taskbar: widget.taskbar ?? systemTaskbar(),
@@ -130,7 +116,13 @@ class DesktopAppState extends State<DesktopApp> {
     shell: widget.shell,
     settings: desktop.settings,
     folder: desktop.paths.join(desktop.paths.home, 'tray'),
-    mood: () => PetMood.of(desktop.sessions, now: desktop.sessions.now, lastActivity: _lastActivity, rhythm: desktop.rhythm),
+    mood: () => PetMood.of(
+      desktop.sessions,
+      now: desktop.sessions.now,
+      lastActivity: _lastActivity,
+      rhythm: desktop.rhythm,
+      asleep: desktop.world.asleep,
+    ),
     cues: desktop.cues,
     motion: desktop.motion,
     rhythm: desktop.rhythm,
@@ -261,7 +253,6 @@ class DesktopAppState extends State<DesktopApp> {
   Future<void> _loadLibrary() async {
     try {
       final library = await (widget.library ?? PoseLibrary.load(rootBundle, DesktopApp.poseAsset));
-      _companion.library = library;
       if (mounted) setState(() => _library = library);
     } on Object catch (error) {
       debugPrint('Mochi: the animations could not be loaded (${error.runtimeType})');
@@ -513,6 +504,8 @@ class DesktopAppState extends State<DesktopApp> {
     } else {
       _focusSession = null;
     }
+    // You're looking at Mochi: no badges from the world, and Mochi can say good morning.
+    desktop.world.setWindowVisible(surface == Surface.main || surface == Surface.popover);
     setState(() => _surface = surface);
     if (surface == Surface.pet && !_warm && Platform.isWindows) _warmUpTimer ??= Timer.periodic(const Duration(seconds: 5), (_) => _warmUp());
     final shown = _stroll.show(surface);
@@ -526,7 +519,6 @@ class DesktopAppState extends State<DesktopApp> {
   Widget _popoverPanel(bool hidePet) => PopoverView(
     desktop: desktop,
     companion: _companion,
-    library: _library,
     lastActivity: () => _lastActivity,
     hidePet: hidePet,
     onClose: closePopover,
@@ -627,7 +619,6 @@ class DesktopAppState extends State<DesktopApp> {
               child: PetSurface(
                 desktop: desktop,
                 stroll: _stroll,
-                library: _library,
                 lastActivity: () => _lastActivity,
                 onAction: handle,
                 onDragStart: () => unawaited(_drag()),
@@ -768,7 +759,6 @@ class _MainSurface extends StatelessWidget {
                 desktop: desktop,
                 companion: state._companion,
                 askFirst: state._takeAskFirst(),
-                library: state._library,
                 lastActivity: () => state._lastActivity,
                 onPair: () => state.open(MainPage.pairing),
                 onSettings: () => state.open(MainPage.settings, pane: SettingsTab.claude),

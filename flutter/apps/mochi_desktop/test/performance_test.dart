@@ -15,6 +15,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_art/pose_tracks.dart';
+import 'package:mochi_desktop/src/core/desktop_world.dart';
 import 'package:mochi_desktop/src/core/pc_rhythm.dart';
 import 'package:mochi_desktop/src/platform/taskbar.dart';
 import 'package:mochi_desktop/src/ui/pet/companion_director.dart';
@@ -23,7 +24,9 @@ import 'package:mochi_desktop/src/ui/pet/pet_director.dart';
 import 'package:mochi_desktop/src/ui/pet/pose_sprites.dart';
 import 'package:mochi_desktop/src/ui/pet/stroller.dart';
 import 'package:mochi_desktop/src/ui/pet/taskbar_stroll.dart';
+import 'package:mochi_desktop/src/ui/pet/world_poses.dart';
 import 'package:mochi_desktop/src/ui/shell.dart';
+import 'package:mochi_world/mochi_world.dart' as w;
 
 import 'support/fakes.dart';
 
@@ -199,6 +202,31 @@ void main() {
             }
           }
         }
+        // The loops the taskbar keeps pictures of, as Mochi's world plays them (on the ring, for a seed), both ways round.
+        final world = w.MochiWorld(seed: 0x5EED5);
+        final ring = WorldPoses(world);
+        for (final loop in const [
+          PetAnimation.idle,
+          PetAnimation.sleep,
+          PetAnimation.watch,
+          PetAnimation.waveGently,
+          PetAnimation.walk,
+          PetAnimation.carry,
+          PetAnimation.sit,
+          PetAnimation.curl,
+          PetAnimation.run,
+        ]) {
+          for (var time = 0.0; time < WorldPoses.ring; time += 0.4) {
+            for (final facing in [1.0, -1.0]) {
+              final pose = facing < 0 ? ring.petLoop(loop, time).mirrored() : ring.petLoop(loop, time);
+              final extent = await reach(
+                (c) => PetRenderer.draw(pose, GContext(c), Offset.zero, 1, PetPalette(PetColor.cream), detail: RenderDetail.tiny, accessory: Accessory.witchHat),
+              );
+              poses++;
+              if (extent != null) expect(within(extent, ArtReach.pet), isTrue, reason: 'world ${loop.name} at $time: $extent');
+            }
+          }
+        }
         expect(poses, greaterThan(1000));
       });
     }, timeout: const Timeout(Duration(minutes: 6)));
@@ -290,9 +318,8 @@ void main() {
         child: RepaintBoundary(
           key: keys[index],
           child: MochiView(
+            world: t.desktop.world,
             sessions: t.desktop.sessions,
-            cues: t.desktop.cues,
-            library: library,
             lastActivity: () => t.desktop.sessions.now,
             fill: SurfaceSizes.taskbarFill,
             feet: SurfaceSizes.taskbarFeet,
@@ -349,12 +376,7 @@ void main() {
     });
 
     testWidgets('with Patch at his desk: the same pixels as drawing the art', (tester) async {
-      final companion = CompanionDirector(
-        sessions: t.desktop.sessions,
-        settings: t.desktop.settings,
-        cues: t.desktop.cues,
-        clock: () => 2.0,
-      )..library = library;
+      final companion = CompanionDirector(t.desktop.world);
       expect(companion.visible, isTrue);
       const unit = 40 * SurfaceSizes.taskbarFill / 66;
       final stage = TaskbarStage(
@@ -392,9 +414,8 @@ void main() {
             width: 64,
             height: 40,
             child: MochiView(
+              world: t.desktop.world,
               sessions: t.desktop.sessions,
-              cues: t.desktop.cues,
-              library: library,
               lastActivity: () => t.desktop.sessions.now,
               rhythm: rhythm,
             ),
@@ -592,21 +613,57 @@ void main() {
   group('Frame rates', () {
     test('a calm loop drawn 8 times a second never skips a blink (on the taskbar, or on its own)', () {
       bool shut(PetPose pose) => pose.eyes != PetEyes.open || pose.eyeOpenness < 0.5;
-      final idle = library.petTrack(PetAnimation.idle)!;
-      final blinks = [for (var i = 0; i < idle.frames.length; i++) if (shut(idle.frames[i])) i];
+      final t = TestDesktop.make(uptime: () => 0);
+      addTearDown(t.dispose);
+      final quantum = MochiView.quantum(8);
+      final ring = WorldPoses(t.desktop.world.world);
+      // The blinks on the grid in one ring: runs of grid frames with the eyes shut.
+      final steps = (WorldPoses.ring / quantum).round();
+      final blinks = <int>[];
+      for (var i = 0; i < steps; i++) {
+        final closed = shut(ring.petLoop(PetAnimation.idle, i * quantum, quantum: quantum));
+        final before = shut(ring.petLoop(PetAnimation.idle, ((i - 1) % steps) * quantum, quantum: quantum));
+        if (closed && !before) blinks.add(i);
+      }
       expect(blinks, isNotEmpty, reason: 'the idle loop blinks');
       for (final onTaskbar in [false, true]) {
-        final director = PetDirector();
+        final director = PetDirector(t.desktop.world);
+        // 16 rings of 5 s, drawn every 1/8 s from an odd start: every blink of every ring shows at least once.
         var seen = 0;
-        // 20 loops of 4 s, drawn every 1/8 s from an odd start.
-        for (var t = 0.037; t < 80; t += 1 / 8) {
+        var wasShut = false;
+        for (var time = 0.037; time < 16 * WorldPoses.ring; time += 1 / 8) {
           final roam = onTaskbar
-              ? StrollSample(x: 0, facing: 1, animation: PetAnimation.idle, animationTime: t, activity: StrollActivity.rest)
+              ? StrollSample(x: 0, facing: 1, animation: PetAnimation.idle, animationTime: time, activity: StrollActivity.rest)
               : null;
-          if (shut(director.pose(library, t, roam: roam, quantum: MochiView.quantum(8)))) seen++;
+          final closed = shut(director.pose(time, roam: roam, quantum: quantum).pose);
+          if (closed && !wasShut) seen++;
+          wasShut = closed;
         }
-        expect(seen, greaterThanOrEqualTo(20 * blinks.length), reason: 'every blink of every loop (taskbar: $onTaskbar)');
+        expect(seen, greaterThanOrEqualTo(16 * blinks.length), reason: 'every blink of every ring (taskbar: $onTaskbar)');
       }
+    });
+
+    test("the world's loops come round exactly on the grid (so their pictures repeat), seamlessly", () {
+      final world = w.MochiWorld(seed: 0x5EED5);
+      final ring = WorldPoses(world);
+      const quantum = 1 / 15;
+      for (final loop in const [PetAnimation.idle, PetAnimation.watch, PetAnimation.walk, PetAnimation.sleep]) {
+        for (final time in [0.2, 1.7, 3.3, 4.8]) {
+          final first = ring.petLoop(loop, 1000 + time, quantum: quantum).toJson();
+          final again = ring.petLoop(loop, 1000 + time + 7 * WorldPoses.ring, quantum: quantum).toJson();
+          expect(again, first, reason: '${loop.name} at $time');
+        }
+        // No jump where the ring comes round: the last moment is next to the first.
+        final end = ring.petLoop(loop, WorldPoses.ring - 1e-4);
+        final start = ring.petLoop(loop, 0);
+        expect(end.scaleY, closeTo(start.scaleY, 0.01), reason: '${loop.name} breathes on');
+        expect(end.y, closeTo(start.y, 0.01), reason: '${loop.name} steps on');
+      }
+      for (final loop in const [CompanionAnimation.idleAtDesk, CompanionAnimation.typing, CompanionAnimation.sleep]) {
+        final first = ring.companionLoop(loop, 1000.4, quantum: quantum).toJson();
+        expect(ring.companionLoop(loop, 1000.4 + 3 * WorldPoses.ring, quantum: quantum).toJson(), first, reason: loop.name);
+      }
+      expect(WorldPoses.ringTime(1001.21, quantum), WorldPoses.ringTime(1006.21, quantum));
     });
 
     test('calm, roaming, napping: the Mac\'s rates, and the grid the animations are played on', () {
@@ -623,6 +680,45 @@ void main() {
       expect(MochiView.quantum(12), 1 / 15);
       expect(PetDirector.quantize(0.52, 1 / 15), closeTo(8 / 15, 1e-9));
       expect(PetDirector.quantize(0.52, null), 0.52);
+    });
+  });
+
+  group("Mochi's world", () {
+    late TestDesktop t;
+
+    setUp(() => t = TestDesktop.make());
+    tearDown(() => t.dispose());
+
+    testWidgets('ticks four times a second while the screen can be seen, and adds no timer while it can\'t', (tester) async {
+      final usage = FakeUsage(const SystemActivity(idleSeconds: 2));
+      final rhythm = PcRhythm(settings: t.desktop.settings, sampler: usage)..start();
+      final world = DesktopWorld(
+        settings: t.desktop.settings,
+        rhythm: rhythm,
+        sounds: t.desktop.sounds,
+        toasts: t.toasts,
+        uptime: testSeconds,
+      )..start();
+      expect(world.ticking, isTrue);
+      final before = world.world.now;
+      await tester.pump(const Duration(seconds: 1));
+      expect(world.world.now - before, closeTo(1, 0.01));
+
+      // The display goes off (or the PC is locked): the world stops with everything else, and saves what it learned.
+      usage.change(const SystemActivity(idleSeconds: 2, displaysAsleep: true));
+      await tester.pump();
+      expect(world.ticking, isFalse);
+      final asleepAt = world.world.now;
+      await tester.pump(const Duration(minutes: 5));
+      expect(world.ticking, isFalse, reason: 'still nothing after minutes with the screen off');
+      expect(world.world.pet.current.startedAt, lessThanOrEqualTo(asleepAt), reason: 'nothing moved meanwhile');
+
+      // Back: it ticks again.
+      usage.change(const SystemActivity(idleSeconds: 0));
+      await tester.pump();
+      expect(world.ticking, isTrue);
+      world.dispose();
+      rhythm.dispose();
     });
   });
 }

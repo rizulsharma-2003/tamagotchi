@@ -24,6 +24,9 @@ dependencies:
     path: ../../packages/mochi_ui
   mochi_wire:
     path: ../../packages/mochi_wire
+  # Mochi's world: the Mac's pet-life engine in Dart (Sprint 2 G1), which drives Mochi and Patch.
+  mochi_world:
+    path: ../../packages/mochi_world
   # Win32 calls (DPAPI, the Animation effects setting) through dart:ffi (2.2.0: 2026-02-11; already in the workspace).
   ffi: 2.2.0
   # The pairing QR code, drawn by our own painter (3.0.2: 2024-07-16; 3.0.3 is days old, 4.x needs Dart 3.11+).

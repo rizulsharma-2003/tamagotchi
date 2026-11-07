@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart' show SeasonalEvent;
-import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_link/mochi_link.dart' show LinkStatus;
 import 'package:mochi_ui/mochi_ui.dart';
 
@@ -21,7 +20,6 @@ class HomeScreen extends StatefulWidget {
     super.key,
     required this.desktop,
     required this.companion,
-    required this.library,
     required this.lastActivity,
     required this.onPair,
     required this.onSettings,
@@ -40,7 +38,6 @@ class HomeScreen extends StatefulWidget {
 
   /// Patch (in the room at his desk).
   final CompanionDirector companion;
-  final PoseLibrary? library;
   final DateTime Function() lastActivity;
   final VoidCallback onPair;
   final VoidCallback onSettings;
@@ -130,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
               InstallCard(desktop: desktop, onInstall: widget.onInstall!),
               const SizedBox(height: Space.m),
             ],
-            _Header(desktop: desktop, companion: companion, library: widget.library, lastActivity: widget.lastActivity, onPair: widget.onPair),
+            _Header(desktop: desktop, companion: companion, lastActivity: widget.lastActivity, onPair: widget.onPair),
             if (desktop.bridgeProblem.value != null) ...[
               const SizedBox(height: Space.m),
               ClayCard(
@@ -172,11 +169,10 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.desktop, required this.companion, required this.library, required this.lastActivity, required this.onPair});
+  const _Header({required this.desktop, required this.companion, required this.lastActivity, required this.onPair});
 
   final MochiDesktop desktop;
   final CompanionDirector companion;
-  final PoseLibrary? library;
   final DateTime Function() lastActivity;
   final VoidCallback onPair;
 
@@ -197,7 +193,7 @@ class _Header extends StatelessWidget {
       SeasonalEvent.userBirthday => 'Happy birthday!',
       SeasonalEvent.mochiBirthday => "$pet's birthday",
     };
-    final mood = PetMood.of(desktop.sessions, now: now, lastActivity: lastActivity(), rhythm: desktop.rhythm);
+    final mood = PetMood.of(desktop.sessions, now: now, lastActivity: lastActivity(), rhythm: desktop.rhythm, asleep: desktop.world.asleep);
     final link = desktop.link;
     final phones = link.devices.where((peer) => peer.role == 'pocket').toList();
     final online = phones.where((peer) => peer.online).length;
@@ -253,7 +249,7 @@ class _Header extends StatelessWidget {
           decoration: claySurface(p),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(Radii.card),
-            child: RoomView(desktop: desktop, companion: companion, library: library, lastActivity: lastActivity),
+            child: RoomView(desktop: desktop, companion: companion, lastActivity: lastActivity),
           ),
         ),
         const SizedBox(height: Space.s),

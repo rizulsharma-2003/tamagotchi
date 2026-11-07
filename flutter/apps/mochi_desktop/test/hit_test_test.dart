@@ -40,9 +40,9 @@ void main() {
     double clock() => tester.binding.clock.now().microsecondsSinceEpoch / 1e6;
     CompanionDirector? companion;
     if (patch) {
-      companion = CompanionDirector(sessions: t.desktop.sessions, settings: t.desktop.settings, cues: t.desktop.cues, clock: clock, random: Random(2));
+      companion = CompanionDirector(t.desktop.world);
       disposables.add(companion.dispose);
-      t.desktop.sessions.apply(hook('SessionStart', at: DateTime.now()));
+      t.desktop.receive(hook('SessionStart', at: DateTime.now()));
     }
     final stroll = TaskbarStroll(
       shell: FakeShell(petWindow: window),

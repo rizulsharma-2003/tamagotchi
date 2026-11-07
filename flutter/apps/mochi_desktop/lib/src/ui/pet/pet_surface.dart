@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:mochi_art/mochi_art.dart' show RenderDetail;
-import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 
 import '../../core/desktop_settings.dart' show DesktopStyle;
@@ -37,7 +36,6 @@ class PetSurface extends StatefulWidget {
     super.key,
     required this.desktop,
     required this.stroll,
-    required this.library,
     required this.lastActivity,
     required this.onAction,
     required this.onDragStart,
@@ -49,7 +47,6 @@ class PetSurface extends StatefulWidget {
 
   final MochiDesktop desktop;
   final TaskbarStroll stroll;
-  final PoseLibrary? library;
   final DateTime Function() lastActivity;
   final ValueChanged<ShellAction> onAction;
 
@@ -279,9 +276,8 @@ class _PetSurfaceState extends State<PetSurface> {
                           border: _focused ? Border.all(color: p.focus, width: 2) : null,
                         ),
                         child: MochiView(
+                          world: widget.desktop.world,
                           sessions: widget.desktop.sessions,
-                          cues: widget.desktop.cues,
-                          library: widget.library,
                           lastActivity: widget.lastActivity,
                           onMood: (mood) {
                             setState(() => _mood = mood);

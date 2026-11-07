@@ -16,7 +16,7 @@
 // - Patch around (a home: his desk is to the right of it, ui/pet/companion_director.dart): Mochi keeps him company as
 //   on the Mac (`RoamMode.companion`, `.working`): it sits with him, potters a little way off and comes back, watches
 //   him work, waves from beside him when Claude needs you and naps there. For a moment together (a high five, a coffee
-//   delivery) it trots over and holds still while it plays (`summon`).
+//   delivery) it holds still where it is while the moment plays (it goes over to him and back in the moment itself).
 //
 // Positions are Mochi's centre in logical pixels along the taskbar; times are seconds on the caller's clock. The plan
 // reaches a couple of seconds ahead and is extended as time passes (`update`). Every choice comes from the `Random`
@@ -55,7 +55,7 @@ enum StrollMode {
 }
 
 /// What Mochi is up to.
-enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react, company, visit }
+enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react, company }
 
 /// Small accents the pose gets on top of its animation.
 enum StrollStyle {
@@ -337,27 +337,6 @@ class Stroller {
     _line = null;
     _home = null;
     _segments.clear();
-  }
-
-  /// A moment with Patch is about to play for [duration] seconds: Mochi trots over to its place beside him and holds
-  /// still there, facing him, while it plays. Returns when Mochi gets there (null: there's no Patch to go to).
-  double? summon(double now, double duration) {
-    final home = _home;
-    if (!isPlaced || home == null) return null;
-    _cut(now);
-    _activity = StrollActivity.visit;
-    if ((_x - home).abs() > 1) {
-      final direction = home > _x ? 1.0 : -1.0;
-      if (direction != _facing) _turn(direction);
-      _walk(home, speed: tuning.trotSpeed);
-    }
-    if (_facing != 1) _turn(1);
-    final arrival = _t;
-    _holdUntil = arrival + duration;
-    _hold(PetAnimation.idle, duration);
-    _open();
-    _extend(now);
-    return arrival;
   }
 
   /// Follows [mode] (re-planning from where Mochi is when it changes) and keeps the plan reaching ahead.
