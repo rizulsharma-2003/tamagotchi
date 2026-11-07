@@ -6,7 +6,7 @@
 >
 > **Clickable prototype:** `phone-prototype.html`, one self-contained file, kept out of the repo in the session
 > scratchpad at
-> `/private/tmp/claude-501/-Users-collegevidya-Documents-developer-mac-Tamagotchi/715609a6-4292-479b-9065-e06e150c0b5d/scratchpad/sprint3/phone-prototype.html`
+> `/private/tmp/claude-501/-Users-collegevidya-Documents-developer-mac-Tamagotchi/715609a6-4292-479b-9065-e06e150c0b5d/docs/prototypes/sprint3-phone-prototype.html`
 > (to be published as an Artifact). Turn on **Show design notes** for 24 numbered callouts that explain each
 > decision. All content is sample data from the apps' demo content.
 

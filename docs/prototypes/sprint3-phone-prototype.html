@@ -1,0 +1,1684 @@
+<meta charset="utf-8">
+<title>Mochi Pocket Redesign</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap">
+<style>
+/* Layout: a phone on a warm desk, with the review notes in a column beside it (below it on narrow screens).
+   Colours are Mochi Pocket's own tokens: iOS/MochiPocket/Theme.swift and flutter/packages/mochi_ui (light + dark). */
+:root {
+  --page: #EFE3D8; --page-ink: #2B2118; --page-ink-2: #6E6259; --bezel: #231A15;
+  --bg-top: #FFF6EE; --bg-bottom: #FCE8DA; --surface: #FFFCF8; --sunken: #F6ECE3; --stroke: #EFDCCB;
+  --rim: rgba(255,255,255,.95);
+  --ink: #2B2118; --ink-2: #6E6259;
+  --peach: #F28C61; --tint: #B4471C; --on-tint: #FFFFFF;
+  --success: #1D7346; --warning: #A84D08; --danger: #B42318; --vip: #B7791F; --indigo: #4F46E5;
+  --pet: #C2335A; --play: #2F7D4F; --on-state: #FFFFFF;
+  --bubble: #FCE9DD; --focus: #1F5FBF; --note: #4F46E5; --on-note: #FFFFFF;
+  --toast-bg: #2B2118; --toast-fg: #FFFCF8; --toast-action: #F7A27E;
+  --scrim: rgba(43,33,24,.32);
+  --shadow-card: 0 8px 20px rgba(122,74,42,.10), 0 1px 2px rgba(122,74,42,.08);
+  --shadow-float: 0 14px 30px rgba(122,74,42,.22), 0 2px 4px rgba(122,74,42,.12);
+  --wall-top: #FCE6D6; --wall-bottom: #F7D6C1; --floor: #E7C2A5; --rug: #F4A985; --desk: #B98A68; --desk-dark: #8E6447;
+  --sky-top: #BFE0F2; --sky-bottom: #F9E2CF; --frame: #FFF8F1;
+  --diff-add: rgba(29,115,70,.11); --diff-del: rgba(180,35,24,.09);
+  --font: "Nunito", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0E0A08; --page-ink: #F8EEE6; --page-ink-2: #C4B2A5; --bezel: #000000;
+    --bg-top: #1C1511; --bg-bottom: #261B15; --surface: #2A201A; --sunken: #382B23; --stroke: #45362C;
+    --rim: rgba(255,255,255,.05);
+    --ink: #F8EEE6; --ink-2: #C4B2A5;
+    --peach: #F28C61; --tint: #F2895B; --on-tint: #2A1006;
+    --success: #6BD39C; --warning: #F5A85E; --danger: #FF8F85; --vip: #E9B95C; --indigo: #A9A4FF;
+    --pet: #FF8DAA; --play: #79D6A0; --on-state: #1A120D;
+    --bubble: #4A2C1E; --focus: #8DB8FF; --note: #A9A4FF; --on-note: #14102E;
+    --toast-bg: #F8EEE6; --toast-fg: #2A201A; --toast-action: #B4471C;
+    --scrim: rgba(0,0,0,.5);
+    --shadow-card: 0 8px 22px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.4);
+    --shadow-float: 0 16px 34px rgba(0,0,0,.5), 0 2px 4px rgba(0,0,0,.4);
+    --wall-top: #3A2A22; --wall-bottom: #2E211A; --floor: #22180F; --rug: #6E3A26; --desk: #6B4A36; --desk-dark: #4D3426;
+    --sky-top: #141C38; --sky-bottom: #3A2A44; --frame: #4A3A30;
+    --diff-add: rgba(107,211,156,.14); --diff-del: rgba(255,143,133,.13);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0E0A08; --page-ink: #F8EEE6; --page-ink-2: #C4B2A5; --bezel: #000000;
+  --bg-top: #1C1511; --bg-bottom: #261B15; --surface: #2A201A; --sunken: #382B23; --stroke: #45362C;
+  --rim: rgba(255,255,255,.05);
+  --ink: #F8EEE6; --ink-2: #C4B2A5;
+  --peach: #F28C61; --tint: #F2895B; --on-tint: #2A1006;
+  --success: #6BD39C; --warning: #F5A85E; --danger: #FF8F85; --vip: #E9B95C; --indigo: #A9A4FF;
+  --pet: #FF8DAA; --play: #79D6A0; --on-state: #1A120D;
+  --bubble: #4A2C1E; --focus: #8DB8FF; --note: #A9A4FF; --on-note: #14102E;
+  --toast-bg: #F8EEE6; --toast-fg: #2A201A; --toast-action: #B4471C;
+  --scrim: rgba(0,0,0,.5);
+  --shadow-card: 0 8px 22px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.4);
+  --shadow-float: 0 16px 34px rgba(0,0,0,.5), 0 2px 4px rgba(0,0,0,.4);
+  --wall-top: #3A2A22; --wall-bottom: #2E211A; --floor: #22180F; --rug: #6E3A26; --desk: #6B4A36; --desk-dark: #4D3426;
+  --sky-top: #141C38; --sky-bottom: #3A2A44; --frame: #4A3A30;
+  --diff-add: rgba(107,211,156,.14); --diff-del: rgba(255,143,133,.13);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--page); color: var(--page-ink);
+  font-family: var(--font); font-size: 16px; line-height: 1.4; -webkit-font-smoothing: antialiased;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.ic { width: 20px; height: 20px; flex: none; }
+
+/* ---------- Page ---------- */
+.page {
+  max-width: 1100px; margin: 0 auto; padding-block: 28px 48px;
+  display: grid; grid-template-columns: auto minmax(0, 380px); gap: 48px; justify-content: center; align-items: start;
+}
+.topbar { display: none; }
+@media (max-width: 880px) {
+  .page { grid-template-columns: minmax(0, 1fr); gap: 20px; padding-block: 12px 40px; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+}
+.topbar .draft { font-weight: 900; font-size: 14px; }
+.device-col { display: flex; justify-content: center; min-width: 0; }
+.device {
+  width: 414px; height: calc(100vh - 56px); height: min(868px, calc(100dvh - 56px)); min-height: 660px;
+  border-radius: 58px; background: var(--bezel); padding: 12px; position: relative;
+  box-shadow: 0 30px 70px rgba(60,30,10,.28), inset 0 0 0 1px rgba(255,255,255,.08);
+}
+.screen {
+  position: relative; width: 100%; height: 100%; border-radius: 46px; overflow: hidden;
+  background: linear-gradient(var(--bg-top), var(--bg-bottom)); color: var(--ink);
+  display: flex; flex-direction: column; isolation: isolate;
+}
+.screen::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(420px 320px at 100% 0%, color-mix(in srgb, var(--peach) 20%, transparent), transparent 70%);
+}
+@media (max-width: 520px) {
+  .device { width: 100%; height: calc(100vh - 88px); height: calc(100dvh - 88px); min-height: 560px; padding: 0; border-radius: 30px; background: none; box-shadow: var(--shadow-float); }
+  .screen { border-radius: 30px; }
+  .statusbar { display: none !important; }
+  .banner { top: 10px !important; }
+  .toast, .listen, .note-pop { bottom: calc(168px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* Review column */
+.review { position: sticky; top: 28px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+@media (max-width: 880px) { .review { position: static; } }
+.review .eyebrow { color: var(--tint); }
+.review h1 { font-size: 30px; line-height: 1.1; font-weight: 900; margin: 4px 0 0; text-wrap: balance; }
+.review p { margin: 0; color: var(--page-ink-2); font-size: 15px; }
+.review code { font-family: var(--mono); font-size: 13px; background: var(--sunken); color: var(--ink); padding: 1px 5px; border-radius: 6px; overflow-wrap: anywhere; }
+.switch {
+  display: inline-flex; align-items: center; gap: 10px; border: 0; background: var(--surface); color: var(--ink);
+  border-radius: 999px; padding: 6px 14px 6px 6px; min-height: 44px; font-weight: 800; cursor: pointer;
+  box-shadow: var(--shadow-card), inset 0 0 0 1px var(--stroke);
+}
+.switch .knob { width: 44px; height: 26px; border-radius: 999px; background: var(--sunken); position: relative; transition: background .2s; box-shadow: inset 0 0 0 1px var(--stroke); }
+.switch .knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
+.switch[aria-checked="true"] .knob { background: var(--note); }
+.switch[aria-checked="true"] .knob::after { transform: translateX(18px); }
+.try { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 14.5px; color: var(--page-ink-2); }
+.try li { display: flex; gap: 8px; }
+.try li::before { content: "→"; color: var(--tint); font-weight: 900; }
+.notes-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.notes-list li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding: 12px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--stroke); color: var(--ink); transition: box-shadow .2s; }
+.notes-list li.hl { box-shadow: inset 0 0 0 2px var(--note); }
+.notes-list .n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--note); color: var(--on-note); font-weight: 900; font-size: 13px; }
+.notes-list b { display: block; font-weight: 900; font-size: 15px; }
+.notes-list span { font-size: 14px; color: var(--ink-2); }
+.review .fine { font-size: 13px; }
+.rv-btn { align-self: flex-start; border: 0; background: var(--sunken); color: var(--ink); min-height: 44px; padding: 0 16px; border-radius: 14px; font-weight: 800; cursor: pointer; }
+
+/* ---------- Phone chrome ---------- */
+.statusbar { flex: none; height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0 34px; font-weight: 800; font-size: 15px; position: relative; z-index: 4; }
+.island { position: absolute; left: 50%; top: 11px; width: 120px; height: 34px; margin-left: -60px; border-radius: 20px; background: #000; }
+.sb-icons { display: flex; gap: 6px; align-items: center; }
+.sb-icons svg { height: 12px; width: auto; }
+.netstrip { flex: none; display: flex; align-items: center; gap: 8px; margin: 0 12px 6px; padding: 8px 12px; border-radius: 14px; background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--ink); font-size: 13.5px; font-weight: 700; position: relative; z-index: 4; }
+.netstrip .ic { width: 18px; height: 18px; color: var(--warning); }
+.views { position: relative; flex: 1; min-height: 0; z-index: 1; }
+.view {
+  position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; padding: 0 16px 130px;
+  opacity: 0; visibility: hidden; transform: translateY(8px);
+  transition: opacity .22s ease, transform .26s cubic-bezier(.2,.8,.2,1), visibility 0s linear .26s;
+  scrollbar-width: none;
+}
+.view::-webkit-scrollbar { display: none; }
+.view.active { opacity: 1; visibility: visible; transform: none; transition: opacity .22s ease, transform .26s cubic-bezier(.2,.8,.2,1), visibility 0s; }
+.vhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 6px 2px 14px; }
+.vhead h1, .dtitle h1 { font-size: 34px; font-weight: 900; margin: 0; line-height: 1.05; letter-spacing: -.01em; }
+.eyebrow { font-size: 12.5px; font-weight: 800; color: var(--ink-2); text-transform: uppercase; letter-spacing: .07em; }
+.host {
+  flex: none; display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 14px 0 12px; border-radius: 999px;
+  border: 1px solid var(--stroke); background: var(--surface); color: var(--ink); font-weight: 800; font-size: 14.5px; cursor: pointer;
+  box-shadow: var(--shadow-card), inset 0 1px 0 var(--rim);
+}
+.host .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 22%, transparent); }
+.host .ic { width: 16px; height: 16px; color: var(--ink-2); }
+.asleep .host .dot { background: var(--ink-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink-2) 22%, transparent); }
+.host-state { color: var(--ink-2); font-weight: 700; }
+.head-actions { display: flex; gap: 8px; align-items: center; }
+.iconbtn { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--sunken); color: var(--tint); display: grid; place-items: center; cursor: pointer; }
+
+.tabbar {
+  flex: none; position: relative; z-index: 6; display: grid; grid-template-columns: repeat(5, 1fr);
+  padding: 6px 6px 24px; background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: 1px solid var(--stroke);
+}
+@media (max-width: 520px) { .tabbar { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); } }
+.tab { position: relative; border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 0 4px; min-height: 52px; color: var(--ink-2); font-size: 11.5px; font-weight: 800; cursor: pointer; border-radius: 14px; }
+.tab .ic { width: 25px; height: 25px; transition: transform .2s; }
+.tab[aria-selected="true"] { color: var(--tint); }
+.tab[aria-selected="true"] .ic { transform: translateY(-1px) scale(1.06); }
+.tab .count { position: absolute; top: 3px; left: 50%; margin-left: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--tint); color: var(--on-tint); font-size: 11px; font-weight: 900; display: grid; place-items: center; }
+.tab .count[hidden] { display: none; }
+
+.fab {
+  position: absolute; right: 16px; bottom: 96px; z-index: 7; display: flex; align-items: center; gap: 8px;
+  height: 58px; padding: 0 20px 0 8px; border-radius: 999px; border: 0; cursor: pointer;
+  background: var(--tint); color: var(--on-tint); font-weight: 900; font-size: 16px;
+  box-shadow: var(--shadow-float); touch-action: none; user-select: none; -webkit-user-select: none;
+  transition: padding .25s, transform .15s, background .2s;
+}
+@media (max-width: 520px) { .fab { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); } }
+.fab:active { transform: scale(.95); }
+.fab .face { width: 42px; height: 42px; border-radius: 50%; background: var(--bubble); display: grid; place-items: center; overflow: hidden; }
+.fab .face svg { width: 38px; height: 36px; margin-top: 4px; }
+.fab .mic { display: none; }
+.fab.as-mic { padding: 0; width: 58px; justify-content: center; }
+.fab.as-mic .face, .fab.as-mic .fab-label { display: none; }
+.fab.as-mic .mic { display: block; width: 26px; height: 26px; }
+.fab.hot { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { box-shadow: var(--shadow-float), 0 0 0 0 color-mix(in srgb, var(--peach) 55%, transparent); } 50% { box-shadow: var(--shadow-float), 0 0 0 14px transparent; } }
+
+/* ---------- Building blocks ---------- */
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.card { position: relative; background: var(--surface); border-radius: 26px; border: 1px solid var(--stroke); box-shadow: var(--shadow-card), inset 0 1px 0 var(--rim); padding: 16px; }
+.sec-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 6px 4px -4px; font-size: 19px; font-weight: 900; }
+.sec-title small { font-size: 13.5px; font-weight: 700; color: var(--ink-2); }
+.label { font-size: 12.5px; font-weight: 900; color: var(--ink-2); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 6px; }
+.tile { flex: none; width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; color: var(--c, var(--tint)); background: color-mix(in srgb, var(--c, var(--tint)) 13%, transparent); }
+.tile .ic { width: 18px; height: 18px; }
+.row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; }
+.row + .row { border-top: 1px solid var(--stroke); }
+.row-main { flex: 1; min-width: 0; }
+.row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.row-title { font-weight: 800; font-size: 15.5px; line-height: 1.25; }
+.row-subj { font-weight: 700; font-size: 14.5px; margin-top: 1px; }
+.row-sub { font-size: 14px; color: var(--ink-2); margin-top: 2px; overflow-wrap: anywhere; }
+.time { flex: none; font-size: 12.5px; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.star { color: var(--vip); width: 14px; height: 14px; vertical-align: -1px; margin-right: 3px; }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pill .ic { width: 14px; height: 14px; }
+.btn { border: 0; font-weight: 800; font-size: 15px; min-height: 44px; padding: 0 16px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; transition: transform .15s, opacity .15s, background .2s; white-space: nowrap; }
+.btn:active { transform: scale(.96); }
+.btn:disabled { opacity: .45; cursor: default; transform: none; }
+.btn .ic { width: 18px; height: 18px; }
+.btn-primary { background: var(--tint); color: var(--on-tint); }
+.btn-soft { background: var(--sunken); color: var(--ink); }
+.btn-ghost { background: transparent; color: var(--tint); padding: 0 10px; }
+.btn-danger { background: transparent; color: var(--danger); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--danger) 50%, transparent); }
+.btn-small { min-height: 36px; font-size: 14px; padding: 0 12px; border-radius: 12px; }
+.btn-row { display: flex; gap: 10px; }
+.btn-row > .btn { flex: 1; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 0; min-height: 40px; padding: 0 14px; border-radius: 999px; background: var(--sunken); color: var(--ink); font-weight: 800; font-size: 14px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--tint); color: var(--on-tint); }
+.chiprow { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; margin: 0 -2px; scrollbar-width: none; }
+.chiprow::-webkit-scrollbar { display: none; }
+.chiprow .chip { flex: none; }
+.fine { font-size: 13px; color: var(--ink-2); margin: 0; }
+pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background: var(--sunken); font-family: var(--mono); font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+.linkbtn { border: 0; background: none; color: var(--tint); font-weight: 800; font-size: 14.5px; min-height: 44px; padding: 0 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.linkbtn .ic { width: 16px; height: 16px; }
+.spin { display: inline-block; width: 1em; text-align: center; color: var(--tint); font-weight: 900; }
+
+/* Mochi art */
+.mochi-svg { display: block; }
+.avatar { flex: none; width: 58px; height: 58px; border-radius: 20px; background: var(--bubble); display: grid; place-items: center; border: 0; cursor: pointer; position: relative; padding: 0; }
+.avatar svg { width: 50px; height: 46px; margin-top: 6px; }
+.hearts { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.heart { position: absolute; left: 50%; top: 30%; color: var(--pet); font-size: 16px; animation: float 1.1s ease-out forwards; }
+@keyframes float { from { transform: translate(-50%, 0) scale(.6); opacity: 0; } 20% { opacity: 1; } to { transform: translate(calc(-50% + var(--dx, 0px)), -46px) scale(1.1); opacity: 0; } }
+
+/* Today */
+.brief { display: flex; gap: 12px; align-items: flex-start; }
+.brief-bubble { position: relative; flex: 1; min-width: 0; background: var(--bubble); border-radius: 18px 18px 18px 6px; padding: 10px 13px; font-weight: 800; font-size: 16.5px; line-height: 1.35; }
+.brief-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.readcap { margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: var(--sunken); font-size: 14.5px; line-height: 1.5; color: var(--ink-2); }
+.readcap mark { background: color-mix(in srgb, var(--peach) 35%, transparent); color: var(--ink); border-radius: 4px; padding: 0 2px; }
+.meet { display: flex; gap: 12px; align-items: flex-start; }
+.meet h3 { margin: 0; font-size: 19px; font-weight: 900; }
+.meet .when { font-weight: 800; color: var(--tint); font-size: 14.5px; font-variant-numeric: tabular-nums; }
+.donebtn { flex: none; width: 44px; height: 44px; margin: -6px -8px -6px -6px; border: 0; background: none; display: grid; place-items: center; cursor: pointer; color: var(--success); }
+.donebtn span { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--stroke); display: grid; place-items: center; transition: background .15s, border-color .15s; }
+.donebtn:hover span { border-color: var(--success); }
+.donebtn .ic { width: 14px; height: 14px; opacity: 0; }
+.donebtn:hover .ic { opacity: .6; }
+
+/* Claude */
+.srow { width: 100%; text-align: left; border: 0; background: none; display: flex; gap: 10px; align-items: center; padding: 12px 0; cursor: pointer; color: inherit; }
+.srow + .srow { border-top: 1px solid var(--stroke); }
+.srow > .ic { color: var(--ink-2); width: 18px; height: 18px; }
+.srow .row-top { align-items: center; }
+.bar { height: 5px; border-radius: 3px; background: var(--sunken); overflow: hidden; margin-top: 8px; }
+.bar i { display: block; height: 100%; width: 38%; border-radius: 3px; background: var(--peach); animation: slide 1.5s ease-in-out infinite; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(270%); } }
+.approval { border-color: color-mix(in srgb, var(--warning) 40%, var(--stroke)); }
+.ap-head { display: flex; gap: 12px; align-items: flex-start; }
+.ap-title { font-weight: 900; font-size: 17px; line-height: 1.25; }
+.ap-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 12px; font-size: 13.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ap-foot b { color: var(--ink); }
+.ap-more { margin-top: 10px; }
+.claude-panes { position: absolute; inset: 0; overflow: hidden; }
+.pane { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; padding: 0 16px 130px; transition: transform .3s cubic-bezier(.2,.8,.2,1), opacity .3s; scrollbar-width: none; }
+.pane::-webkit-scrollbar { display: none; }
+.pane-detail { transform: translateX(100%); background: linear-gradient(var(--bg-top), var(--bg-bottom)); visibility: hidden; transition: transform .3s cubic-bezier(.2,.8,.2,1), visibility 0s linear .3s; }
+.detail-open .pane-detail { transform: none; visibility: visible; transition: transform .3s cubic-bezier(.2,.8,.2,1), visibility 0s; }
+.detail-open .pane-list { transform: translateX(-24%); opacity: .4; }
+.dhead { display: flex; justify-content: space-between; align-items: center; padding: 2px 0 6px; }
+.back { border: 0; background: none; color: var(--tint); font-weight: 800; font-size: 16px; min-height: 44px; display: inline-flex; align-items: center; gap: 2px; padding: 0 8px 0 0; cursor: pointer; }
+.dtitle { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 4px 2px 14px; position: relative; }
+.card p { margin: 0 0 10px; font-size: 15px; }
+.card p:last-child { margin-bottom: 0; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.steps li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; font-size: 14.5px; align-items: baseline; }
+.steps .k { font-weight: 900; text-align: center; }
+.steps .k.ok { color: var(--success); }
+.steps .k.wait { color: var(--warning); }
+.steps code, .frow .fname { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+.frow { width: 100%; border: 0; background: none; display: grid; grid-template-columns: 20px minmax(0, 1fr) auto auto 18px; gap: 8px; align-items: center; padding: 10px 0; text-align: left; cursor: pointer; color: inherit; min-height: 44px; }
+.frow + .frow { border-top: 1px solid var(--stroke); }
+.frow .ic { width: 18px; height: 18px; color: var(--ink-2); }
+.add { color: var(--success); font-weight: 800; font-size: 13px; font-variant-numeric: tabular-nums; }
+.del { color: var(--danger); font-weight: 800; font-size: 13px; font-variant-numeric: tabular-nums; }
+.replyform, .composer-form { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.field { flex: 1; min-width: 0; min-height: 46px; border: 1px solid var(--stroke); background: var(--sunken); border-radius: 16px; padding: 0 14px; font-size: 15.5px; outline: none; }
+.field:focus { border-color: var(--tint); }
+.sendbtn { flex: none; width: 46px; height: 46px; border-radius: 50%; border: 0; background: var(--tint); color: var(--on-tint); display: grid; place-items: center; cursor: pointer; }
+.sendbtn .ic { width: 20px; height: 20px; }
+
+/* Inbox */
+.list { display: flex; flex-direction: column; gap: 8px; position: relative; }
+.swipe-wrap { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .28s ease, opacity .2s ease, margin .28s ease; }
+.swipe-wrap.gone { grid-template-rows: 0fr; opacity: 0; margin-top: -8px; }
+.swipe-clip { min-height: 0; overflow: hidden; border-radius: 20px; }
+.swipe { position: relative; }
+.swipe-actions { position: absolute; inset: 0 0 0 auto; width: 160px; display: flex; border-radius: 20px; overflow: hidden; }
+.sa { flex: 1; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--on-state); font-weight: 800; font-size: 13px; cursor: pointer; }
+.sa .ic { width: 20px; height: 20px; }
+.sa-snooze { background: var(--warning); }
+.sa-done { background: var(--success); }
+.swipe-face { position: relative; display: flex; gap: 12px; padding: 12px 14px; border-radius: 20px; background: var(--surface); border: 1px solid var(--stroke); box-shadow: inset 0 1px 0 var(--rim); transition: transform .26s cubic-bezier(.2,.8,.2,1); touch-action: pan-y; cursor: grab; user-select: none; -webkit-user-select: none; }
+.swipe-face.dragging { transition: none; cursor: grabbing; }
+.swipe.open .swipe-face { transform: translateX(-160px); }
+.row-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.bundle { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 20px; background: var(--surface); border: 1px dashed var(--stroke); width: 100%; text-align: left; color: inherit; cursor: pointer; }
+.bundle .ic.chev { transition: transform .2s; color: var(--ink-2); }
+.bundle[aria-expanded="true"] .ic.chev { transform: rotate(90deg); }
+.draft-text { margin: 8px 0 10px; padding: 10px 12px; border-radius: 14px; background: var(--sunken); font-size: 14.5px; }
+.ph { background: color-mix(in srgb, var(--warning) 18%, transparent); border-radius: 5px; padding: 0 3px; font-weight: 800; }
+.empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 22px 16px; }
+.empty svg { width: 84px; height: 76px; }
+.empty b { font-size: 17px; }
+
+/* Ask */
+.chat { display: flex; flex-direction: column; gap: 10px; padding-bottom: 96px; }
+.day { align-self: center; font-size: 12px; font-weight: 900; color: var(--ink-2); text-transform: uppercase; letter-spacing: .07em; margin: 6px 0 2px; }
+.msg { max-width: 84%; padding: 10px 14px; border-radius: 20px; font-size: 15.5px; line-height: 1.38; animation: pop .22s ease-out; }
+@keyframes pop { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+.msg.me { align-self: flex-end; background: var(--tint); color: var(--on-tint); border-bottom-right-radius: 6px; font-weight: 700; }
+.mrow { display: flex; gap: 8px; align-items: flex-end; align-self: flex-start; max-width: 90%; }
+.mrow .mini { flex: none; width: 30px; height: 30px; border-radius: 11px; background: var(--bubble); display: grid; place-items: center; }
+.mrow .mini svg { width: 26px; height: 24px; margin-top: 4px; }
+.msg.mochi { max-width: 100%; background: var(--surface); border: 1px solid var(--stroke); border-bottom-left-radius: 6px; box-shadow: var(--shadow-card); }
+.msg.card-msg { padding: 14px; }
+.msg .quote { margin: 8px 0 12px; padding: 8px 10px; border-radius: 12px; background: var(--sunken); font-size: 14.5px; }
+.typing span { display: inline-block; width: 7px; height: 7px; margin: 0 2px; border-radius: 50%; background: var(--ink-2); animation: blink 1s infinite; }
+.typing span:nth-child(2) { animation-delay: .15s; } .typing span:nth-child(3) { animation-delay: .3s; }
+@keyframes blink { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
+.composer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 26px 86px 14px 16px; background: linear-gradient(transparent, var(--bg-bottom) 34%); }
+.composer .chiprow { margin-bottom: 6px; }
+.composer .chip { min-height: 36px; font-size: 13.5px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--stroke); }
+.composer-form { margin-top: 0; }
+
+/* Mochi room */
+.room { position: relative; aspect-ratio: 4 / 3.5; max-width: 100%; border-radius: 26px; overflow: hidden; border: 1px solid var(--stroke); box-shadow: var(--shadow-card); background: linear-gradient(var(--wall-top), var(--wall-bottom)); }
+.room .window { position: absolute; left: 8%; top: 18%; width: 30%; height: 32%; border-radius: 14px; background: linear-gradient(var(--sky-top), var(--sky-bottom)); border: 6px solid var(--frame); }
+.room .window::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 5px; margin-left: -2.5px; background: var(--frame); }
+.room .lights { position: absolute; left: 0; right: 0; top: 2%; width: 100%; height: auto; }
+.room .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; background: var(--floor); }
+.room .rug { position: absolute; left: 12%; bottom: 7%; width: 54%; height: 15%; border-radius: 50%; background: var(--rug); opacity: .75; }
+.room .desk { position: absolute; right: 5%; bottom: 22%; width: 34%; height: 6%; border-radius: 6px; background: var(--desk); }
+.room .desk::before, .room .desk::after { content: ""; position: absolute; top: 100%; width: 7%; height: 260%; background: var(--desk-dark); }
+.room .desk::before { left: 10%; } .room .desk::after { right: 10%; }
+.room .laptop { position: absolute; right: 9%; bottom: 28%; width: 15%; height: 12%; border-radius: 4px 4px 1px 1px; background: #3C3330; border: 3px solid #5A4C46; }
+.room .laptop::after { content: ">_"; position: absolute; inset: 0; display: grid; place-items: center; color: #F2895B; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+.room .patch { position: absolute; right: 26%; bottom: 28%; width: 13%; height: auto; image-rendering: pixelated; }
+.room .mochi-wrap { position: absolute; left: 22%; bottom: 9%; width: 33%; }
+.room .mochi-wrap svg { width: 100%; height: auto; }
+.room .diya { position: absolute; bottom: 5%; width: 8%; }
+.room .bubble { position: absolute; left: 10%; bottom: 47%; max-width: 62%; padding: 8px 12px; border-radius: 16px; background: var(--surface); color: var(--ink); font-weight: 800; font-size: 15px; box-shadow: var(--shadow-card); transition: opacity .2s, transform .2s; }
+.room .bubble::after { content: ""; position: absolute; left: 30%; bottom: -7px; width: 14px; height: 14px; background: var(--surface); transform: rotate(45deg); border-radius: 0 0 4px 0; }
+.room .bubble.hide { opacity: 0; transform: translateY(4px); }
+.room .ball { position: absolute; left: 58%; bottom: 10%; width: 7%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #F7B6C6, #C2335A); opacity: 0; }
+.room .ball.go { animation: ballhop 1s ease-in-out; }
+@keyframes ballhop { 0% { opacity: 1; transform: translate(0,0); } 30% { transform: translate(-60%, -160%); } 60% { transform: translate(-120%, 0); } 80% { transform: translate(-150%, -50%); } 100% { opacity: 0; transform: translate(-170%, 0); } }
+.room .treat { position: absolute; left: 36%; top: 30%; width: 6%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #FFD27A, #E08A1E); opacity: 0; }
+.room .treat.go { animation: drop .9s ease-in forwards; }
+@keyframes drop { 0% { opacity: 1; transform: translateY(-40px); } 70% { opacity: 1; transform: translateY(60px); } 100% { opacity: 0; transform: translateY(70px) scale(.4); } }
+.hop { animation: hop .6s cubic-bezier(.3,1.6,.5,1); }
+@keyframes hop { 0% { transform: scale(1,1); } 25% { transform: scale(1.08,.9); } 55% { transform: translateY(-14%) scale(.95,1.06); } 100% { transform: none; } }
+.wiggle { animation: wiggle .7s ease-in-out; transform-origin: 50% 100%; }
+@keyframes wiggle { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } 75% { transform: rotate(-2deg); } }
+.ppt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.ppt .btn { flex-direction: column; min-height: 76px; border-radius: 20px; gap: 4px; font-size: 15px; background: var(--surface); box-shadow: var(--shadow-card), inset 0 0 0 1px var(--stroke); color: var(--c); }
+.ppt .btn .ic { width: 26px; height: 26px; }
+.games { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.game { display: flex; gap: 10px; align-items: center; padding: 12px; border-radius: 20px; background: var(--surface); border: 1px solid var(--stroke); text-align: left; cursor: pointer; color: inherit; min-height: 60px; font-weight: 800; font-size: 14.5px; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
+.toggle-row + .toggle-row { border-top: 1px solid var(--stroke); }
+.mini-switch { flex: none; width: 50px; height: 30px; border-radius: 999px; border: 0; background: var(--sunken); position: relative; cursor: pointer; box-shadow: inset 0 0 0 1px var(--stroke); transition: background .2s; }
+.mini-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
+.mini-switch[aria-checked="true"] { background: var(--success); }
+.mini-switch[aria-checked="true"]::after { transform: translateX(20px); }
+.sounds-like { margin-top: 8px; padding: 8px 12px; border-radius: 14px; background: var(--bubble); font-weight: 800; font-size: 14.5px; }
+
+/* Overlays */
+.banner {
+  position: absolute; left: 10px; right: 10px; top: 54px; z-index: 30; display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px 14px; border-radius: 24px; border: 1px solid var(--stroke); cursor: pointer; text-align: left; color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-float); transform: translateY(-160%); transition: transform .42s cubic-bezier(.2,.9,.3,1.15);
+}
+.banner.show { transform: none; }
+.banner .appicon { flex: none; width: 38px; height: 38px; border-radius: 10px; background: var(--bubble); display: grid; place-items: center; }
+.banner .appicon svg { width: 34px; height: 31px; margin-top: 4px; }
+.banner .bmeta { font-size: 12px; font-weight: 800; color: var(--ink-2); display: flex; justify-content: space-between; }
+.banner .btitle { font-weight: 900; font-size: 15px; line-height: 1.25; margin-top: 1px; }
+.banner .bbody { font-size: 14px; color: var(--ink); margin-top: 2px; }
+.toast {
+  position: absolute; left: 16px; right: 16px; bottom: 168px; z-index: 40; display: flex; align-items: center; gap: 12px;
+  padding: 12px 10px 12px 16px; border-radius: 18px; background: var(--toast-bg); color: var(--toast-fg);
+  font-weight: 800; font-size: 14.5px; box-shadow: var(--shadow-float);
+  opacity: 0; transform: translateY(12px); pointer-events: none; transition: opacity .22s, transform .22s;
+}
+.toast.show { opacity: 1; transform: none; pointer-events: auto; }
+.toast .t-text { flex: 1; min-width: 0; }
+.toast button { flex: none; border: 0; background: none; color: var(--toast-action); font-weight: 900; min-height: 36px; padding: 0 8px; cursor: pointer; }
+.scrim { position: absolute; inset: 0; z-index: 50; background: var(--scrim); opacity: 0; pointer-events: none; transition: opacity .25s; }
+.scrim.show { opacity: 1; pointer-events: auto; }
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 51; max-height: 90%; overflow-y: auto; overflow-x: hidden;
+  padding: 8px 16px 30px; border-radius: 30px 30px 0 0; background: linear-gradient(var(--bg-top), var(--bg-bottom));
+  box-shadow: 0 -10px 30px rgba(0,0,0,.18); transform: translateY(105%); visibility: hidden;
+  transition: transform .34s cubic-bezier(.2,.8,.2,1), visibility 0s linear .34s;
+}
+.sheet.show { transform: none; visibility: visible; transition: transform .34s cubic-bezier(.2,.8,.2,1), visibility 0s; }
+.grabber { width: 40px; height: 5px; border-radius: 3px; background: var(--stroke); margin: 2px auto 12px; }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.sheet h2 { margin: 0; font-size: 23px; font-weight: 900; line-height: 1.15; }
+.sheet h3 { margin: 18px 4px 8px; font-size: 13px; font-weight: 900; color: var(--ink-2); text-transform: uppercase; letter-spacing: .07em; }
+.ask-hero { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 4px 0 16px; text-align: center; }
+.bigmic { width: 86px; height: 86px; border-radius: 50%; border: 0; background: var(--tint); color: var(--on-tint); display: grid; place-items: center; cursor: pointer; box-shadow: var(--shadow-float); touch-action: none; user-select: none; -webkit-user-select: none; }
+.bigmic .ic { width: 36px; height: 36px; }
+.bigmic.hot { animation: pulse 1.2s ease-in-out infinite; }
+.hostcard { display: flex; gap: 12px; align-items: center; }
+.parked { opacity: .78; border-style: dashed; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.qa { border: 0; border-radius: 18px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--stroke); min-height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; font-weight: 800; font-size: 13px; cursor: pointer; color: var(--ink); padding: 6px; text-align: center; }
+.qa .ic { width: 22px; height: 22px; color: var(--tint); }
+.confirm { margin-top: 10px; }
+.diff { margin: 0; border-radius: 16px; overflow-x: auto; background: var(--surface); border: 1px solid var(--stroke); font-family: var(--mono); font-size: 13px; line-height: 1.55; }
+.diff div { padding: 0 12px; white-space: pre; min-width: max-content; }
+.diff .h { color: var(--indigo); background: var(--sunken); padding-block: 4px; }
+.diff .a { background: var(--diff-add); }
+.diff .d { background: var(--diff-del); }
+.diff .a::first-letter { color: var(--success); }
+.diff .d::first-letter { color: var(--danger); }
+.listen { position: absolute; left: 12px; right: 12px; bottom: 170px; z-index: 45; padding: 16px; border-radius: 24px; background: var(--surface); border: 1px solid var(--stroke); box-shadow: var(--shadow-float); display: flex; flex-direction: column; gap: 8px; align-items: center; text-align: center; }
+.wave { display: flex; gap: 4px; align-items: center; height: 26px; }
+.wave i { width: 5px; border-radius: 3px; background: var(--peach); animation: wave .9s ease-in-out infinite; height: 30%; }
+.wave i:nth-child(2) { animation-delay: .1s; } .wave i:nth-child(3) { animation-delay: .2s; } .wave i:nth-child(4) { animation-delay: .3s; } .wave i:nth-child(5) { animation-delay: .4s; }
+@keyframes wave { 0%,100% { height: 25%; } 50% { height: 100%; } }
+.listen .said { font-weight: 800; font-size: 16px; min-height: 1.4em; }
+.faceid { position: absolute; inset: 0; z-index: 60; display: grid; place-items: center; background: var(--scrim); }
+.faceid .box { width: 160px; height: 160px; border-radius: 30px; background: var(--surface); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font-weight: 900; box-shadow: var(--shadow-float); }
+.faceid .ic { width: 58px; height: 58px; color: var(--tint); }
+.faceid.ok .ic { color: var(--success); }
+.note-pop { position: absolute; left: 12px; right: 12px; bottom: 168px; z-index: 70; padding: 14px 14px 12px; border-radius: 20px; background: var(--surface); border: 2px solid var(--note); box-shadow: var(--shadow-float); }
+.note-pop b { display: block; font-size: 15.5px; font-weight: 900; margin-bottom: 4px; }
+.note-pop p { margin: 0; font-size: 14px; color: var(--ink-2); }
+.note-pop .x { position: absolute; top: 4px; right: 4px; width: 40px; height: 40px; border: 0; background: none; color: var(--ink-2); cursor: pointer; display: grid; place-items: center; }
+
+/* Design-note callouts */
+.nb { position: absolute; top: -10px; left: -8px; z-index: 20; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid var(--surface); background: var(--note); color: var(--on-note); font-weight: 900; font-size: 12.5px; display: grid; place-items: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.25); animation: pop .2s ease-out; }
+.notes-on .screen [data-note] { outline: 2px dashed color-mix(in srgb, var(--note) 60%, transparent); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  .bar i { width: 60%; transform: none; }
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4"/></symbol>
+    <symbol id="i-claude" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2.6-7.4A2 2 0 0 1 7.5 4.2h9a2 2 0 0 1 1.9 1.4L21 13v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 13h5l1.5 2.6h5L16 13h5"/></symbol>
+    <symbol id="i-ask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.5a8 8 0 0 1-11.7 7.1L4 19.8l1.2-4.3a8 8 0 1 1 15.3-4z"/><path d="M9 11.5h.01M12.5 11.5h.01M16 11.5h.01" stroke-width="2.6"/></symbol>
+    <symbol id="i-paw" viewBox="0 0 24 24" fill="currentColor"><ellipse cx="12" cy="16" rx="4.6" ry="3.8"/><circle cx="6" cy="10.5" r="2"/><circle cx="9.6" cy="6.6" r="2"/><circle cx="14.4" cy="6.6" r="2"/><circle cx="18" cy="10.5" r="2"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+    <symbol id="i-speaker" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L13 19V5L7.5 9.5z"/><path d="M16.5 9a4.5 4.5 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="12" height="12" rx="3"/><path d="M15 10.5l6-3.5v10l-6-3.5"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 7l8.5 6 8.5-6"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6.5h10M10 12h10M10 17.5h10"/><path d="M3.5 6.5l1.5 1.5 2.5-2.5M3.5 12l1.5 1.5 2.5-2.5"/><circle cx="5.5" cy="17.5" r="1.3"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></symbol>
+    <symbol id="i-chevl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5.5L8.5 12l6.5 6.5"/></symbol>
+    <symbol id="i-chevd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9.5l5.5 5.5 5.5-5.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5.5M6 11l6-6 6 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.8l2.8 5.9 6.4.7-4.8 4.4 1.3 6.4L12 17l-5.7 3.2 1.3-6.4-4.8-4.4 6.4-.7z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+    <symbol id="i-playpause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5v13l8-6.5z"/><path d="M16 6v12M20 6v12"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L13 19V5L7.5 9.5z"/><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1.2"/><path d="M8 5H6.5A2 2 0 0 0 4.5 7v12a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H16"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4.5M7.5 9L12 4.5 16.5 9M5 19.5h14"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2.5L4.5 13.5h7l-1 8 8.5-11h-7z"/></symbol>
+    <symbol id="i-face" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M9 9.5v1.5M15 9.5v1.5M12 9.5v3.5h-1M9.5 16a3.5 3.5 0 0 0 5 0"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.3a4.2 4.2 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/></symbol>
+    <symbol id="i-ball" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M4.5 9.5c4.5 1.6 10.5 1.6 15 0M4.5 14.5c4.5-1.6 10.5-1.6 15 0"/></symbol>
+    <symbol id="i-treat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M9 9h.01M14.5 8h.01M15.5 13.5h.01M9.5 14.5h.01M12 11.5h.01" stroke-width="3"/></symbol>
+    <symbol id="i-game" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7" width="19" height="11" rx="5.5"/><path d="M7.5 10.5v4M5.5 12.5h4M15.5 11.5h.01M18 13.5h.01" /></symbol>
+    <symbol id="i-recap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="3"/><path d="M8 8.5h8M8 12.5h8M8 16.5h5"/></symbol>
+    <symbol id="i-sofa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11V8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v3"/><path d="M3 13a2 2 0 0 1 4 0v1.5h10V13a2 2 0 0 1 4 0v4.5H3zM5 17.5V20M19 17.5V20"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="5.5" r="2"/><circle cx="6.5" cy="18.5" r="2"/><circle cx="17.5" cy="8" r="2"/><path d="M6.5 7.5v9M17.5 10a5 5 0 0 1-5 5H8.5"/></symbol>
+    <symbol id="i-sleepz" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h6l-6 7h6M14 5h6l-6 6h6"/></symbol>
+    <symbol id="mochi" viewBox="0 0 120 108">
+      <ellipse cx="60" cy="102" rx="36" ry="5" fill="#000" opacity=".12"/>
+      <path d="M100 82c11 1 15-8 10-14" fill="none" stroke="#5B3A29" stroke-width="3.2" stroke-linecap="round"/>
+      <path d="M30 46C24 28 27 13 36 12c7-1 13 7 18 15Z" fill="#FFE7D3" stroke="#5B3A29" stroke-width="2.6" stroke-linejoin="round"/>
+      <path d="M90 46c6-18 3-33-6-34-7-1-13 7-18 15Z" fill="#FFE7D3" stroke="#5B3A29" stroke-width="2.6" stroke-linejoin="round"/>
+      <path d="M34 34c-1.5-8 .5-14 3.5-14.5 3-.4 6 3.5 8.5 7Z" fill="#F7B3A6"/>
+      <path d="M86 34c1.5-8-.5-14-3.5-14.5-3-.4-6 3.5-8.5 7Z" fill="#F7B3A6"/>
+      <path d="M60 24c27 0 44 18 44 42 0 22-18 34-44 34S16 88 16 66c0-24 17-42 44-42Z" fill="#FFE7D3" stroke="#5B3A29" stroke-width="2.6"/>
+      <ellipse cx="45" cy="60" rx="6" ry="7.5" fill="#2B2118"/><ellipse cx="75" cy="60" rx="6" ry="7.5" fill="#2B2118"/>
+      <circle cx="47.2" cy="57" r="2.2" fill="#fff"/><circle cx="77.2" cy="57" r="2.2" fill="#fff"/>
+      <ellipse cx="34" cy="72" rx="6.5" ry="3.6" fill="#F59C93" opacity=".6"/><ellipse cx="86" cy="72" rx="6.5" ry="3.6" fill="#F59C93" opacity=".6"/>
+      <path d="M54 70q3 4 6 0q3 4 6 0" fill="none" stroke="#5B3A29" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <ellipse cx="44" cy="99" rx="9" ry="4.5" fill="#FFE7D3" stroke="#5B3A29" stroke-width="2.2"/>
+      <ellipse cx="76" cy="99" rx="9" ry="4.5" fill="#FFE7D3" stroke="#5B3A29" stroke-width="2.2"/>
+    </symbol>
+    <symbol id="patch" viewBox="0 0 24 15" shape-rendering="crispEdges">
+      <rect x="3" y="0" width="18" height="12" fill="#CC7A5D"/>
+      <rect x="0" y="5" width="3" height="4" fill="#CC7A5D"/><rect x="21" y="5" width="3" height="4" fill="#CC7A5D"/>
+      <rect x="5" y="12" width="2" height="3" fill="#CC7A5D"/><rect x="8" y="12" width="2" height="3" fill="#CC7A5D"/>
+      <rect x="14" y="12" width="2" height="3" fill="#CC7A5D"/><rect x="17" y="12" width="2" height="3" fill="#CC7A5D"/>
+      <rect x="7" y="3" width="1" height="3" fill="#2B2118"/><rect x="16" y="3" width="1" height="3" fill="#2B2118"/>
+    </symbol>
+    <symbol id="diya" viewBox="0 0 30 30">
+      <path d="M15 4c3 4 4 7 0 11-4-4-3-7 0-11z" fill="#FFC857"/><path d="M15 8c1.4 2 1.8 3.6 0 5.6-1.8-2-1.4-3.6 0-5.6z" fill="#FF7A2F"/>
+      <path d="M3 17h24c-1.5 6-6 9-12 9S4.5 23 3 17z" fill="#C2552B"/><path d="M3 17h24" stroke="#8E3A1A" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="10" cy="21" r="1.2" fill="#FFD27A"/><circle cx="15" cy="22" r="1.2" fill="#FFD27A"/><circle cx="20" cy="21" r="1.2" fill="#FFD27A"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="page" id="page">
+  <div class="topbar">
+    <span class="draft">Sprint 3 · A1 draft</span>
+    <button class="switch" role="switch" aria-checked="false" data-notes-toggle><span class="knob"></span>Notes</button>
+  </div>
+
+  <div class="device-col">
+    <div class="device">
+      <div class="screen" id="screen">
+        <div class="statusbar" aria-hidden="true">
+          <span>9:41</span><span class="island"></span>
+          <span class="sb-icons">
+            <svg viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1" fill="currentColor"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="currentColor"/><rect x="10" y="3" width="3" height="9" rx="1" fill="currentColor"/><rect x="15" y="0" width="3" height="12" rx="1" fill="currentColor"/></svg>
+            <svg viewBox="0 0 16 12"><path d="M8 11.5l2.4-2.8a3.6 3.6 0 0 0-4.8 0zM3.6 6.6a6.6 6.6 0 0 1 8.8 0l1.6-1.9a9.2 9.2 0 0 0-12 0zM.6 3.2a11 11 0 0 1 14.8 0" fill="currentColor"/></svg>
+            <svg viewBox="0 0 27 12"><rect x=".5" y=".5" width="23" height="11" rx="3.5" fill="none" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor"/><rect x="24.5" y="4" width="2" height="4" rx="1" fill="currentColor" opacity=".45"/></svg>
+          </span>
+        </div>
+        <div class="netstrip" id="netstrip" hidden><svg class="ic"><use href="#i-sleepz"/></svg><span id="netstrip-text">Your Mac is asleep. Anything you send waits and runs when it wakes.</span></div>
+
+        <div class="views">
+          <!-- TODAY -->
+          <section class="view active" id="view-today" role="tabpanel" aria-labelledby="tab-today" data-view="today">
+            <header class="vhead">
+              <div><div class="eyebrow">Thursday, 5 November · Diwali week</div><h1>Today</h1></div>
+              <button class="host" data-act="host" data-note="3" aria-label="Your Mac: online. Open computer controls"><span class="dot"></span><span class="host-name">Mac</span><svg class="ic"><use href="#i-chevd"/></svg></button>
+            </header>
+            <div class="stack">
+              <div id="today-approval" data-note="8"></div>
+
+              <article class="card" data-note="4">
+                <div class="brief">
+                  <button class="avatar" data-act="pet-avatar" aria-label="Pet Mochi"><svg class="mochi-svg"><use href="#mochi"/></svg><span class="hearts"></span></button>
+                  <div class="brief-bubble" id="brief-text">Morning! Design review at 4, and Priya's waiting on the October invoice.</div>
+                </div>
+                <div class="readcap" id="readcap" hidden></div>
+                <div class="brief-meta">
+                  <button class="btn btn-soft btn-small" data-act="read" id="read-btn"><svg class="ic"><use href="#i-speaker"/></svg><span>Read aloud</span></button>
+                  <span class="fine">Checked by Mochi Cloud · 8:05 AM</span>
+                </div>
+              </article>
+
+              <article class="card" data-note="5">
+                <div class="label">Next meeting</div>
+                <div class="meet">
+                  <span class="tile" style="--c: var(--indigo)"><svg class="ic"><use href="#i-video"/></svg></span>
+                  <div class="row-main">
+                    <h3>Design review</h3>
+                    <div class="when">4:00 – 4:30 PM · in 2 h 10 min</div>
+                    <div class="row-sub">With Aditi and Sam · Google Meet</div>
+                  </div>
+                </div>
+                <div class="btn-row" style="margin-top: 12px">
+                  <button class="btn btn-soft" data-act="brief-me">Brief me</button>
+                  <button class="btn btn-primary" data-act="join"><svg class="ic"><use href="#i-video"/></svg>Join</button>
+                </div>
+              </article>
+
+              <div class="sec-title"><span>Waiting for you</span><small id="today-wait-count"></small></div>
+              <article class="card" data-note="7"><div id="today-waiting"></div>
+                <button class="linkbtn" data-act="tab" data-tab="inbox">See everything in Inbox <svg class="ic"><use href="#i-chev"/></svg></button>
+              </article>
+
+              <div class="sec-title"><span>Claude on your Mac</span><small id="today-claude-count"></small></div>
+              <article class="card" data-note="6" style="padding-block: 4px"><div id="today-claude"></div></article>
+            </div>
+          </section>
+
+          <!-- CLAUDE -->
+          <section class="view" id="view-claude" role="tabpanel" aria-labelledby="tab-claude" data-view="claude" style="padding: 0; overflow: hidden">
+            <div class="claude-panes" id="claude-panes">
+              <div class="pane pane-list">
+                <header class="vhead">
+                  <div><div class="eyebrow">Live sessions</div><h1>Claude</h1></div>
+                  <button class="host" data-act="host" data-note="3" aria-label="Your Mac: online. Open computer controls"><span class="dot"></span><span class="host-name">Mac</span><svg class="ic"><use href="#i-chevd"/></svg></button>
+                </header>
+                <div class="stack">
+                  <div id="claude-approvals" class="stack" data-note="8"></div>
+                  <div class="sec-title" data-note="9"><span>On your Mac</span><small class="host-state" id="mac-state">Online · kept awake while Claude runs</small></div>
+                  <article class="card" style="padding-block: 4px" data-note="10"><div id="claude-sessions"></div></article>
+                  <button class="btn btn-primary" data-act="sheet" data-sheet="start" data-note="11" style="min-height: 52px"><svg class="ic"><use href="#i-plus"/></svg>Start a task</button>
+                  <p class="fine" style="text-align: center">Approvals for new tasks come to this phone.</p>
+                </div>
+              </div>
+              <div class="pane pane-detail" id="detail" aria-label="Session"></div>
+            </div>
+          </section>
+
+          <!-- INBOX -->
+          <section class="view" id="view-inbox" role="tabpanel" aria-labelledby="tab-inbox" data-view="inbox">
+            <header class="vhead">
+              <div><div class="eyebrow">Mail · calendar · Notion</div><h1>Inbox</h1></div>
+              <button class="host" data-act="host" data-note="3" aria-label="Your Mac: online. Open computer controls"><span class="dot"></span><span class="host-name">Mac</span><svg class="ic"><use href="#i-chevd"/></svg></button>
+            </header>
+            <div class="stack">
+              <div class="chiprow" role="toolbar" aria-label="Show" data-note="14">
+                <button class="chip" aria-pressed="true" data-act="filter" data-f="all">All</button>
+                <button class="chip" aria-pressed="false" data-act="filter" data-f="gmail">Mail</button>
+                <button class="chip" aria-pressed="false" data-act="filter" data-f="calendar">Calendar</button>
+                <button class="chip" aria-pressed="false" data-act="filter" data-f="notion">Notion</button>
+                <button class="chip" aria-pressed="false" data-act="filter" data-f="drafts">Drafts</button>
+              </div>
+              <div id="inbox-needs-wrap">
+                <div class="sec-title" style="margin-bottom: 10px"><span>Needs you</span><small id="inbox-count"></small></div>
+                <div class="list" id="inbox-list" data-note="15"></div>
+              </div>
+              <div id="inbox-quiet-wrap" data-note="16">
+                <button class="bundle" data-act="bundle" aria-expanded="false" aria-controls="quiet-list">
+                  <span class="tile" style="--c: var(--ink-2)"><svg class="ic"><use href="#i-mail"/></svg></span>
+                  <span class="row-main"><span class="row-title" style="display: block">4 quieter emails</span><span class="row-sub" style="display: block">GitHub, Google and 2 more · nothing urgent</span></span>
+                  <svg class="ic chev"><use href="#i-chev"/></svg>
+                </button>
+                <div id="quiet-list" class="card" hidden style="margin-top: 8px; padding-block: 4px">
+                  <div class="row"><span class="tile" style="--c: var(--ink-2)"><svg class="ic"><use href="#i-mail"/></svg></span><div class="row-main"><div class="row-top"><span class="row-title">GitHub</span><span class="time">7:40 AM</span></div><div class="row-subj">[tamagotchi] Mochi's own voice</div><div class="row-sub">1 new commit pushed to main.</div></div></div>
+                  <div class="row"><span class="tile" style="--c: var(--ink-2)"><svg class="ic"><use href="#i-mail"/></svg></span><div class="row-main"><div class="row-title">3 more newsletters and receipts</div><div class="row-sub">They stay off your Lock Screen.</div></div></div>
+                </div>
+              </div>
+              <div id="inbox-drafts-wrap" data-note="17">
+                <div class="sec-title" style="margin-bottom: 10px"><span>Drafts</span><small>In Gmail · not sent</small></div>
+                <article class="card">
+                  <div class="row-top"><span class="row-title">To Priya Sharma</span><span class="time">8:44 AM</span></div>
+                  <div class="row-subj">Re: Invoice for October</div>
+                  <div class="draft-text">Hi Priya, I'll send the October invoice today, by <span class="ph">[time]</span>.</div>
+                  <div class="btn-row"><button class="btn btn-soft" data-act="toast" data-text="Opening the draft in Gmail.">Open in Gmail</button><button class="btn btn-ghost" data-act="toast" data-text="Asked Mochi Cloud for a new draft. You'll get a notification when it's in Gmail (about a minute).">Redraft</button></div>
+                  <p class="fine" style="margin-top: 8px">Drafted by Mochi Cloud in your words. Nothing is sent until you send it.</p>
+                </article>
+              </div>
+              <div id="inbox-follow-wrap" data-note="18">
+                <div class="sec-title" style="margin-bottom: 10px"><span>Follow-ups</span><small>Mochi is watching</small></div>
+                <article class="card" style="padding-block: 4px">
+                  <div class="row"><span class="tile" style="--c: var(--warning)"><svg class="ic"><use href="#i-clock"/></svg></span><div class="row-main"><div class="row-title">Aditi Rao · Onboarding v2 for review</div><div class="row-sub">Mochi tells you on Monday if there's no reply to your notes.</div></div></div>
+                </article>
+              </div>
+              <div id="inbox-done-wrap" hidden>
+                <div class="sec-title" style="margin-bottom: 10px"><span>Done today</span><small id="done-count"></small></div>
+                <article class="card" style="padding-block: 4px"><div id="done-list"></div></article>
+              </div>
+            </div>
+          </section>
+
+          <!-- ASK -->
+          <section class="view" id="view-ask" role="tabpanel" aria-labelledby="tab-ask" data-view="ask">
+            <header class="vhead">
+              <div><div class="eyebrow">Voice first</div><h1>Ask</h1></div>
+              <button class="host" data-act="host" data-note="3" aria-label="Your Mac: online. Open computer controls"><span class="dot"></span><span class="host-name">Mac</span><svg class="ic"><use href="#i-chevd"/></svg></button>
+            </header>
+            <div class="chat" id="chat" data-note="19">
+              <div class="day">Today, 8:12 AM</div>
+              <div class="msg me">What's pending?</div>
+              <div class="mrow"><span class="mini"><svg><use href="#mochi"/></svg></span><div class="msg mochi" data-note="20">Five things. The design review at 4 and Priya's invoice need you.</div></div>
+              <div class="msg me">Tell the mochi-link Claude to run the relay tests</div>
+              <div class="mrow"><span class="mini"><svg><use href="#mochi"/></svg></span><div class="msg mochi card-msg"><b>Send to Claude in mochi-link?</b><div class="quote">“From the user, via Mochi: run the relay tests.”</div><span class="pill" style="--c: var(--success)"><svg class="ic"><use href="#i-check"/></svg>Sent</span></div></div>
+              <div class="mrow"><span class="mini"><svg><use href="#mochi"/></svg></span><div class="msg mochi">Sent to Claude in mochi-link. I'll tell you when it's done.</div></div>
+            </div>
+          </section>
+
+          <!-- MOCHI -->
+          <section class="view" id="view-mochi" role="tabpanel" aria-labelledby="tab-mochi" data-view="mochi">
+            <header class="vhead">
+              <div><div class="eyebrow">Friendship 3 · with Patch</div><h1>Mochi</h1></div>
+              <div class="head-actions">
+                <button class="iconbtn" data-act="toast" data-text="Settings open here: Mochi Link, notifications, voice, Live Activity." aria-label="Settings"><svg class="ic"><use href="#i-sliders"/></svg></button>
+                <button class="host" data-act="host" data-note="3" aria-label="Your Mac: online. Open computer controls"><span class="dot"></span><span class="host-name">Mac</span><svg class="ic"><use href="#i-chevd"/></svg></button>
+              </div>
+            </header>
+            <div class="stack">
+              <div class="room" id="room" data-note="21" role="img" aria-label="Mochi's room, decorated for Diwali, with Patch at the desk">
+                <div class="window"></div>
+                <svg class="lights" viewBox="0 0 360 40" aria-hidden="true">
+                  <path d="M0 8 Q90 34 180 10 T360 8" fill="none" stroke="#7A5A48" stroke-width="1.5"/>
+                  <g>
+                    <circle cx="22" cy="16" r="4.5" fill="#FFC857"/><circle cx="52" cy="23" r="4.5" fill="#F28C61"/><circle cx="82" cy="26" r="4.5" fill="#FF8DAA"/>
+                    <circle cx="112" cy="25" r="4.5" fill="#FFC857"/><circle cx="142" cy="19" r="4.5" fill="#79D6A0"/><circle cx="172" cy="12" r="4.5" fill="#F28C61"/>
+                    <circle cx="202" cy="10" r="4.5" fill="#FFC857"/><circle cx="232" cy="14" r="4.5" fill="#FF8DAA"/><circle cx="262" cy="17" r="4.5" fill="#F28C61"/>
+                    <circle cx="292" cy="16" r="4.5" fill="#79D6A0"/><circle cx="322" cy="12" r="4.5" fill="#FFC857"/><circle cx="350" cy="9" r="4.5" fill="#F28C61"/>
+                  </g>
+                </svg>
+                <div class="floor"></div><div class="rug"></div>
+                <div class="desk"></div><div class="laptop"></div>
+                <svg class="patch" viewBox="0 0 24 15" aria-hidden="true"><use href="#patch"/></svg>
+                <div class="mochi-wrap" id="room-mochi"><svg viewBox="0 0 120 108" aria-hidden="true"><use href="#mochi"/></svg><span class="hearts"></span></div>
+                <svg class="diya" style="left: 5%" viewBox="0 0 30 30" aria-hidden="true"><use href="#diya"/></svg>
+                <svg class="diya" style="left: 62%" viewBox="0 0 30 30" aria-hidden="true"><use href="#diya"/></svg>
+                <div class="ball" id="ball"></div><div class="treat" id="treat"></div>
+                <div class="bubble" id="room-bubble">So many lights!</div>
+              </div>
+              <div class="ppt" data-note="22">
+                <button class="btn" style="--c: var(--pet)" data-act="pet"><svg class="ic"><use href="#i-heart"/></svg>Pet</button>
+                <button class="btn" style="--c: var(--play)" data-act="play"><svg class="ic"><use href="#i-ball"/></svg>Play</button>
+                <button class="btn" style="--c: var(--tint)" data-act="treat"><svg class="ic"><use href="#i-treat"/></svg>Treat</button>
+              </div>
+              <p class="fine" style="text-align: center">Treats are laddoos this week.</p>
+              <div class="games">
+                <button class="game" data-act="toast" data-text="Catch opens here (not in this prototype)."><span class="tile" style="--c: var(--play)"><svg class="ic"><use href="#i-game"/></svg></span>Catch</button>
+                <button class="game" data-act="toast" data-text="Rock, paper, scissors opens here (not in this prototype)."><span class="tile" style="--c: var(--pet)"><svg class="ic"><use href="#i-game"/></svg></span>Rock, paper, scissors</button>
+                <button class="game" data-act="toast" data-text="Focus timer opens here (not in this prototype)."><span class="tile" style="--c: var(--indigo)"><svg class="ic"><use href="#i-clock"/></svg></span>Focus timer</button>
+                <button class="game" data-act="toast" data-text="Your day with Claude opens here (not in this prototype)."><span class="tile" style="--c: var(--tint)"><svg class="ic"><use href="#i-recap"/></svg></span>Your day</button>
+              </div>
+              <article class="card" data-note="23">
+                <div class="label">Mochi's voice</div>
+                <div class="toggle-row" style="flex-direction: column; align-items: stretch; gap: 8px">
+                  <span class="row-title">How chatty</span>
+                  <div class="chips" role="group" aria-label="How chatty">
+                    <button class="chip" aria-pressed="false" data-act="chatty" data-v="quiet">Quiet</button>
+                    <button class="chip" aria-pressed="true" data-act="chatty" data-v="normal">Normal</button>
+                    <button class="chip" aria-pressed="false" data-act="chatty" data-v="chatty">Chatty</button>
+                  </div>
+                </div>
+                <div class="toggle-row" style="flex-direction: column; align-items: stretch; gap: 8px">
+                  <span class="row-title">Mochi calls you</span>
+                  <div class="chips" role="group" aria-label="Mochi calls you">
+                    <button class="chip" aria-pressed="true" data-act="address" data-v="you">“you”</button>
+                    <button class="chip" aria-pressed="false" data-act="address" data-v="name">Your name</button>
+                  </div>
+                </div>
+                <div class="toggle-row">
+                  <span><span class="row-title" style="display: block">Mood shows in Mochi's voice</span><span class="row-sub" style="display: block">Never changes the facts.</span></span>
+                  <button class="mini-switch" role="switch" aria-checked="true" data-act="mood" aria-label="Mood shows in Mochi's voice"></button>
+                </div>
+                <div class="sounds-like" id="sounds-like">Sounds like: “Claude's done in mochi-link! 🎉”</div>
+              </article>
+            </div>
+          </section>
+          <!-- Ask composer lives over the Ask tab -->
+        <div class="composer" id="composer" hidden>
+          <div class="chiprow">
+            <button class="chip" data-act="say" data-text="What's waiting?">What's waiting?</button>
+            <button class="chip" data-act="say" data-text="Start a task in mochi-link">Start a task</button>
+            <button class="chip" data-act="say" data-text="Pause the music on my Mac">Pause the music on my Mac</button>
+          </div>
+          <form class="composer-form" id="composer-form">
+            <input class="field" id="composer-input" placeholder="Ask Mochi anything…" aria-label="Ask Mochi anything" autocomplete="off">
+            <button class="sendbtn" aria-label="Send"><svg class="ic"><use href="#i-send"/></svg></button>
+          </form>
+        </div>
+        </div>
+
+        <!-- Global: Ask Mochi -->
+        <button class="fab" id="fab" data-note="2" aria-label="Ask Mochi. Press and hold to talk"><span class="face"><svg><use href="#mochi"/></svg></span><svg class="ic mic"><use href="#i-mic"/></svg><span class="fab-label">Ask Mochi</span></button>
+
+        <nav class="tabbar" role="tablist" aria-label="Mochi Pocket" data-note="1">
+          <button class="tab" role="tab" id="tab-today" aria-selected="true" aria-controls="view-today" data-act="tab" data-tab="today"><svg class="ic"><use href="#i-today"/></svg>Today</button>
+          <button class="tab" role="tab" id="tab-claude" aria-selected="false" aria-controls="view-claude" data-act="tab" data-tab="claude"><svg class="ic"><use href="#i-claude"/></svg>Claude<span class="count" id="count-claude">1</span></button>
+          <button class="tab" role="tab" id="tab-inbox" aria-selected="false" aria-controls="view-inbox" data-act="tab" data-tab="inbox"><svg class="ic"><use href="#i-inbox"/></svg>Inbox<span class="count" id="count-inbox">5</span></button>
+          <button class="tab" role="tab" id="tab-ask" aria-selected="false" aria-controls="view-ask" data-act="tab" data-tab="ask"><svg class="ic"><use href="#i-ask"/></svg>Ask</button>
+          <button class="tab" role="tab" id="tab-mochi" aria-selected="false" aria-controls="view-mochi" data-act="tab" data-tab="mochi"><svg class="ic"><use href="#i-paw"/></svg>Mochi</button>
+        </nav>
+
+        <!-- Notification banner -->
+        <button class="banner" id="banner" data-note="24" aria-live="polite">
+          <span class="appicon"><svg><use href="#mochi"/></svg></span>
+          <span class="row-main"><span class="bmeta"><span>MOCHI</span><span>now</span></span><span class="btitle" id="banner-title" style="display: block"></span><span class="bbody" id="banner-body" style="display: block"></span></span>
+        </button>
+
+        <div class="toast" id="toast" role="status" aria-live="polite"><span class="t-text" id="toast-text"></span><button id="toast-undo" hidden>Undo</button></div>
+        <div class="listen" id="listen" hidden><div class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div><div class="fine">Listening… let go to send</div><div class="said" id="said"></div></div>
+        <div class="note-pop" id="note-pop" hidden role="dialog" aria-label="Design note"><button class="x" data-act="close-note" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button><b id="note-pop-title"></b><p id="note-pop-text"></p></div>
+
+        <!-- Sheets -->
+        <div class="scrim" id="scrim" data-act="close-sheet"></div>
+
+        <div class="sheet" id="sheet-ask" role="dialog" aria-modal="true" aria-labelledby="ask-title">
+          <div class="grabber"></div>
+          <div class="ask-hero">
+            <h2 id="ask-title">Ask Mochi anything</h2>
+            <button class="bigmic" id="bigmic" aria-label="Press and hold to talk"><svg class="ic"><use href="#i-mic"/></svg></button>
+            <span class="fine">Press and hold to talk, or type below.</span>
+          </div>
+          <div class="chips" style="justify-content: center; margin-bottom: 12px">
+            <button class="chip" data-act="say" data-text="What's waiting?">What's waiting?</button>
+            <button class="chip" data-act="say" data-text="Remind me if Priya doesn't reply by Monday">Remind me about Priya</button>
+            <button class="chip" data-act="say" data-text="Pause the music on my Mac">Pause the music</button>
+          </div>
+          <form class="composer-form" id="sheet-form">
+            <input class="field" id="sheet-input" placeholder="Ask Mochi anything…" aria-label="Ask Mochi anything" autocomplete="off">
+            <button class="sendbtn" aria-label="Send"><svg class="ic"><use href="#i-send"/></svg></button>
+          </form>
+        </div>
+
+        <div class="sheet" id="sheet-start" role="dialog" aria-modal="true" aria-labelledby="start-title">
+          <div class="grabber"></div>
+          <div class="sheet-head"><h2 id="start-title">Start a task on your Mac</h2><button class="iconbtn" data-act="close-sheet" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></div>
+          <h3>Project</h3>
+          <div class="chips" role="group" aria-label="Project">
+            <button class="chip" aria-pressed="false" data-act="proj" data-v="mac-Tamagotchi">mac-Tamagotchi</button>
+            <button class="chip" aria-pressed="true" data-act="proj" data-v="mochi-link">mochi-link</button>
+            <button class="chip" aria-pressed="false" data-act="proj" data-v="mochi-cloud">mochi-cloud</button>
+          </div>
+          <h3>What should Claude do?</h3>
+          <form id="start-form" class="stack" style="gap: 10px">
+            <textarea class="field" id="task-text" rows="3" style="padding: 12px 14px; resize: none" placeholder="For example: fix the failing upload test"></textarea>
+            <div class="chips">
+              <button type="button" class="chip" data-act="task-eg" data-text="Fix the failing upload test">Fix the failing upload test</button>
+              <button type="button" class="chip" data-act="task-eg" data-text="Write tests for VIP matching">Write tests for VIP matching</button>
+            </div>
+            <p class="fine">Claude starts in that project on your Mac. When it asks permission, you'll answer here.</p>
+            <button class="btn btn-primary" id="start-go" style="min-height: 52px" disabled>Start</button>
+          </form>
+        </div>
+
+        <div class="sheet" id="sheet-host" role="dialog" aria-modal="true" aria-labelledby="host-title">
+          <div class="grabber"></div>
+          <div class="sheet-head"><h2 id="host-title">Your computers</h2><button class="iconbtn" data-act="close-sheet" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></div>
+          <div class="stack" style="gap: 10px">
+            <article class="card hostcard">
+              <span class="tile" style="--c: var(--success)"><svg class="ic"><use href="#i-check"/></svg></span>
+              <div class="row-main"><div class="row-title">Mac</div><div class="row-sub" id="host-sub">Online · 3 Claude sessions</div></div>
+              <span class="pill" style="--c: var(--tint)">This one</span>
+            </article>
+            <article class="card hostcard parked">
+              <span class="tile" style="--c: var(--ink-2)"><svg class="ic"><use href="#i-sleepz"/></svg></span>
+              <div class="row-main"><div class="row-title">Windows PC</div><div class="row-sub">Parked for now: multi-host is on hold (docs/MULTI_HOST_PLAN.md). When it's back, each computer gets a row here and the Claude tab groups sessions by computer.</div></div>
+            </article>
+          </div>
+          <h3>On your Mac</h3>
+          <div class="toggle-row card" style="padding-block: 10px">
+            <span><span class="row-title" style="display: block">Keep awake while Claude runs</span><span class="row-sub" style="display: block">Mochi tells you if your Mac is about to sleep.</span></span>
+            <button class="mini-switch" role="switch" aria-checked="true" data-act="awake" aria-label="Keep your Mac awake while Claude runs"></button>
+          </div>
+          <div class="grid3" style="margin-top: 10px">
+            <button class="qa" data-act="qa" data-v="lock"><svg class="ic"><use href="#i-lock"/></svg>Lock</button>
+            <button class="qa" data-act="qa" data-v="sleep"><svg class="ic"><use href="#i-moon"/></svg>Sleep</button>
+            <button class="qa" data-act="qa" data-v="play"><svg class="ic"><use href="#i-playpause"/></svg>Play/Pause</button>
+            <button class="qa" data-act="qa" data-v="mute"><svg class="ic"><use href="#i-mute"/></svg>Mute</button>
+            <button class="qa" data-act="qa" data-v="clip"><svg class="ic"><use href="#i-clip"/></svg>Send clipboard</button>
+            <button class="qa" data-act="qa" data-v="file"><svg class="ic"><use href="#i-upload"/></svg>Send a file</button>
+          </div>
+          <div class="card confirm" id="qa-confirm" hidden>
+            <div class="row-title" id="qa-confirm-text"></div>
+            <div class="btn-row" style="margin-top: 10px"><button class="btn btn-soft" data-act="qa-cancel">Cancel</button><button class="btn btn-primary" data-act="qa-go" id="qa-go">Lock</button></div>
+          </div>
+          <h3>Prototype only</h3>
+          <div class="toggle-row card" style="padding-block: 10px">
+            <span class="row-title">Pretend the Mac is asleep</span>
+            <button class="mini-switch" role="switch" aria-checked="false" data-act="asleep" id="asleep-switch" aria-label="Pretend the Mac is asleep"></button>
+          </div>
+        </div>
+
+        <div class="sheet" id="sheet-diff" role="dialog" aria-modal="true" aria-labelledby="diff-title">
+          <div class="grabber"></div>
+          <div class="sheet-head"><div><div class="eyebrow" id="diff-proj"></div><h2 id="diff-title" style="font-family: var(--mono); font-size: 16px; overflow-wrap: anywhere"></h2></div><button class="iconbtn" data-act="close-sheet" aria-label="Close"><svg class="ic"><use href="#i-x"/></svg></button></div>
+          <div class="diff" id="diff-body"></div>
+          <div class="btn-row" style="margin-top: 14px"><button class="btn btn-soft" data-act="toast" data-text="Type what to change, and it goes to Claude on your Mac.">Ask Claude to change…</button></div>
+          <p class="fine" style="margin-top: 8px">A stub: one file at a time. Claude does any edits or git work on your Mac.</p>
+        </div>
+
+        <div class="faceid" id="faceid" hidden><div class="box"><svg class="ic"><use href="#i-face"/></svg><span id="faceid-text">Face ID</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="review" aria-label="About this prototype">
+    <div>
+      <div class="eyebrow">Sprint 3 · A1 · draft for review</div>
+      <h1>Mochi Pocket, rebuilt around five tabs</h1>
+    </div>
+    <p>A clickable sketch of the new phone app's structure for iPhone and Android. Everything is sample data based on the apps' demo content; nothing is connected. The words follow <code>docs/MOCHI_VOICE.md</code>, also a draft.</p>
+    <button class="switch" role="switch" aria-checked="false" data-notes-toggle><span class="knob"></span>Show design notes</button>
+    <ul class="try">
+      <li>Allow or Deny the approval (a second, riskier one follows)</li>
+      <li>Open a Claude session, then a changed file</li>
+      <li>Swipe or tap a row in Inbox</li>
+      <li>Press and hold Ask Mochi to talk</li>
+      <li>Tap the Mac chip, then pretend it's asleep</li>
+    </ul>
+    <div id="notes-wrap" hidden>
+      <div class="eyebrow" id="notes-heading" style="margin-bottom: 8px">Notes for this screen</div>
+      <ol class="notes-list" id="notes-list"></ol>
+    </div>
+    <button class="rv-btn" data-replay>Show the notification again</button>
+    <p class="fine">Spec: <code>docs/SPRINT3_IA_DRAFT.md</code></p>
+  </aside>
+</div>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const reduceMQ = matchMedia('(prefers-reduced-motion: reduce)');
+  const still = () => reduceMQ.matches;
+  const page = $('#page'), screen = $('#screen');
+  const ic = (name, cls = '') => `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+
+  // ---------- Sample data ----------
+  const S = {
+    tab: 'today', detail: null, asleep: false, queued: 0, notes: false, filter: 'all', reading: null,
+    done: [], snoozed: [], project: 'mochi-link', voiceTurn: 0, stopArmed: false,
+    chatty: 'normal', address: 'you', mood: true, pendingQA: null,
+  };
+  const APPROVALS = [
+    { id: 'a1', project: 'mac-Tamagotchi', tool: 'Bash', cmd: 'swift test --filter AgentTests', left: 9 * 60 + 41, risky: false, state: 'pending' },
+  ];
+  const SESS = {
+    'mac-Tamagotchi': {
+      state: 'needs', since: '8:40 AM', elapsed: 0,
+      doing: 'Building the phone approval card (B1) in Mochi Pocket.',
+      last: 'Gave Mochi its own Kokoro voice and made Siri read reliably.',
+      now: 'Wants to run swift test',
+      steps: [['ok', 'Read <code>iOS/MochiPocket/ContentView.swift</code>'], ['ok', 'Edited <code>iOS/MochiPocket/SessionCard.swift</code>'], ['ok', 'Edited <code>Sources/TamagotchiCore/Phone/PhoneSync.swift</code>'], ['wait', 'Asked to run <code>swift test --filter AgentTests</code>']],
+      files: [['iOS/MochiPocket/SessionCard.swift', 88, 4], ['Sources/TamagotchiCore/Phone/PhoneSync.swift', 24, 6]],
+      next: ['Run the tests', 'Push it to GitHub'],
+    },
+    'mochi-link': {
+      state: 'working', since: '9:02 AM', elapsed: 6 * 60 + 12,
+      doing: 'Making the relay accept sealed file uploads, with a size limit (B8).',
+      now: 'Running npm test',
+      steps: [['ok', 'Read <code>relay/src/room.ts</code>'], ['ok', 'Edited <code>relay/src/upload.ts</code>'], ['ok', 'Edited <code>relay/test/upload.test.ts</code>'], ['run', 'Running <code>npm test</code>']],
+      files: [['relay/src/upload.ts', 64, 3], ['relay/test/upload.test.ts', 41, 0], ['relay/src/room.ts', 12, 8]],
+      next: ['Also cap uploads at 10 MB', 'Show me the failing test'],
+    },
+    'mochi-cloud': {
+      state: 'done', since: '8:20 AM', finished: '40 min ago', elapsed: 0,
+      doing: 'Reply drafts for Mochi Pocket.',
+      last: 'Drafted a reply to Priya in Gmail Drafts. Nothing was sent.',
+      steps: [['ok', 'Read <code>CLAUDE.md</code>'], ['ok', 'Ran <code>python3 mochi_cloud.py window --draft</code>'], ['ok', 'Created one Gmail draft']],
+      files: [],
+      next: ['Push it to GitHub'],
+    },
+  };
+  const ITEMS = [
+    { id: 'c-design', src: 'calendar', who: 'Design review', what: '4:00 – 4:30 PM · With Aditi and Sam · Google Meet', when: '4:00 PM', join: true, say: 'the design review at 4', speak: 'Design review at 4.' },
+    { id: 'm-priya', src: 'gmail', who: 'Priya Sharma', vip: true, subj: 'Invoice for October', what: 'Can you send the October invoice today? Finance closes the books tomorrow.', when: '8:31 AM', reply: true, say: "Priya's invoice", speak: 'Priya Sharma needs you about the October invoice.' },
+    { id: 'm-vfdf', src: 'gmail', who: 'VFDF via Figma', what: 'Mentioned you in a comment.', when: '9:12 AM', say: "VFDF's Figma mention", speak: 'VFDF mentioned you in Figma.' },
+    { id: 'm-aditi', src: 'gmail', who: 'Aditi Rao', subj: 'Onboarding v2 for review', what: 'Shared the new onboarding flow; would love your notes before Friday.', when: 'Yesterday', reply: true, say: "Aditi's onboarding notes", speak: 'Aditi Rao needs you about onboarding v2.' },
+    { id: 'n-launch', src: 'notion', who: 'Finish the launch checklist', what: 'Due today · Product', when: 'Today', say: 'the launch checklist', speak: 'Due in Notion: finish the launch checklist.' },
+  ];
+  const SRC = { gmail: { icon: 'mail', c: 'var(--tint)' }, calendar: { icon: 'video', c: 'var(--indigo)' }, notion: { icon: 'list', c: 'var(--ink-2)' } };
+  const DIFFS = {
+    'relay/src/upload.ts': [
+      ['h', '@@ -12,7 +12,13 @@ export async function handleUpload(req: Request, env: Env) {'],
+      [' ', '   const room = await loadRoom(env, roomId);'],
+      ['d', '-  const body = await req.arrayBuffer();'],
+      ['a', '+  const length = Number(req.headers.get("content-length") ?? 0);'],
+      ['a', '+  if (length > MAX_UPLOAD_BYTES) {'],
+      ['a', '+    return json({ error: "too_large", limit: MAX_UPLOAD_BYTES }, 413);'],
+      ['a', '+  }'],
+      ['a', '+  const body = await req.arrayBuffer();'],
+      [' ', '   // The relay stores sealed bytes only; it never sees the key.'],
+      [' ', '   await env.UPLOADS.put(key, body, { expirationTtl: 3600 });'],
+    ],
+    'iOS/MochiPocket/SessionCard.swift': [
+      ['h', '@@ -150,6 +150,12 @@ struct SessionCard: View {'],
+      [' ', '     private var label: String {'],
+      [' ', '         switch card.phase {'],
+      [' ', '         case "working": return "Working"'],
+      ['d', '-        case "waiting": return "Needs you"'],
+      ['a', '+        case "waiting":'],
+      ['a', '+            return card.approval == nil ? "Needs you" : "Wants your OK"'],
+      [' ', '         case "done": return "Finished"'],
+    ],
+  };
+  const NOTES = [
+    { n: 1, view: 'all', t: 'Five tabs, one thumb', b: 'Today, Claude, Inbox, Ask and Mochi, in the same order on iPhone and Android. Today opens first because glancing at the day is the most common cold-phone job. The room moved to its own tab.' },
+    { n: 2, view: 'all', t: 'Ask Mochi from anywhere', b: "On every screen. A tap opens Ask as a sheet over what you're doing; press and hold talks straight away, the same gesture as holding Mochi today. On the Ask tab it turns into the mic." },
+    { n: 3, view: 'all', t: 'The computer chip', b: "Shows “Mac” only: multi-host is parked, so there's no PC to switch to yet. The chip is also the offline and queued indicator, and it opens the Mac's remote actions (lock, sleep, keep awake, clipboard, file drop)." },
+    { n: 24, view: 'all', t: 'Notifications follow the voice guide', b: 'The title names who or what; the body says what happened and what you can do. Tap the banner to jump to the approval.' },
+    { n: 4, view: 'today', t: 'The briefing comes first', b: "Mochi's own words, at most 110 characters, with the meeting or person first (MOCHI_VOICE §4.4). Read aloud and “Checked by” stay: you trust a briefing more when you know who checked, and when. Tap Mochi to pet it." },
+    { n: 5, view: 'today', t: 'Next meeting, one tap to Join', b: "Join is the main button. “Brief me” is the C2 meeting assistant: who's coming, your last emails with them, and related Notion docs." },
+    { n: 6, view: 'today', t: 'Claude at a glance', b: 'One line per session, with a state pill that uses words, not just colour. Tapping a row opens that session in the Claude tab.' },
+    { n: 7, view: 'today', t: 'A preview, not a second inbox', b: "The top three things that need you, each with a done circle. The rest live in Inbox, so done and undone stay one list across the Mac, iPhone and Android (C9)." },
+    { n: 8, view: 'today claude', t: 'Approvals (B1)', b: "The exact command, quoted; who's asking and on which computer; and the default (“Denied in 10 min”). Deny and Allow are the same size, with Deny on the left. Risky commands such as git push need Face ID. The toast says what was sent, not what Claude did. A pending approval also sits at the top of Today: it's the only thing with a timer." },
+    { n: 9, view: 'claude', t: 'Grouped by computer', b: 'Sessions sit under “On your Mac”. When multi-host returns, a PC group appears below it with no new navigation.' },
+    { n: 10, view: 'claude', t: 'Live progress', b: "Claude's own spinner, the current step in plain words, and the elapsed time. The tool-by-tool steps are one tap away, in the session." },
+    { n: 11, view: 'claude', t: 'Start a task (B2)', b: "Pick one of the Mac's recent projects and say what to do, by typing here or by voice from anywhere. Permission prompts from the new session come back through B1." },
+    { n: 12, view: 'claude', t: 'Session detail', b: "What it's doing, the steps, the files changed, and suggested replies (from the turn summary's “next”). Stop takes two taps (B4). Commit & push waits until Claude finishes (B3)." },
+    { n: 13, view: 'claude', t: 'Diff viewer (stub)', b: "One file at a time, unified, in large text. Changes go back to Claude (“Ask Claude to change…”); the phone never edits code itself." },
+    { n: 14, view: 'inbox', t: 'One inbox for mail, meetings and Notion', b: 'Filter chips instead of tabs inside the tab. “Needs you” comes first, in the briefing\'s order: meetings, then people (VIP star), then Notion.' },
+    { n: 15, view: 'inbox', t: 'Swipe, with visible buttons', b: "Swipe left for Snooze and Done; swipe further to finish. A tap shows the same buttons, so nothing depends on a hidden gesture (VoiceOver and TalkBack users get them as actions)." },
+    { n: 16, view: 'inbox', t: 'Quieter mail, bundled', b: 'Newsletters and receipts become one row (C5, the smart digest). They never buzz the phone.' },
+    { n: 17, view: 'inbox', t: 'Drafts in your voice', b: "Written by Mochi Cloud as you (MOCHI_VOICE §7), with [placeholders] for what Mochi doesn't know. Nothing is sent until you send it in Gmail." },
+    { n: 18, view: 'inbox', t: 'Follow-ups (C3)', b: "Things Mochi is watching for you, and when it will tell you." },
+    { n: 19, view: 'ask', t: 'A voice-first conversation', b: 'The mic is the big button; typing comes second. History stays. A message to a Claude session shows the same “Send to Claude?” card as the Mac.' },
+    { n: 20, view: 'ask', t: "Replies in Mochi's voice", b: "One sentence, and only what a tool confirmed: “Sent to Claude in mochi-link”, never “Claude is on it”." },
+    { n: 21, view: 'mochi', t: 'The room is now a tab', b: "Today's app opens on the room; the redesign puts work first and moves the room here. It keeps the season's decor (Diwali lights and diyas) and Mochi's bubbles." },
+    { n: 22, view: 'mochi', t: 'Pet, Play, Treat', b: 'Unchanged: one tap each. Treats follow the season (laddoos this week).' },
+    { n: 23, view: 'mochi', t: 'Personality settings (D4)', b: "How chatty Mochi is, how it addresses you, and whether its mood shows in its voice. Settings (the sliders) move here from the home screen's corner." },
+  ];
+
+  // ---------- Rendering ----------
+  const pending = () => APPROVALS.filter((a) => a.state === 'pending');
+  const open = () => ITEMS.filter((i) => !S.done.includes(i.id) && !S.snoozed.includes(i.id));
+
+  function approvalCard(a) {
+    const title = a.risky ? 'Allow Claude to push this?' : 'Allow Claude to run this?';
+    return `<article class="card approval" data-aid="${a.id}">
+      <div class="ap-head"><span class="tile" style="--c: var(--warning)">${ic('bolt')}</span>
+        <div class="row-main"><div class="ap-title">${title}</div><div class="row-sub">${esc(a.project)} · your Mac · ${a.tool}</div></div></div>
+      <pre class="cmd"><code>${esc(a.cmd)}</code></pre>
+      <div class="ap-foot">${a.risky ? `<span class="pill" style="--c: var(--indigo)">${ic('face')}Face ID</span>` : ''}<span>Denied in <b data-left="${a.id}">${mmss(a.left)}</b> if you don't answer.</span></div>
+      <div class="btn-row"><button class="btn btn-soft" data-act="deny" data-id="${a.id}">Deny</button><button class="btn btn-primary" data-act="allow" data-id="${a.id}">${a.risky ? ic('face') + 'Allow' : 'Allow'}</button></div>
+    </article>`;
+  }
+
+  function statePill(s) {
+    if (s.state === 'needs') return `<span class="pill" style="--c: var(--warning)">Needs you</span>`;
+    if (s.state === 'working') return `<span class="pill" style="--c: var(--tint)">Working · <span data-elapsed>${mmss(s.elapsed)}</span></span>`;
+    if (s.state === 'starting') return `<span class="pill" style="--c: var(--tint)">Starting</span>`;
+    return `<span class="pill" style="--c: var(--success)">Finished · ${s.finished}</span>`;
+  }
+
+  function sessRow(name, s) {
+    let sub;
+    if (s.state === 'needs') sub = 'Wants your OK to run a command';
+    else if (s.state === 'working' || s.state === 'starting') sub = `<span class="spin">✻</span> ${esc(s.now)}`;
+    else sub = esc(s.last);
+    return `<button class="srow" data-act="open-session" data-name="${esc(name)}">
+      <span class="row-main"><span class="row-top"><span class="row-title">${esc(name)}</span>${statePill(s)}</span>
+      <span class="row-sub" style="display: block">${sub}</span>${s.state === 'working' || s.state === 'starting' ? '<span class="bar" style="display: block"><i></i></span>' : ''}</span>${ic('chev')}</button>`;
+  }
+
+  function renderApprovals() {
+    const list = pending();
+    $('#claude-approvals').innerHTML = list.map(approvalCard).join('');
+    $('#today-approval').innerHTML = list.length ? approvalCard(list[0]) : '';
+    $('#today-approval').hidden = !list.length;
+    $('#claude-approvals').hidden = !list.length;
+  }
+
+  function renderSessions() {
+    const order = Object.keys(SESS).sort((a, b) => rank(SESS[a]) - rank(SESS[b]));
+    $('#claude-sessions').innerHTML = order.map((n) => sessRow(n, SESS[n])).join('');
+    $('#today-claude').innerHTML = order.map((n) => sessRow(n, SESS[n])).join('');
+    const working = order.filter((n) => SESS[n].state === 'working').length;
+    const needs = order.filter((n) => SESS[n].state === 'needs').length;
+    $('#today-claude-count').textContent = [needs ? `${needs} needs you` : '', working ? `${working} working` : ''].filter(Boolean).join(' · ');
+    $('#host-sub').textContent = S.asleep ? 'Asleep · sessions paused' : `Online · ${order.length} Claude sessions`;
+  }
+  const rank = (s) => ({ needs: 0, working: 1, starting: 1, done: 2 }[s.state]);
+
+  function renderDetail() {
+    if (!S.detail) return;
+    const name = S.detail, s = SESS[name];
+    const ask = pending().find((a) => a.project === name);
+    $('#detail').innerHTML = `
+      <div class="dhead"><button class="back" data-act="back">${ic('chevl')}Claude</button>
+        <button class="host" data-act="host" data-note="3" aria-label="Your Mac: online. Open computer controls"><span class="dot"></span><span class="host-name">${S.asleep ? 'Mac · asleep' : 'Mac'}</span>${ic('chevd')}</button></div>
+      <div class="dtitle" data-note="12"><div class="eyebrow">Your Mac · started ${s.since}</div><h1>${esc(name)}</h1>${statePill(s)}</div>
+      <div class="stack">
+        ${ask ? approvalCard(ask) : ''}
+        <article class="card"><div class="label">What it's doing</div><p>${esc(s.doing)}</p>${s.last ? `<div class="label">Last turn</div><p>${esc(s.last)}</p>` : ''}</article>
+        <article class="card"><div class="label">Steps</div><ol class="steps">${s.steps.map(([k, t]) => `<li><span class="k ${k}">${k === 'ok' ? '✓' : k === 'wait' ? '?' : '<span class="spin">✻</span>'}</span><span>${t}</span></li>`).join('')}</ol></article>
+        ${s.files.length ? `<article class="card" data-note="13" style="padding-block: 6px"><div class="label" style="margin-top: 8px">Files changed</div>${s.files.map(([f, a, d]) => `<button class="frow" data-act="diff" data-file="${esc(f)}">${ic('file')}<span class="fname">${esc(f)}</span><span class="add">+${a}</span><span class="del">−${d}</span>${ic('chev')}</button>`).join('')}</article>` : ''}
+        <article class="card"><div class="label">Reply</div>
+          <div class="chips">${s.next.map((t) => `<button class="chip" data-act="reply-chip" data-text="${esc(t)}">${esc(t)}</button>`).join('')}</div>
+          <form class="replyform" id="reply-form"><input class="field" id="reply-input" placeholder="Tell Claude what to do next" aria-label="Tell Claude what to do next" autocomplete="off"><button class="sendbtn" aria-label="Send">${ic('send')}</button></form>
+        </article>
+        <div class="btn-row">
+          <button class="btn btn-danger" data-act="stop" ${s.state === 'working' ? '' : 'disabled'}>${ic('stop')}<span id="stop-label">Stop</span></button>
+          <button class="btn btn-soft" data-act="commit" ${s.state === 'done' ? '' : 'disabled'}>${ic('branch')}Commit & push</button>
+        </div>
+        ${s.state === 'done' ? '' : '<p class="fine" style="text-align: center">Commit & push opens when Claude finishes.</p>'}
+      </div>`;
+    S.stopArmed = false;
+  }
+
+  function itemRow(it) {
+    const src = SRC[it.src];
+    const extra = it.join ? `<div class="row-actions"><button class="btn btn-primary btn-small" data-act="join">${ic('video')}Join</button></div>`
+      : it.reply ? `<div class="row-actions"><button class="btn btn-soft btn-small" data-act="draft" data-id="${it.id}">Draft reply</button></div>` : '';
+    return `<div class="swipe-wrap" data-id="${it.id}"><div class="swipe-clip"><div class="swipe">
+      <div class="swipe-actions"><button class="sa sa-snooze" data-act="snooze" data-id="${it.id}" tabindex="-1">${ic('clock')}Snooze</button><button class="sa sa-done" data-act="done" data-id="${it.id}" tabindex="-1">${ic('check')}Done</button></div>
+      <div class="swipe-face" tabindex="0" data-swipe aria-label="${esc(it.who)}. Press Enter for Done and Snooze">
+        <span class="tile" style="--c: ${src.c}">${ic(src.icon)}</span>
+        <div class="row-main"><div class="row-top"><span class="row-title">${it.vip ? '<svg class="star" aria-label="VIP"><use href="#i-star"/></svg>' : ''}${esc(it.who)}</span><span class="time">${it.when}</span></div>
+        ${it.subj ? `<div class="row-subj">${esc(it.subj)}</div>` : ''}<div class="row-sub">${esc(it.what)}</div>${extra}</div>
+      </div></div></div></div>`;
+  }
+
+  function renderInbox() {
+    const f = S.filter;
+    const list = open().filter((i) => f === 'all' || i.src === f);
+    const el = $('#inbox-list');
+    if (!open().length) {
+      el.innerHTML = `<div class="card empty"><svg viewBox="0 0 120 108" aria-hidden="true"><use href="#mochi"/></svg><b>All clear.</b><span class="fine">I'll tell you when something comes in.</span></div>`;
+    } else if (!list.length) {
+      el.innerHTML = `<div class="card empty"><b>Nothing here</b><span class="fine">Nothing in this filter needs you right now.</span></div>`;
+    } else el.innerHTML = list.map(itemRow).join('');
+    $('#inbox-count').textContent = open().length ? `${open().length} things` : '';
+    $('#inbox-needs-wrap').hidden = f === 'drafts';
+    $('#inbox-quiet-wrap').hidden = !(f === 'all' || f === 'gmail');
+    $('#inbox-drafts-wrap').hidden = !(f === 'all' || f === 'drafts' || f === 'gmail');
+    $('#inbox-follow-wrap').hidden = f !== 'all';
+    const doneItems = ITEMS.filter((i) => S.done.includes(i.id));
+    $('#inbox-done-wrap').hidden = !doneItems.length || f === 'drafts';
+    $('#done-count').textContent = `${doneItems.length}`;
+    $('#done-list').innerHTML = doneItems.map((i) => `<div class="row"><span class="tile" style="--c: var(--success)">${ic('check')}</span><div class="row-main"><div class="row-title">${esc(i.who)}</div><div class="row-sub">Marked done here · just now</div></div><button class="btn btn-ghost btn-small" data-act="undone" data-id="${i.id}">Undo</button></div>`).join('');
+    $$('[data-act="filter"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.f === f)));
+  }
+
+  function renderTodayWaiting() {
+    const rows = open().filter((i) => i.src !== 'calendar').slice(0, 3);
+    const total = open().length;
+    $('#today-wait-count').textContent = total ? `${total} things` : '';
+    $('#today-waiting').innerHTML = rows.length ? rows.map((i) => {
+      const src = SRC[i.src];
+      return `<div class="row"><span class="tile" style="--c: ${src.c}">${ic(src.icon)}</span>
+        <div class="row-main"><div class="row-title">${i.vip ? '<svg class="star" aria-label="VIP"><use href="#i-star"/></svg>' : ''}${esc(i.who)}</div><div class="row-sub">${esc(i.subj || i.what)}</div></div>
+        <button class="donebtn" data-act="done" data-id="${i.id}" aria-label="Mark ${esc(i.who)} done"><span>${ic('check')}</span></button></div>`;
+    }).join('') : `<p class="fine" style="padding: 8px 0">All clear. Mochi will tell you when something comes in.</p>`;
+  }
+
+  function renderBadges() {
+    const c = pending().length, n = open().length;
+    $('#count-claude').textContent = c; $('#count-claude').hidden = !c;
+    $('#count-inbox').textContent = n; $('#count-inbox').hidden = !n;
+  }
+
+  function renderHost() {
+    screen.classList.toggle('asleep', S.asleep);
+    $$('.host-name').forEach((e) => (e.textContent = S.asleep ? 'Mac · asleep' : 'Mac'));
+    $$('.host').forEach((e) => e.setAttribute('aria-label', `Your Mac: ${S.asleep ? 'asleep' : 'online'}. Open computer controls`));
+    $('#netstrip').hidden = !S.asleep;
+    $('#netstrip-text').textContent = S.queued
+      ? `Your Mac is asleep. ${S.queued} queued; ${S.queued === 1 ? 'it runs' : 'they run'} when your Mac wakes.`
+      : 'Your Mac is asleep. Anything you send waits and runs when it wakes.';
+    $('#mac-state').textContent = S.asleep ? 'Asleep · sessions paused' : 'Online · kept awake while Claude runs';
+  }
+
+  function render() {
+    renderApprovals(); renderSessions(); renderDetail(); renderInbox(); renderTodayWaiting(); renderBadges(); renderHost();
+    applyNotes();
+  }
+
+  // ---------- Notes ----------
+  function applyNotes() {
+    $$('.nb', screen).forEach((b) => b.remove());
+    page.classList.toggle('notes-on', S.notes);
+    $$('[data-notes-toggle]').forEach((b) => b.setAttribute('aria-checked', String(S.notes)));
+    $('#notes-wrap').hidden = !S.notes;
+    if (!S.notes) { $('#note-pop').hidden = true; return; }
+    $$('[data-note]', screen).forEach((el) => {
+      if (el.hidden || el.closest('[hidden]')) return;
+      if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+      const n = el.dataset.note;
+      const b = document.createElement('button');
+      b.className = 'nb'; b.textContent = n; b.dataset.act = 'note'; b.dataset.n = n;
+      b.setAttribute('aria-label', `Design note ${n}`);
+      el.appendChild(b);
+    });
+    const key = S.tab;
+    const list = NOTES.filter((x) => x.view === 'all' || x.view.split(' ').includes(key)).sort((a, b) => (a.view === 'all') - (b.view === 'all') || a.n - b.n);
+    $('#notes-heading').textContent = `Notes for ${key[0].toUpperCase() + key.slice(1)}`;
+    $('#notes-list').innerHTML = list.map((x) => `<li data-n="${x.n}"><span class="n">${x.n}</span><span><b>${esc(x.t)}</b><span>${esc(x.b)}</span></span></li>`).join('');
+  }
+  function showNote(n) {
+    const x = NOTES.find((y) => String(y.n) === String(n)); if (!x) return;
+    $('#note-pop-title').textContent = `${x.n}. ${x.t}`;
+    $('#note-pop-text').textContent = x.b;
+    $('#note-pop').hidden = false;
+    $$('#notes-list li').forEach((li) => li.classList.toggle('hl', li.dataset.n === String(n)));
+  }
+
+  // ---------- Navigation ----------
+  function goTab(tab) {
+    S.tab = tab;
+    $$('.view').forEach((v) => v.classList.toggle('active', v.dataset.view === tab));
+    $$('.tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === tab)));
+    const fab = $('#fab');
+    fab.classList.toggle('as-mic', tab === 'ask');
+    fab.setAttribute('aria-label', tab === 'ask' ? 'Press and hold to talk' : 'Ask Mochi. Press and hold to talk');
+    $('#composer').hidden = tab !== 'ask';
+    $('#note-pop').hidden = true;
+    if (tab === 'ask') scrollChat();
+    applyNotes();
+  }
+  function openSession(name) {
+    S.detail = name;
+    if (S.tab !== 'claude') goTab('claude');
+    renderDetail();
+    $('#claude-panes').classList.add('detail-open');
+    $('#detail').scrollTop = 0;
+    applyNotes();
+    setTimeout(() => $('#detail .back')?.focus({ preventScroll: true }), 50);
+  }
+  function closeSession() {
+    $('#claude-panes').classList.remove('detail-open');
+    S.detail = null;
+    applyNotes();
+  }
+
+  // ---------- Sheets, toasts, banner ----------
+  let openSheetEl = null, lastFocus = null;
+  function openSheet(name) {
+    closeSheet(true);
+    lastFocus = document.activeElement;
+    openSheetEl = $(`#sheet-${name}`);
+    $('#scrim').classList.add('show');
+    openSheetEl.classList.add('show');
+    setTimeout(() => openSheetEl.querySelector('input, textarea, button:not(.iconbtn)')?.focus({ preventScroll: true }), 80);
+  }
+  function closeSheet(quiet) {
+    if (!openSheetEl) return;
+    openSheetEl.classList.remove('show');
+    $('#scrim').classList.remove('show');
+    openSheetEl = null;
+    $('#qa-confirm').hidden = true;
+    if (!quiet && lastFocus) lastFocus.focus?.({ preventScroll: true });
+  }
+  let toastTimer;
+  function toast(text, undo) {
+    $('#toast-text').textContent = text;
+    const u = $('#toast-undo');
+    u.hidden = !undo; u.onclick = undo ? () => { undo(); hideToast(); } : null;
+    $('#toast').classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, undo ? 4200 : 3000);
+  }
+  const hideToast = () => $('#toast').classList.remove('show');
+  let bannerTimer, bannerTarget = null;
+  function banner(title, body, target) {
+    $('#banner-title').textContent = title;
+    $('#banner-body').textContent = body;
+    bannerTarget = target;
+    $('#banner').classList.add('show');
+    applyNotes();
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => $('#banner').classList.remove('show'), 7000);
+  }
+  function approvalBanner(a) {
+    const title = a.risky ? `${a.project} wants to push to GitHub` : `${a.project} wants to run a command`;
+    banner(title, `${a.cmd}. ${a.risky ? 'Needs Face ID. ' : ''}Denied in 10 min if you don't answer.`, a.project);
+  }
+
+  // ---------- Approvals ----------
+  function answer(id, allow) {
+    const a = APPROVALS.find((x) => x.id === id); if (!a || a.state !== 'pending') return;
+    const finish = () => {
+      a.state = allow ? 'allowed' : 'denied';
+      const s = SESS[a.project];
+      if (S.asleep) {
+        S.queued++;
+        toast(`${allow ? 'Allowed' : 'Denied'}. Your Mac is asleep, so it's queued.`);
+      } else {
+        toast(allow ? 'Allowed. Sent to your Mac.' : `Denied. Claude in ${a.project} was told no.`);
+      }
+      if (s) {
+        s.state = 'working';
+        s.now = allow ? (a.risky ? 'Pushing to GitHub' : `Running ${a.cmd.split(' ').slice(0, 2).join(' ')}`) : 'Carrying on without it';
+        s.steps = s.steps.map(([k, t]) => [k === 'wait' ? 'ok' : k, k === 'wait' ? t.replace('Asked to', allow ? 'Allowed:' : 'Denied:').replace('Wants to', allow ? 'Allowed:' : 'Denied:') : t]);
+        s.steps.push(['run', allow ? `Running <code>${esc(a.cmd)}</code>` : 'Carrying on without it']);
+      }
+      render();
+      if (a.id === 'a1') setTimeout(secondApproval, 5200);
+      if (a.id === 'a2' && allow) setTimeout(() => finishSession('mochi-link', 'Pushed relay-uploads to GitHub. Uploads over the limit now get a clear error.'), 3500);
+    };
+    if (allow && a.risky) faceID(finish); else finish();
+  }
+  function secondApproval() {
+    if (APPROVALS.some((x) => x.id === 'a2')) return;
+    const s = SESS['mochi-link'];
+    s.steps = s.steps.map(([k, t]) => (k === 'run' ? ['ok', 'Ran <code>npm test</code>: 41 passed'] : [k, t]));
+    s.steps.push(['wait', 'Asked to run <code>git push origin relay-uploads</code>']);
+    s.state = 'needs'; s.now = 'Wants your OK to push';
+    const a = { id: 'a2', project: 'mochi-link', tool: 'Bash', cmd: 'git push origin relay-uploads', left: 10 * 60, risky: true, state: 'pending' };
+    APPROVALS.push(a);
+    render();
+    approvalBanner(a);
+  }
+  function finishSession(name, summary) {
+    const s = SESS[name]; if (!s) return;
+    s.state = 'done'; s.finished = 'just now'; s.last = summary;
+    s.steps = s.steps.map(([k, t]) => [k === 'run' ? 'ok' : k, t]);
+    render();
+    banner(`Claude finished in ${name}`, `${summary} Reply to say what's next.`, name);
+  }
+  function faceID(done) {
+    const f = $('#faceid');
+    f.hidden = false; f.classList.remove('ok'); $('#faceid-text').textContent = 'Face ID';
+    setTimeout(() => { f.classList.add('ok'); $('#faceid-text').textContent = 'Confirmed'; }, 900);
+    setTimeout(() => { f.hidden = true; done(); }, 1500);
+  }
+
+  // ---------- Inbox actions ----------
+  function markDone(id) {
+    const wrap = $(`#inbox-list .swipe-wrap[data-id="${id}"]`);
+    const commit = () => { if (!S.done.includes(id)) S.done.push(id); render(); };
+    if (wrap && S.tab === 'inbox' && !still()) { wrap.classList.add('gone'); setTimeout(commit, 260); } else commit();
+    toast('Marked done.', () => { S.done = S.done.filter((x) => x !== id); render(); });
+  }
+  function snooze(id) {
+    const wrap = $(`#inbox-list .swipe-wrap[data-id="${id}"]`);
+    const commit = () => { if (!S.snoozed.includes(id)) S.snoozed.push(id); render(); };
+    if (wrap && !still()) { wrap.classList.add('gone'); setTimeout(commit, 260); } else commit();
+    toast('Snoozed until 6 PM.', () => { S.snoozed = S.snoozed.filter((x) => x !== id); render(); });
+  }
+
+  // Swipe rows: drag left to reveal, far left to finish; a tap toggles the buttons.
+  let drag = null;
+  screen.addEventListener('pointerdown', (e) => {
+    const face = e.target.closest('[data-swipe]');
+    if (!face || e.target.closest('button')) return;
+    drag = { face, swipe: face.parentElement, x: e.clientX, y: e.clientY, dx: 0, moved: false, base: face.parentElement.classList.contains('open') ? -160 : 0 };
+  });
+  screen.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved) {
+      if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy)) { if (Math.abs(dy) > 10) drag = null; return; }
+      drag.moved = true; drag.face.classList.add('dragging');
+      try { drag.face.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    }
+    drag.dx = dx;
+    const x = Math.min(0, Math.max(-300, drag.base + dx));
+    drag.face.style.transform = `translateX(${x}px)`;
+  });
+  const endDrag = () => {
+    if (!drag) return;
+    const { face, swipe, moved, base, dx } = drag; drag = null;
+    face.classList.remove('dragging'); face.style.transform = '';
+    if (!moved) { toggleRow(swipe); return; }
+    const x = base + dx;
+    if (x < -230) { markDone(swipe.closest('.swipe-wrap').dataset.id); return; }
+    closeRows(swipe);
+    swipe.classList.toggle('open', x < -70);
+    setRowFocus(swipe);
+  };
+  screen.addEventListener('pointerup', endDrag);
+  screen.addEventListener('pointercancel', endDrag);
+  function toggleRow(swipe) { const was = swipe.classList.contains('open'); closeRows(); swipe.classList.toggle('open', !was); setRowFocus(swipe); }
+  function closeRows(except) { $$('.swipe.open', screen).forEach((s) => { if (s !== except) { s.classList.remove('open'); setRowFocus(s); } }); }
+  function setRowFocus(swipe) { $$('.sa', swipe).forEach((b) => (b.tabIndex = swipe.classList.contains('open') ? 0 : -1)); }
+
+  // ---------- Ask ----------
+  const chat = $('#chat');
+  function scrollChat() { const v = $('#view-ask'); requestAnimationFrame(() => v.scrollTo({ top: v.scrollHeight, behavior: still() ? 'auto' : 'smooth' })); }
+  function addMe(text) { chat.insertAdjacentHTML('beforeend', `<div class="msg me">${esc(text)}</div>`); scrollChat(); }
+  function addMochi(html, card) {
+    chat.insertAdjacentHTML('beforeend', `<div class="mrow"><span class="mini"><svg><use href="#mochi"/></svg></span><div class="msg mochi${card ? ' card-msg' : ''}">${html}</div></div>`);
+    scrollChat();
+    return chat.lastElementChild;
+  }
+  function thinking(then) {
+    const row = addMochi('<span class="typing" aria-label="Mochi is thinking"><span></span><span></span><span></span></span>');
+    setTimeout(() => { row.remove(); then(); }, still() ? 200 : 750);
+  }
+  function waitingReply() {
+    const list = open();
+    if (!list.length) return "Nothing's waiting for you. Enjoy!";
+    const n = list.length;
+    const top = list.slice(0, 2).map((i) => i.say);
+    if (n === 1) return `One thing: ${top[0]}.`;
+    return `${WORDS[n] || n} things. ${top[0][0].toUpperCase() + top[0].slice(1)} and ${top[1]} need you.`;
+  }
+  function respond(text) {
+    const t = text.toLowerCase();
+    if (/mochi-link/.test(t) && /(test|run)/.test(t) && !/start a task/.test(t)) {
+      const el = addMochi(`<b>Send to Claude in mochi-link?</b><div class="quote">“From the user, via Mochi: run the relay tests.”</div><div class="btn-row"><button class="btn btn-soft" data-act="chat-no">Don't Send</button><button class="btn btn-primary" data-act="chat-send">Send</button></div>`, true);
+      el.querySelector('[data-act="chat-send"]').focus({ preventScroll: true });
+      return;
+    }
+    let reply;
+    if (/(waiting|pending)/.test(t)) reply = waitingReply();
+    else if (/remind|follow/.test(t)) reply = "Okay. I'll tell you on Monday if Priya hasn't replied.";
+    else if (/(pause|music|play)/.test(t)) {
+      if (S.asleep) { S.queued++; renderHost(); reply = "Your Mac is asleep, so I queued it. It runs when your Mac wakes."; }
+      else reply = 'Pressed play/pause on your Mac.';
+    } else if (/(start|task|fix)/.test(t)) reply = /mochi-link/.test(t) ? 'What should Claude do in mochi-link?' : 'Which project? mac-Tamagotchi, mochi-link or mochi-cloud.';
+    else reply = "I'm a prototype, so I only know a few things. Try “What's waiting?”";
+    addMochi(esc(reply));
+  }
+  function sendChat(text) {
+    if (!text.trim()) return;
+    if (S.tab !== 'ask') goTab('ask');
+    addMe(text);
+    thinking(() => respond(text));
+  }
+
+  // Hold to talk (Ask button, the big mic and the Ask tab's mic)
+  const PHRASES = ['Tell Claude in mochi-link to run the relay tests', "Remind me if Priya doesn't reply by Monday", "What's waiting?"];
+  let hold = null;
+  function startListening(source) {
+    const phrase = PHRASES[S.voiceTurn % PHRASES.length];
+    hold.listening = true; hold.phrase = phrase; hold.shown = 0;
+    source.classList.add('hot');
+    $('#listen').hidden = false; $('#said').textContent = '';
+    const step = () => {
+      if (!hold || !hold.listening) return;
+      hold.shown = Math.min(phrase.length, hold.shown + 2);
+      $('#said').textContent = phrase.slice(0, hold.shown);
+      if (hold.shown < phrase.length) hold.typer = setTimeout(step, still() ? 0 : 45);
+    };
+    step();
+  }
+  function stopListening(source, send) {
+    source.classList.remove('hot');
+    $('#listen').hidden = true;
+    if (!hold) return;
+    clearTimeout(hold.typer);
+    const phrase = hold.phrase;
+    hold = null;
+    if (send && phrase) { S.voiceTurn++; closeSheet(true); sendChat(phrase); }
+  }
+  function bindHold(el, onTap) {
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target.closest('.nb')) return;
+      e.preventDefault();
+      try { el.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+      hold = { el, listening: false };
+      hold.timer = setTimeout(() => { if (hold && hold.el === el) startListening(el); }, 320);
+    });
+    const up = (cancel) => {
+      if (!hold || hold.el !== el) return;
+      clearTimeout(hold.timer);
+      if (hold.listening) stopListening(el, !cancel);
+      else { hold = null; if (!cancel) onTap(); }
+    };
+    el.addEventListener('pointerup', () => up(false));
+    el.addEventListener('pointercancel', () => up(true));
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault(); onTap(true);
+    });
+    el.addEventListener('click', (e) => { if (e.detail === 0) return; e.preventDefault(); });
+  }
+  function voiceByKeyboard(source) {
+    hold = { el: source, listening: false };
+    startListening(source);
+    const phrase = hold.phrase;
+    setTimeout(() => { if (hold) stopListening(source, true); }, still() ? 300 : phrase.length * 24 + 600);
+  }
+  bindHold($('#fab'), (kbd) => {
+    if (S.tab === 'ask') { if (kbd) voiceByKeyboard($('#fab')); else toast('Press and hold to talk.'); }
+    else openSheet('ask');
+  });
+  bindHold($('#bigmic'), (kbd) => { if (kbd) voiceByKeyboard($('#bigmic')); else toast('Press and hold to talk.'); });
+
+  // ---------- Mochi's room ----------
+  const LINES = {
+    pet: ['Purr…', 'Hehe, that tickles!', 'More scritches?', 'Mrrrp!'],
+    play: ['Again! Again!', 'Catch me!', 'Wheee!', 'Best game ever!'],
+    treat: ['Yum!', 'Nom nom nom', 'My favourite!', 'Thank you! ♥'],
+  };
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  function say(text) {
+    const b = $('#room-bubble');
+    if (S.chatty === 'quiet') { b.classList.add('hide'); return; }
+    b.classList.add('hide');
+    setTimeout(() => { b.textContent = text; b.classList.remove('hide'); }, still() ? 0 : 140);
+  }
+  function hearts(host) {
+    if (still()) return;
+    const h = host.querySelector('.hearts');
+    for (let i = 0; i < 3; i++) {
+      const s = document.createElement('span');
+      s.className = 'heart'; s.textContent = '♥';
+      s.style.setProperty('--dx', `${(i - 1) * 18}px`); s.style.animationDelay = `${i * 0.12}s`;
+      h.appendChild(s); setTimeout(() => s.remove(), 1400);
+    }
+  }
+  function animate(el, cls) { if (still()) return; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+
+  function updateSoundsLike() {
+    const quiet = S.chatty === 'quiet';
+    const line = S.mood ? "Claude's done in mochi-link! 🎉" : "Claude's done in mochi-link.";
+    $('#sounds-like').textContent = quiet ? 'Sounds like: Mochi only speaks up when something needs you.' : `Sounds like: “${line}”`;
+    const name = S.address === 'name' ? 'Morning, [your name]!' : 'Morning!';
+    $('#brief-text').textContent = `${name} Design review at 4, and Priya's waiting on the October invoice.`;
+    const b = $('#room-bubble');
+    b.classList.toggle('hide', quiet);
+    if (!quiet) b.textContent = S.chatty === 'chatty' ? 'So many lights! 🪔' : 'So many lights!';
+  }
+
+  // ---------- Read aloud ----------
+  function readScript() {
+    const list = open();
+    if (!list.length) return ["Nothing is waiting for you right now. Enjoy!"];
+    const n = list.length;
+    return [`${n === 1 ? 'One thing is' : (WORDS[n] || n) + ' things are'} waiting for you.`, ...list.map((i) => i.speak), "That's everything."];
+  }
+  function toggleRead() {
+    const btn = $('#read-btn'), cap = $('#readcap');
+    if (S.reading) { clearInterval(S.reading); S.reading = null; cap.hidden = true; btn.querySelector('span').textContent = 'Read aloud'; return; }
+    const lines = readScript(); let i = 0;
+    cap.hidden = false; btn.querySelector('span').textContent = 'Stop reading';
+    const show = () => { cap.innerHTML = lines.map((l, j) => (j === i ? `<mark>${esc(l)}</mark>` : esc(l))).join(' '); };
+    show();
+    S.reading = setInterval(() => { i++; if (i >= lines.length) { toggleRead(); return; } show(); }, 1700);
+  }
+
+  // ---------- Clicks ----------
+  const QA = {
+    lock: { confirm: 'Lock your Mac now?', go: 'Lock', done: 'Lock sent to your Mac.' },
+    sleep: { confirm: 'Put your Mac to sleep? Claude sessions pause until it wakes.', go: 'Sleep', done: 'Sleep sent to your Mac.' },
+    play: { done: 'Pressed play/pause on your Mac.' },
+    mute: { done: 'Muted your Mac.' },
+    clip: { done: 'Sent your clipboard to your Mac.' },
+    file: { done: 'Choose a photo or file to send (not in this prototype).', local: true },
+  };
+  function runQA(v) {
+    const q = QA[v];
+    if (S.asleep && !q.local) { S.queued++; renderHost(); toast("Your Mac is asleep, so it's queued. It runs when your Mac wakes."); return; }
+    toast(q.done);
+  }
+
+  const act = {
+    tab: (el) => { closeRows(); if (el.dataset.tab === 'claude' && S.tab === 'claude' && S.detail) { closeSession(); return; } goTab(el.dataset.tab); },
+    'open-session': (el) => openSession(el.dataset.name),
+    back: closeSession,
+    host: () => openSheet('host'),
+    sheet: (el) => openSheet(el.dataset.sheet),
+    'close-sheet': () => closeSheet(),
+    allow: (el) => answer(el.dataset.id, true),
+    deny: (el) => answer(el.dataset.id, false),
+    done: (el) => markDone(el.dataset.id),
+    snooze: (el) => snooze(el.dataset.id),
+    undone: (el) => { S.done = S.done.filter((x) => x !== el.dataset.id); render(); },
+    filter: (el) => { S.filter = el.dataset.f; renderInbox(); applyNotes(); },
+    bundle: (el) => { const ex = el.getAttribute('aria-expanded') === 'true'; el.setAttribute('aria-expanded', String(!ex)); $('#quiet-list').hidden = ex; },
+    join: () => toast('Opening Google Meet.'),
+    'brief-me': () => toast("Coming in C2: who's coming, your last emails with them, and related Notion docs."),
+    draft: (el) => { const it = ITEMS.find((i) => i.id === el.dataset.id); toast(`Asked for a reply to ${it.who.split(' ')[0]}. You'll get a notification when the draft is in Gmail.`); },
+    read: toggleRead,
+    toast: (el) => toast(el.dataset.text),
+    note: (el) => showNote(el.dataset.n),
+    'close-note': () => { $('#note-pop').hidden = true; },
+    say: (el) => { closeSheet(true); sendChat(el.dataset.text); },
+    'chat-send': (el) => { const card = el.closest('.msg'); card.querySelector('.btn-row').outerHTML = `<span class="pill" style="--c: var(--success)">${ic('check')}Sent</span>`; thinking(() => addMochi(esc(S.asleep ? "Your Mac is asleep, so it's queued. I'll send it when your Mac wakes." : "Sent to Claude in mochi-link. I'll tell you when it's done."))); if (S.asleep) { S.queued++; renderHost(); } },
+    'chat-no': (el) => { const card = el.closest('.msg'); card.querySelector('.btn-row').outerHTML = `<span class="pill" style="--c: var(--ink-2)">Not sent</span>`; thinking(() => addMochi("Okay, I didn't send it.")); },
+    'reply-chip': (el) => { const f = $('#reply-input'); if (f) { f.value = el.dataset.text; f.focus(); } },
+    stop: () => {
+      if (!S.stopArmed) { S.stopArmed = true; $('#stop-label').textContent = 'Tap again to stop'; setTimeout(() => { S.stopArmed = false; const l = $('#stop-label'); if (l) l.textContent = 'Stop'; }, 3000); return; }
+      const s = SESS[S.detail]; s.state = 'done'; s.finished = 'just now'; s.last = 'Stopped from your phone.';
+      s.steps = s.steps.map(([k, t]) => [k === 'run' ? 'ok' : k, t]);
+      toast(`Stop sent to your Mac. Claude in ${S.detail} stops after this step.`); render();
+    },
+    commit: () => toast('Asked Claude to commit and push on your Mac. You can review the commit message first.'),
+    diff: (el) => {
+      const f = el.dataset.file;
+      $('#diff-proj').textContent = S.detail || '';
+      $('#diff-title').textContent = f;
+      const lines = DIFFS[f] || [['h', '@@ a sample hunk @@'], [' ', '   (The real viewer shows this file\'s changes.)']];
+      $('#diff-body').innerHTML = lines.map(([k, t]) => `<div class="${k === ' ' ? '' : k}">${esc(t)}</div>`).join('');
+      openSheet('diff');
+    },
+    proj: (el) => { S.project = el.dataset.v; $$('[data-act="proj"]').forEach((b) => b.setAttribute('aria-pressed', String(b === el))); },
+    'task-eg': (el) => { const t = $('#task-text'); t.value = el.dataset.text; t.dispatchEvent(new Event('input')); },
+    qa: (el) => {
+      const v = el.dataset.v, q = QA[v];
+      if (q.confirm) { S.pendingQA = v; $('#qa-confirm-text').textContent = q.confirm; $('#qa-go').textContent = q.go; $('#qa-confirm').hidden = false; $('#qa-go').focus({ preventScroll: true }); return; }
+      runQA(v);
+    },
+    'qa-cancel': () => { $('#qa-confirm').hidden = true; S.pendingQA = null; },
+    'qa-go': () => { $('#qa-confirm').hidden = true; if (S.pendingQA) runQA(S.pendingQA); S.pendingQA = null; },
+    awake: (el) => { const on = el.getAttribute('aria-checked') !== 'true'; el.setAttribute('aria-checked', String(on)); toast(on ? "Your Mac stays awake while Claude runs." : "Your Mac sleeps on its usual schedule. Mochi warns you if Claude is still running."); },
+    asleep: (el) => { S.asleep = !S.asleep; if (!S.asleep) S.queued = 0; el.setAttribute('aria-checked', String(S.asleep)); render(); toast(S.asleep ? 'Pretending your Mac is asleep.' : 'Your Mac is awake again. Anything queued has been sent.'); },
+    pet: () => { animate($('#room-mochi'), 'wiggle'); hearts($('#room-mochi')); say(pick(LINES.pet)); },
+    'pet-avatar': (el) => { animate(el, 'wiggle'); hearts(el); },
+    play: () => { animate($('#room-mochi'), 'hop'); animate($('#ball'), 'go'); say(pick(LINES.play)); },
+    treat: () => { animate($('#treat'), 'go'); setTimeout(() => animate($('#room-mochi'), 'hop'), still() ? 0 : 600); say(pick(LINES.treat)); },
+    chatty: (el) => { S.chatty = el.dataset.v; $$('[data-act="chatty"]').forEach((b) => b.setAttribute('aria-pressed', String(b === el))); updateSoundsLike(); },
+    address: (el) => { S.address = el.dataset.v; $$('[data-act="address"]').forEach((b) => b.setAttribute('aria-pressed', String(b === el))); updateSoundsLike(); },
+    mood: (el) => { S.mood = !S.mood; el.setAttribute('aria-checked', String(S.mood)); updateSoundsLike(); },
+  };
+  screen.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-act]');
+    if (!el || !screen.contains(el)) return;
+    if (el.id === 'fab' || el.id === 'bigmic') return;
+    if (el.disabled) return;
+    const fn = act[el.dataset.act];
+    if (fn) { e.preventDefault(); fn(el, e); }
+  });
+  $('#banner').addEventListener('click', (e) => {
+    if (e.target.closest('.nb')) return;
+    $('#banner').classList.remove('show');
+    if (bannerTarget) openSession(bannerTarget);
+  });
+  $$('[data-notes-toggle]').forEach((b) => b.addEventListener('click', () => { S.notes = !S.notes; applyNotes(); }));
+  $('[data-replay]').addEventListener('click', () => {
+    const a = pending()[0];
+    if (a) approvalBanner(a);
+    else banner('VFDF mentioned you in Figma, +2 more', 'Design review at 4:00 PM. Priya needs the October invoice today.', null);
+  });
+
+  // Forms
+  $('#composer-form').addEventListener('submit', (e) => { e.preventDefault(); const f = $('#composer-input'); sendChat(f.value); f.value = ''; });
+  $('#sheet-form').addEventListener('submit', (e) => { e.preventDefault(); const f = $('#sheet-input'); const v = f.value; f.value = ''; closeSheet(true); sendChat(v); });
+  screen.addEventListener('submit', (e) => {
+    if (e.target.id !== 'reply-form') return;
+    e.preventDefault();
+    const f = $('#reply-input'); if (!f.value.trim()) return;
+    const name = S.detail;
+    toast(S.asleep ? `Your Mac is asleep, so your reply is queued for ${name}.` : `Sent to Claude in ${name}.`);
+    if (S.asleep) { S.queued++; renderHost(); }
+    f.value = '';
+  });
+  $('#task-text').addEventListener('input', (e) => { $('#start-go').disabled = !e.target.value.trim(); });
+  $('#start-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = $('#task-text').value.trim(); if (!text) return;
+    const project = S.project;
+    closeSheet(true);
+    $('#task-text').value = ''; $('#start-go').disabled = true;
+    if (S.asleep) { S.queued++; renderHost(); toast("Your Mac is asleep, so the task is queued. It starts when your Mac wakes."); return; }
+    toast("Sent to your Mac. It shows here when Claude starts.");
+    setTimeout(() => {
+      const key = `${project} · new`;
+      SESS[key] = { state: 'working', since: 'just now', elapsed: 0, doing: text, now: 'Reading the project', steps: [['run', 'Reading the project']], files: [], next: ['Show me the plan first'] };
+      render();
+    }, 1800);
+  });
+
+  // Keyboard: Esc closes the top layer; Enter on a swipe row shows its buttons.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (!$('#note-pop').hidden) { $('#note-pop').hidden = true; return; }
+      if (openSheetEl) { closeSheet(); return; }
+      if (S.detail) { closeSession(); return; }
+    }
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-swipe]')) {
+      e.preventDefault(); toggleRow(e.target.parentElement);
+      const first = e.target.parentElement.querySelector('.sa'); if (e.target.parentElement.classList.contains('open')) first.focus();
+    }
+  });
+
+  // ---------- Live clocks ----------
+  setInterval(() => {
+    pending().forEach((a) => {
+      a.left = Math.max(0, a.left - 1);
+      $$(`[data-left="${a.id}"]`).forEach((el) => (el.textContent = mmss(a.left)));
+      if (a.left === 0) { a.state = 'denied'; toast(`Denied automatically: no answer for ${a.project}.`); render(); }
+    });
+    Object.entries(SESS).forEach(([name, s]) => {
+      if (s.state !== 'working' || S.asleep) return;
+      s.elapsed++;
+      $$(`.srow[data-name="${CSS.escape(name)}"] [data-elapsed]`).forEach((el) => (el.textContent = mmss(s.elapsed)));
+      if (S.detail === name) $$('#detail .dtitle [data-elapsed]').forEach((el) => (el.textContent = mmss(s.elapsed)));
+    });
+  }, 1000);
+  const GLYPHS = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
+  let g = 0;
+  setInterval(() => { if (still()) return; g = (g + 1) % GLYPHS.length; $$('.spin', screen).forEach((el) => (el.textContent = GLYPHS[g])); }, 130);
+
+  // ---------- Start ----------
+  render();
+  updateSoundsLike();
+  setTimeout(() => approvalBanner(APPROVALS[0]), 1400);
+})();
+</script>
