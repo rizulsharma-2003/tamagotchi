@@ -8,6 +8,8 @@
 ///   what arrives while the app isn't running.
 /// - [ClaudeHookInstaller] adds Mochi's hooks to Claude Code's settings.json and takes them out again without
 ///   touching anything else ([HookSettingsMerger]), with a backup first.
+/// - [UpdateCli] is the helper's `update`, `launch` and `uninstall` (Mochi for Windows installs itself per user in
+///   [InstallLayout] and swaps in verified updates with [FolderSwap]).
 library;
 
 export 'src/bridge.dart';
@@ -16,7 +18,11 @@ export 'src/claude_hooks.dart';
 export 'src/classifiers.dart';
 export 'src/event_spool.dart';
 export 'src/event_validator.dart';
+export 'src/folder_swap.dart';
 export 'src/hook_cli.dart';
 export 'src/hook_sanitizer.dart';
+export 'src/install_layout.dart';
+export 'src/process_control.dart';
+export 'src/update_cli.dart';
 export 'src/wire_event.dart';
 export 'src/wire_text.dart';
