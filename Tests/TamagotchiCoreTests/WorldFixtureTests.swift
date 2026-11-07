@@ -15,4 +15,16 @@ struct WorldFixtureTests {
 
     @Test("link-spec/world/interactions.json: the interaction scripts' frames")
     func interactionFrames() throws { try WorldFixtures.check("interactions.json", PoseFixtures.interactions()) }
+
+    @Test("link-spec/world/scheduler.json: ambient picks, cooldowns, daily caps and no repeats")
+    func scheduler() throws { try WorldFixtures.check("scheduler.json", LogicFixtures.scheduler()) }
+
+    @Test("link-spec/world/progress.json: friendship, achievements and growing up")
+    func progress() throws { try WorldFixtures.check("progress.json", LogicFixtures.progress()) }
+
+    @Test("link-spec/world/celebrations.json: celebrations from real Claude events (G2)")
+    func celebrations() throws { try WorldFixtures.check("celebrations.json", LogicFixtures.celebrations()) }
+
+    @Test("link-spec/world/world.json: whole CompanionWorld timelines")
+    func worldTimelines() throws { try WorldFixtures.check("world.json", WorldTimelineFixtures.world()) }
 }
