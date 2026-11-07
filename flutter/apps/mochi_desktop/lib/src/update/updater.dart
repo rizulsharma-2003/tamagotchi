@@ -223,6 +223,7 @@ class Updater extends ChangeNotifier {
     if (ready != null) {
       _ready = ready;
       _set(UpdatePhase.ready);
+      unawaited(_warmRunner(ready));
     } else if (_phase != UpdatePhase.failed) {
       _set(UpdatePhase.idle);
     }
@@ -394,6 +395,7 @@ class Updater extends ChangeNotifier {
       _progress = null;
       _set(UpdatePhase.ready);
       onReady?.call(ready);
+      unawaited(_warmRunner(ready));
     } on UpdateFeedException catch (error) {
       _problem = error.message;
       _set(error.offline ? UpdatePhase.offline : UpdatePhase.failed);
@@ -446,15 +448,36 @@ class Updater extends ChangeNotifier {
     return await _handOff(ready) == null;
   }
 
-  Future<String?> _handOff(ReadyUpdate ready) async {
+  /// The helper that installs the update, copied out of the app folder it replaces (update\runner). Throws
+  /// [FileSystemException]; returns null when the app has no helper.
+  String? _copyRunner(ReadyUpdate ready) {
     final sep = layout.separator;
-    final source = _helper?.call() ?? '${ready.root}$sep${HelperInfo.executableName}${layout.windows ? '.exe' : ''}';
-    if (!File(source).existsSync()) return "Mochi's helper is missing, so the update can't be installed. Reinstall Mochi.";
-    // The helper runs from outside the app folder it replaces.
-    final runner = '${files.runnerDirectory}$sep${HelperInfo.executableName}${layout.windows ? '.exe' : ''}';
+    final name = '${HelperInfo.executableName}${layout.windows ? '.exe' : ''}';
+    final source = _helper?.call() ?? '${ready.root}$sep$name';
+    if (!File(source).existsSync()) return null;
+    final runner = '${files.runnerDirectory}$sep$name';
+    Directory(files.runnerDirectory).createSync(recursive: true);
+    UpdateCli.replaceFile(source: source, target: runner);
+    return runner;
+  }
+
+  /// Once an update is ready: the helper is put in place and started once (`warm`, which does nothing), so it starts
+  /// at once when Mochi restarts. Windows looks a new program over the first time it runs, which can take seconds (on
+  /// an ARM PC, many: x64 programs are translated then).
+  Future<void> _warmRunner(ReadyUpdate ready) async {
     try {
-      Directory(files.runnerDirectory).createSync(recursive: true);
-      UpdateCli.replaceFile(source: source, target: runner);
+      final runner = _copyRunner(ready);
+      if (runner != null) await (_processes ?? systemProcessControl()).launch(runner, const ['warm'], workingDirectory: files.runnerDirectory);
+    } on Object {
+      // Only a head start.
+    }
+  }
+
+  Future<String?> _handOff(ReadyUpdate ready) async {
+    final String? runner;
+    try {
+      runner = _copyRunner(ready);
+      if (runner == null) return "Mochi's helper is missing, so the update can't be installed. Reinstall Mochi.";
       File(files.ready).renameSync(files.applying);
     } on FileSystemException catch (error) {
       return "The update couldn't be started (${error.osError?.message ?? error.message}).";

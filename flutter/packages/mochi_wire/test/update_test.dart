@@ -417,6 +417,16 @@ void main() {
       expect(processes.launched.single.arguments, ['--installed']);
     });
 
+    test('warm does nothing at all (the app runs it once so Windows has looked the program over)', () async {
+      final processes = FakeProcesses();
+      final out = StringBuffer();
+      final code = await UpdateCli(environment: const {}, out: out, paths: BridgePaths(temp.path), processes: processes).run(['warm']);
+      expect(code, 0);
+      expect(out.toString(), isEmpty);
+      expect(processes.launched, isEmpty);
+      expect(Directory(temp.path).listSync(), isEmpty, reason: 'not even a log line');
+    });
+
     test('never starts a second Mochi while the first is still there', () async {
       final processes = FakeProcesses()..stubborn.add(77);
       final code = await UpdateCli(environment: const {}, out: StringBuffer(), paths: BridgePaths(temp.path), processes: processes)

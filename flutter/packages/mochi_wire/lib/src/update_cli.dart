@@ -17,6 +17,9 @@ import 'wire_event.dart';
 ///     mochi_hook launch --after <pid> --exe <path> [-- arguments…]
 ///         waits for <pid> to quit, then starts <path> ("Install Mochi" relaunches the installed copy this way: only
 ///         one Mochi runs at a time)
+///     mochi_hook warm
+///         does nothing: the app starts the helper once while an update waits, so Windows has looked the new program
+///         over before it's needed (that can take seconds the first time)
 ///     mochi_hook uninstall [--install-root <dir>] [--quiet]
 ///         what Settings › Apps runs: stops the installed Mochi, removes its folder, Start-menu shortcut, Settings ›
 ///         Apps entry and startup entry; keeps your settings and Mochi's link in %LOCALAPPDATA%\Mochi
@@ -42,7 +45,7 @@ class UpdateCli {
        _swap = swap,
        _clock = clock ?? DateTime.now;
 
-  static const List<String> commands = ['update', 'launch', 'uninstall'];
+  static const List<String> commands = ['update', 'launch', 'warm', 'uninstall'];
 
   final Map<String, String> environment;
   final StringSink out;
@@ -70,6 +73,8 @@ class UpdateCli {
         return update(rest);
       case 'launch':
         return launch(rest);
+      case 'warm':
+        return 0;
       case 'uninstall':
         return uninstall(rest);
     }

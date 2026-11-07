@@ -455,7 +455,9 @@ void main() {
       expect(updater.phase, UpdatePhase.applying);
       final runner = '${rig.files.runnerDirectory}$sep$helperName';
       expect(read(runner), 'helper 0.1.0', reason: 'the installed copy’s helper, copied out of the folder it replaces');
-      final launch = rig.processes.launched.single;
+      expect(rig.processes.launched.first.arguments, ['warm'], reason: 'started once as soon as the update was ready');
+      expect(rig.processes.launched.first.exe, runner);
+      final launch = rig.processes.launched.last;
       expect(launch.exe, runner);
       expect(launch.arguments, ['update', '--staged', root, '--app', rig.layout.installDirectory, '--pid', '4242', '--version', '0.2.0', '--build', '2']);
       expect(File(rig.files.ready).existsSync(), isFalse);
@@ -481,6 +483,7 @@ void main() {
 
       final next = rig.updater();
       addTearDown(next.dispose);
+      rig.processes.launched.clear();
       expect(await next.applyPendingAtLaunch(), isTrue);
       expect(rig.processes.launched.single.arguments.first, 'update');
 

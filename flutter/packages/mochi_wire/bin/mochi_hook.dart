@@ -12,13 +12,14 @@ import 'package:mochi_wire/mochi_wire.dart';
 Future<void> main(List<String> arguments) async {
   final command = arguments.isEmpty ? null : arguments.first;
   if (UpdateCli.commands.contains(command)) {
-    // Updates and the uninstall take as long as they take (each waits with its own limits); `update` runs without a
-    // console, so nothing goes to stdout there.
+    // Updates and the uninstall take as long as they take (each waits with its own limits). Only the uninstall has a
+    // console to talk in; the others run without one, so nothing goes to stdout.
     var code = 1;
     try {
-      code = await UpdateCli(environment: Platform.environment, out: command == 'update' ? StringBuffer() : stdout).run(arguments);
+      final quiet = command != 'uninstall';
+      code = await UpdateCli(environment: Platform.environment, out: quiet ? StringBuffer() : stdout).run(arguments);
     } on Object catch (error) {
-      if (command != 'update') stderr.writeln('mochi_hook: $command failed (${error.runtimeType})');
+      if (command == 'uninstall') stderr.writeln('mochi_hook: $command failed (${error.runtimeType})');
     }
     try {
       await stdout.flush();

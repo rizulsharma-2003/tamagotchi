@@ -9,6 +9,9 @@
 //   dart tool/update_signing.dart sign --manifest manifest.json --out manifest.sig [--service S]
 //                                                            signs it with the Keychain's key (and checks the result)
 //   dart tool/update_signing.dart verify --manifest manifest.json --signature manifest.sig --public-key B64
+//   dart tool/update_signing.dart check-zip --zip Mochi-….zip --manifest manifest.json
+//                                                            the zip is the manifest’s, unpacks as the app does, and
+//                                                            holds an x64 Mochi with the VC++ runtime
 //   dart tool/update_signing.dart delete-key --service S     only for a throwaway key (a service ending in -dryrun)
 //
 // The private key is never printed, written to a file or passed on a command line: it goes to and from
@@ -18,6 +21,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:mochi_desktop/src/update/update_manifest.dart';
 import 'package:mochi_desktop/src/update/update_signing.dart';
 
@@ -70,6 +74,8 @@ Future<void> main(List<String> arguments) async {
         final key = UpdateSigning.base64UrlDecode(_required(options, '--public-key')) ?? _fail('--public-key is not base64url.');
         if (!await UpdateSigning.verify(manifest, signature, key)) _fail('The signature does NOT match that public key.');
         stdout.writeln('The signature matches.');
+      case 'check-zip':
+        await _checkZip(File(_required(options, '--zip')), UpdateManifest.parse(File(_required(options, '--manifest')).readAsBytesSync()));
       case 'delete-key':
         if (!service.endsWith('-dryrun')) _fail('Only a throwaway key (a service ending in -dryrun) can be deleted here.');
         await _security(['delete-generic-password', '-s', service, '-a', account]);
@@ -80,6 +86,39 @@ Future<void> main(List<String> arguments) async {
     _fail(error.message);
   } on FileSystemException catch (error) {
     _fail('${error.path}: ${error.osError?.message ?? error.message}');
+  }
+}
+
+/// The zip is what the manifest says (size, SHA-256), unpacks the way the app unpacks it (package:archive), and holds
+/// a whole x64 Mochi: the app, the helper, Flutter, the AOT code and the VC++ runtime.
+Future<void> _checkZip(File zip, UpdateManifest manifest) async {
+  if (zip.lengthSync() != manifest.size) _fail('The zip is ${zip.lengthSync()} bytes; the manifest says ${manifest.size}.');
+  if (await UpdateSigning.sha256OfFile(zip.path) != manifest.sha256) _fail("The zip's SHA-256 isn't the manifest's.");
+  final temp = Directory.systemTemp.createTempSync('mochi_release_check');
+  try {
+    final input = InputFileStream(zip.path);
+    try {
+      extractArchiveToDiskSync(ZipDecoder().decodeStream(input), temp.path);
+    } finally {
+      input.closeSync();
+    }
+    final root = File('${temp.path}/Mochi/Mochi.exe').existsSync() ? '${temp.path}/Mochi' : temp.path;
+    const needed = ['Mochi.exe', 'mochi_hook.exe', 'flutter_windows.dll', 'data/app.so', 'data/icudtl.dat'];
+    const runtime = ['msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'];
+    for (final name in [...needed, ...runtime]) {
+      final file = File('$root/$name');
+      if (!file.existsSync()) _fail('The zip has no $name.');
+      if (name.endsWith('.exe') || name.endsWith('.dll')) {
+        final bytes = file.readAsBytesSync();
+        final pe = bytes.length > 64 ? bytes[60] | bytes[61] << 8 | bytes[62] << 16 | bytes[63] << 24 : -1;
+        final machine = pe > 0 && pe + 6 <= bytes.length ? bytes[pe + 4] | bytes[pe + 5] << 8 : -1;
+        if (machine != 0x8664) _fail('$name in the zip is not x64 (machine 0x${machine.toRadixString(16)}).');
+      }
+    }
+    final files = Directory(root).listSync(recursive: true).whereType<File>().length;
+    stdout.writeln('The zip checks out: $files files, x64, with the VC++ runtime.');
+  } finally {
+    temp.deleteSync(recursive: true);
   }
 }
 

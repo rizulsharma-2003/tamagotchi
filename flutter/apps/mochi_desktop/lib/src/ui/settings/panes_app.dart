@@ -426,7 +426,7 @@ class UpdatesGroup extends StatelessWidget {
   final SettingsHost host;
 
   /// The status line: a title, whether all is well, and a word on it.
-  static (String, bool, String) status(Updater updater, {required String runningFrom, required String Function(DateTime) time}) {
+  static (String, bool, String) status(Updater updater, {required String Function(DateTime) time}) {
     final version = updater.newVersion;
     final problem = updater.problem;
     final checked = updater.checkedAt;
@@ -463,7 +463,7 @@ class UpdatesGroup extends StatelessWidget {
         final settings = desktop.settings;
         final phase = updater.phase;
         String time(DateTime at) => MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(at.toLocal()));
-        final (title, ok, detail) = status(updater, runningFrom: installer.runningFrom, time: time);
+        final (title, ok, detail) = status(updater, time: time);
         final busy = phase == UpdatePhase.checking || phase == UpdatePhase.downloading || phase == UpdatePhase.verifying;
         final notes = updater.notes;
         return SettingsGroup(

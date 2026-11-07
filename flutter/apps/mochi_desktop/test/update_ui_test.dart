@@ -250,7 +250,8 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       });
       await tester.pump();
-      expect(rig.processes.launched.single.arguments.take(2), ['update', '--staged']);
+      expect(rig.processes.launched.map((launch) => launch.arguments.first), ['warm', 'update']);
+      expect(rig.processes.launched.last.arguments.take(2), ['update', '--staged']);
       expect(shell.quit_, isTrue, reason: 'Mochi quits so the helper can swap it');
     });
 
@@ -264,7 +265,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       });
       await tester.pump();
-      expect(rig.processes.launched, hasLength(1));
+      expect(rig.processes.launched.last.arguments.first, 'update');
       expect(shell.quit_, isTrue);
     });
 
