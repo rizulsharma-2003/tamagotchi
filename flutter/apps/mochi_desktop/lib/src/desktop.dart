@@ -394,6 +394,22 @@ class MochiDesktop {
   /// only update the badge).
   void _transition(SessionTransition transition) => reactions.handle(transition, previousPrimary: _previousPrimary);
 
+  /// "Milestone" in the popover (the Mac's): a milestone you reached, recorded as a real event for the session Mochi
+  /// follows, so it's celebrated (graduation the first time), notified as Settings › Notifications says, and shared.
+  void markMilestone() {
+    final now = sessions.now;
+    final primary = sessions.primary;
+    final event = WireEvent(id: 'manual-${now.microsecondsSinceEpoch}', ts: now.microsecondsSinceEpoch / 1e6, origin: WireOrigin.report, event: 'Report')
+      ..report = const WireReport(kind: 'milestone', status: 'reached', label: 'Marked by you');
+    if (primary != null && primary.isLive) {
+      event
+        ..session = primary.id
+        ..project = primary.project
+        ..projectKey = primary.projectKey;
+    }
+    _live(event);
+  }
+
   /// Petting, play or treats on this PC (Mochi reacts, and so do the phones).
   void interact(String kind) {
     cue(switch (kind) {

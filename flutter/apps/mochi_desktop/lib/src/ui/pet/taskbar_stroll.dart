@@ -139,6 +139,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
        stroller = Stroller(random: random, tuning: tuning),
        _roaming = settings.roamTaskbar {
     _cues = cues.listen(_cue);
+    _celebrations = companion?.host.celebrated.listen((_) => _celebrated());
     settings.addListener(_settingsChanged);
     motion.addListener(_motionChanged);
     companion?.addListener(_companionChanged);
@@ -201,6 +202,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   final Duration Function() _idle;
   final double Function() _clock;
   late final StreamSubscription<PetCue> _cues;
+  StreamSubscription<Object?>? _celebrations;
 
   Surface _surface = Surface.hidden;
   PetPlacement _placement = PetPlacement.away;
@@ -1133,6 +1135,12 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     if (settings.companionOnlyMoments) _companionChanged();
   }
 
+  /// A real Claude moment earned a celebration (G2): with "only for interesting moments", Patch comes out for it.
+  void _celebrated() {
+    _momentUntil = _clock() + momentLength;
+    if (settings.companionOnlyMoments) _companionChanged();
+  }
+
   /// With "only for interesting moments", Patch is looked at again every couple of seconds while he's out, so he goes
   /// when the moment is over.
   void _watchMoments() {
@@ -1337,6 +1345,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     _precise(false);
     if (_covered) shell.petWindow?.uncover();
     unawaited(_cues.cancel());
+    unawaited(_celebrations?.cancel());
     settings.removeListener(_settingsChanged);
     motion.removeListener(_motionChanged);
     companion?.removeListener(_companionChanged);

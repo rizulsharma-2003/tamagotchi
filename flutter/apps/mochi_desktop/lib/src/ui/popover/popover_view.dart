@@ -597,6 +597,17 @@ class _PetControls extends StatelessWidget {
             onTap: () => desktop.interact('treat'),
           ),
         ),
+        const SizedBox(width: Space.s),
+        // The Mac's Milestone: a milestone you reached, celebrated (graduation the first time) and kept in the history.
+        Expanded(
+          child: _ControlButton(
+            title: 'Milestone',
+            label: 'Mark a milestone you reached',
+            icon: Icons.star_rounded,
+            tint: p.success,
+            onTap: desktop.markMilestone,
+          ),
+        ),
       ],
     );
   }

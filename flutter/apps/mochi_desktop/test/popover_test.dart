@@ -204,13 +204,13 @@ void main() {
   testWidgets('the keyboard: it opens with the focus on Pet, Tab moves on, Enter and Space press, Escape closes it', (tester) async {
     final state = await open(tester);
     final settings = t.desktop.settings;
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    for (var i = 0; i < 4; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    }
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
-    expect(settings.pauseReactions, isTrue, reason: 'Pet, Play, Treat, then Pause');
+    expect(settings.pauseReactions, isTrue, reason: 'Pet, Play, Treat, Milestone, then Pause');
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pump();
     expect(settings.pauseReactions, isFalse);
@@ -219,6 +219,18 @@ void main() {
     await follow(tester);
     expect(state.surface, Surface.pet);
     expect(shell.shown.last, Surface.pet);
+  });
+
+  testWidgets("Milestone (the Mac's): a milestone you reached is recorded and celebrated (G2), for the session Mochi follows", (tester) async {
+    await open(tester);
+    expect(find.bySemanticsLabel('Mark a milestone you reached'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Mark a milestone you reached'));
+    await tester.pump();
+    final world = t.desktop.world;
+    expect(world.world.progress.milestones, 1);
+    expect(world.world.progress.unlockedIDs.map((id) => id.name), contains('firstMilestone'));
+    expect(world.lastCelebration?.celebration.reason.name, 'firstMilestone', reason: 'graduation, the first time');
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('a click elsewhere closes it, and Mochi is back on the very spot it left; a click on Mochi opens it again', (tester) async {

@@ -8,6 +8,7 @@ import 'package:mochi_art/mochi_art.dart' show RenderDetail;
 import 'package:mochi_ui/mochi_ui.dart';
 
 import '../../core/desktop_settings.dart' show DesktopStyle;
+import '../../core/desktop_world.dart' show DesktopWorld;
 import '../../core/hotkeys.dart' show MochiShortcut;
 import '../../core/notifications.dart' show NotificationCategory;
 import '../../core/pet_cues.dart';
@@ -75,10 +76,20 @@ class _PetSurfaceState extends State<PetSurface> {
   bool _focused = false;
   bool _bubbleShown = false;
 
+  StreamSubscription<Object?>? _celebrations;
+
   @override
   void initState() {
     super.initState();
     _cues = widget.desktop.cues.listen(_cue);
+    // Celebrations from Claude's real moments (G2), said for the screen reader as they play.
+    _celebrations = widget.desktop.world.celebrated.listen((celebration) {
+      final settings = widget.desktop.settings;
+      SemanticsService.announce(
+        DesktopWorld.describeCelebration(celebration, pet: settings.petName, patch: settings.companionName),
+        TextDirection.ltr,
+      );
+    });
     widget.desktop.hotkeys.addListener(_shortcutsChanged);
     _shortcutsChanged();
   }
@@ -137,6 +148,7 @@ class _PetSurfaceState extends State<PetSurface> {
   @override
   void dispose() {
     unawaited(_cues?.cancel());
+    unawaited(_celebrations?.cancel());
     widget.desktop.hotkeys.removeListener(_shortcutsChanged);
     _bubbleTimer?.cancel();
     super.dispose();

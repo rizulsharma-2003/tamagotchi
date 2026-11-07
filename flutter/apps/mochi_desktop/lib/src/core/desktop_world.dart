@@ -12,6 +12,12 @@
 // - Settings (the Mac's keys), Windows' "Animation effects", and whether Mochi's window or popover is open.
 // - This PC's own moments: petting, play and treats (here or from a phone), Ask Mochi, updates.
 //
+// Celebrations (G2) come only from Claude's real moments, live: a high five for a finished turn, a victory dance for a
+// long one (both ends seen live), the tiny trophy for a real build or test result, detective mode after repeated tool
+// errors and case closed when that turn ends, graduation for the first milestone. Never for late events (the spool) or
+// restored ones (the last hours, rebuilt at launch), and simulated activity (a development tool) doesn't reach Mochi
+// here at all, as it doesn't reach the sessions.
+//
 // What comes out: the poses (drawn by the views), a speech bubble (W11), a note at the top of the scene (achievements,
 // a new friendship level, growing up), and sounds and Windows notifications for the world's own moments
 // (achievements, petting, growing up) through the app's sounds and toasts, with the Mac's rules. Claude's moments keep
@@ -30,7 +36,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:mochi_art/mochi_art.dart' show PetRenderer;
-import 'package:mochi_wire/mochi_wire.dart' show WireEvent;
+import 'package:mochi_wire/mochi_wire.dart' show WireEvent, WireOrigin;
 import 'package:mochi_world/mochi_world.dart' as w;
 
 import 'desktop_settings.dart';
@@ -115,7 +121,18 @@ class DesktopWorld extends ChangeNotifier {
       effects: _WorldEffects(this),
     );
     world.setSystemReducedMotion(_reducedMotion());
-    if (savedWorld.isNotEmpty) world.restore(savedWorld, progressToo: false);
+    celebrations = w.Celebrations(
+      settings: world.settings,
+      milestoneReached: world.progress.unlockedIDs.contains(w.AchievementID.firstMilestone),
+    );
+    if (savedWorld.isNotEmpty) {
+      world.restore(savedWorld, progressToo: false);
+      // The classifier knows the restored sessions too (restored events never celebrate).
+      final history = savedWorld['history'];
+      for (final json in history is List ? history : const []) {
+        if (w.eventFromJson(json) case final event?) celebrations.observe(event.withDelivery(w.EventDelivery.restored));
+      }
+    }
     speech = w.SpeechDirector(world);
     _growth(announce: false);
     _signature = _currentSignature();
@@ -143,6 +160,30 @@ class DesktopWorld extends ChangeNotifier {
 
   /// When Mochi and Patch speak (W11).
   late final w.SpeechDirector speech;
+
+  /// Why Claude's real moments celebrate (G2), fed every event in order.
+  late final w.Celebrations celebrations;
+
+  /// The last celebration a real, live event earned (and when, on the world's clock).
+  ({w.Celebration celebration, double at})? lastCelebration;
+
+  final StreamController<w.Celebration> _celebrated = StreamController.broadcast(sync: true);
+
+  /// Each celebration as a real, live event earns it (for the screen reader, and "Patch only for interesting moments").
+  Stream<w.Celebration> get celebrated => _celebrated.stream;
+
+  /// What a celebration is, in plain words, by the names you gave them (the screen reader says it as it plays).
+  static String describeCelebration(w.Celebration celebration, {required String pet, required String patch}) =>
+      switch (celebration.reason) {
+        w.CelebrationReason.turnFinished => '$pet and $patch high-five: Claude finished',
+        w.CelebrationReason.longTurn => '$pet and $patch do a victory dance: a long turn is done',
+        w.CelebrationReason.buildTestPassed => '$patch holds up a tiny trophy: a real build or test passed',
+        w.CelebrationReason.investigating => '$patch puts on his detective hat: a few tool errors in a row',
+        w.CelebrationReason.caseClosed => 'Case closed! Claude got past the errors',
+        w.CelebrationReason.firstMilestone => '$pet and $patch graduate: your first milestone',
+        w.CelebrationReason.milestone => '$pet and $patch celebrate a milestone',
+        w.CelebrationReason.commit => '$pet and $patch high-five: a commit',
+      };
 
   Timer? _ticker;
   bool _dirty = false;
@@ -199,9 +240,25 @@ class DesktopWorld extends ChangeNotifier {
 
   // MARK: What goes in
 
-  /// One of Claude Code's hook events: live from the bridge, or [late] from the helper's spool (history only).
+  /// One of Claude Code's hook events: live from the bridge, or [late] from the helper's spool (history only). Simulated
+  /// activity never reaches Mochi here, as it never reaches the sessions.
   void ingest(WireEvent event, {bool late = false}) {
-    world.ingestWire(event.toJson(), delivery: late ? w.EventDelivery.late : w.EventDelivery.live);
+    if (event.origin == WireOrigin.simulator) return;
+    final wire = event.toJson();
+    if (w.EventNormalizer.isPing(wire)) return world.ingestWire(wire);
+    final source = world.settings.keepNotificationText ? wire : (Map<String, Object?>.of(wire)..remove('message'));
+    final normalized = w.EventNormalizer.normalize(source, receivedAt: _clock(), delivery: late ? w.EventDelivery.late : w.EventDelivery.live);
+    if (normalized == null) return;
+    final duplicates = world.diagnostics.duplicatesIgnored;
+    world.ingest(normalized);
+    // A duplicate the world ignored isn't news for the classifier either.
+    if (world.diagnostics.duplicatesIgnored == duplicates) {
+      final celebration = celebrations.observe(normalized);
+      if (celebration != null) {
+        lastCelebration = (celebration: celebration, at: world.now);
+        if (!_celebrated.isClosed) _celebrated.add(celebration);
+      }
+    }
     _changed();
   }
 
@@ -373,6 +430,7 @@ class DesktopWorld extends ChangeNotifier {
   void _settingsChanged() {
     final pinned = world.settings.pinnedSessionID;
     world.settings = worldSettings(settings).copyWith(pinnedSessionID: () => pinned);
+    celebrations.settings = world.settings;
     // Growing up turned on or off: the stage changes at once.
     if (settings.lifeStages != _lifeStagesSeen) {
       _lifeStagesSeen = settings.lifeStages;
@@ -445,6 +503,7 @@ class DesktopWorld extends ChangeNotifier {
     _ticker?.cancel();
     settings.removeListener(_settingsChanged);
     rhythm.removeListener(_rhythmChanged);
+    unawaited(_celebrated.close());
     super.dispose();
   }
 }
