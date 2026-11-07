@@ -26,6 +26,14 @@ struct PhoneSettingsView: View {
     private var androidName: String? {
         link.phones.first { $0.linkPlatform == .android }.map { $0.name ?? "Your Android phone" }
     }
+    /// Which phones show Mochi on their lock screen, as the toggle and the test button name them.
+    private var lockScreenPhones: String {
+        switch (hasIPhone || androidName == nil, androidName != nil) {
+        case (true, true): "phones"
+        case (false, true): "Android phone"
+        default: "iPhone"
+        }
+    }
     /// The paired iPhone's own name ("Rizul's iPhone").
     private var iPhoneName: String {
         link.phones.first { $0.linkPlatform == .iOS }?.name ?? "Your iPhone"
@@ -69,13 +77,16 @@ struct PhoneSettingsView: View {
                 }
             }
 
-            Section(androidName == nil ? "Live Activity on iPhone" : "On your phones' lock screens") {
-                Toggle("Show \(name) on my \(androidName == nil ? "iPhone" : "phones")", isOn: $store.settings.phone.enabled)
-                Text("A Live Activity on your iPhone's Lock Screen and in the Dynamic Island while Claude works. It lights up "
-                     + "when Claude needs you and celebrates when Claude is done. Needs Mochi on your iPhone, paired above.")
-                    .font(.caption).foregroundStyle(.secondary)
+            Section(androidName == nil ? "Live Activity on iPhone" : "On your lock screen") {
+                Toggle("Show \(name) on my \(lockScreenPhones)", isOn: $store.settings.phone.enabled)
+                if hasIPhone || androidName == nil {
+                    Text("A Live Activity on your iPhone's Lock Screen and in the Dynamic Island while Claude works. It lights up "
+                         + "when Claude needs you and celebrates when Claude is done. Needs Mochi on your iPhone, paired above.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 if let androidName, link.paired {
-                    Label("\(androidName) shows it as an ongoing notification on its lock screen.", systemImage: "info.circle")
+                    Label("\(androidName) shows it as an ongoing notification on its lock screen while Claude works, "
+                          + "and lights up when Claude needs you.", systemImage: "info.circle")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if link.paired, !hasIPhone {
@@ -92,7 +103,8 @@ struct PhoneSettingsView: View {
                            detail: phone.activityRunning ? "Showing “\(phone.shown?.title ?? "")”" : "Not showing")
                 }
                 HStack {
-                    Button("Send a Test to My \(androidName == nil ? "iPhone" : "Phones")") { phone.sendTest() }.disabled(!ready)
+                    Button("Send a Test to My \(["phones": "Phones", "Android phone": "Android Phone"][lockScreenPhones] ?? lockScreenPhones)") { phone.sendTest() }
+                        .disabled(!ready)
                     Button("End It") { phone.endNow() }.disabled(!link.paired || (!hasIPhone && androidName == nil))
                 }
                 if !link.paired {
