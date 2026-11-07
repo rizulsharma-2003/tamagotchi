@@ -511,6 +511,9 @@ class CompanionDirector extends ChangeNotifier {
     return loop == null ? CompanionPose() : loop.calmed(t, calm: calm);
   }
 
+  /// He's waiting with you (Claude needs you).
+  bool get waiting => _present && !_departing && _base == CompanionAnimation.waiting;
+
   /// Something is playing that needs smooth frames (a one-shot, an interaction, the burst).
   bool busyAt(double t) => scene(t) != null || _playingShot(t) || burstAt(t) != null || pending != null;
 

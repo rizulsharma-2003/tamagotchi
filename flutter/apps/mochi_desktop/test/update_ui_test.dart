@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_desktop/src/desktop.dart' show appVersion, appBuild;
 import 'package:mochi_desktop/src/core/pet_cues.dart';
+import 'package:mochi_desktop/src/core/desktop_settings.dart' show DesktopStyle;
 import 'package:mochi_desktop/src/ui/app.dart';
 import 'package:mochi_desktop/src/ui/screens/home_screen.dart';
 import 'package:mochi_desktop/src/ui/screens/settings_screen.dart';
@@ -241,9 +242,9 @@ void main() {
       await check(tester);
       await tester.pump();
       expect(shell.trayUpdate, [true]);
-      final labels = NativeShell.trayItems(roaming: true, updateReady: true).map((item) => item.label).toList();
+      final labels = NativeShell.trayItems(style: DesktopStyle.roam, updateReady: true).map((item) => item.label).toList();
       expect(labels.first, 'Restart to Update');
-      expect(NativeShell.trayItems(roaming: true).map((item) => item.label), isNot(contains('Restart to Update')));
+      expect(NativeShell.trayItems(style: DesktopStyle.roam).map((item) => item.label), isNot(contains('Restart to Update')));
 
       final button = inUpdates(find.text('Restart to Update'));
       await tester.ensureVisible(button);

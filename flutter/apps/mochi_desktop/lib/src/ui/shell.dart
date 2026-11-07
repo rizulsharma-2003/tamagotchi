@@ -9,12 +9,14 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart' show Alignment, Colors, Rect;
 import 'package:flutter/services.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../core/desktop_settings.dart' show PetSize, DesktopStyle;
 import '../platform/taskbar.dart';
 import '../platform/win32_taskbar.dart';
 
@@ -28,11 +30,11 @@ enum ShellAction {
   pair,
   settings,
 
-  /// "Roam along the taskbar", switched on or off.
-  toggleRoaming,
-
-  /// "Back to the taskbar": roaming on again after Mochi was dragged off it.
-  backToTaskbar,
+  /// Where Mochi lives (the Mac's menu-bar styles): roaming the taskbar, playing in its spot there, or as the classic
+  /// tray icon.
+  roamTaskbar,
+  playInSpot,
+  trayIcon,
 
   /// The popover lost the focus (a click somewhere else): it closes, as a flyout does.
   dismissPopover,
@@ -49,8 +51,8 @@ enum WindowEdge { top, bottom, left, right, topLeft, topRight, bottomLeft, botto
 
 abstract interface class DesktopShell {
   /// Shows [surface]: the pet at [petPosition] (screen coordinates; null: bottom left, just above the taskbar), with
-  /// the window [petSize] big.
-  Future<void> show(Surface surface, {Offset? petPosition, Size petSize = SurfaceSizes.pet});
+  /// the window [petSize] big, or exactly at [petFrame] (physical pixels, Windows), above other windows or not ([onTop]).
+  Future<void> show(Surface surface, {Offset? petPosition, Size petSize = SurfaceSizes.pet, bool onTop = true, PixelRect? petFrame});
 
   /// The pet's window for Win32 moves (Windows only; null elsewhere, where Mochi doesn't roam).
   PetWindow? get petWindow;
@@ -63,8 +65,12 @@ abstract interface class DesktopShell {
   Size get mainSize;
   set mainSize(Size size);
 
-  /// Ticks (or unticks) "Roam along the taskbar" in the tray menu.
-  Future<void> setRoaming(bool roaming);
+  /// Ticks where Mochi lives in the tray menu.
+  Future<void> setStyle(DesktopStyle style);
+
+  /// The tray icon: the app's own, or (the classic tray icon) a picture of Mochi as it is now ([path], an .ico file),
+  /// and what it says when you point at it.
+  Future<void> setTrayIcon({String? path, required String tooltip});
 
   /// Shows (or hides) "Restart to Update" at the top of the tray menu.
   Future<void> setUpdateReady(bool ready);
@@ -94,8 +100,12 @@ abstract interface class DesktopShell {
 
 /// The size of each form, in logical pixels.
 abstract final class SurfaceSizes {
-  /// The pet standing still: Mochi with room for its speech bubble above.
+  /// The pet standing still (at its medium size): Mochi with room for its speech bubble above.
   static const Size pet = Size(176, 200);
+
+  /// The desktop pet at [size]: its box, and room for the bubble above it (never narrower than the bubble).
+  static Size standing(PetSize size) =>
+      Size(math.max(pet.width, (size.stage * pet.width / petStage).roundToDouble()), size.stage + bubble);
 
   /// The pet's window in the taskbar is Mochi's box (TaskbarStage.box, sized by the taskbar); with a speech bubble it
   /// grows upwards by [bubble] and widens to this.
@@ -134,7 +144,7 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   final StreamController<ShellAction> _actions = StreamController.broadcast();
   Surface _surface = Surface.hidden;
   PetWindow? _petWindow;
-  bool _roaming = true;
+  DesktopStyle _style = DesktopStyle.roam;
   bool _updateReady = false;
 
   @override
@@ -184,39 +194,59 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
     trayManager.addListener(this);
     await trayManager.setIcon(Platform.isWindows ? 'assets/tray/tray_icon.ico' : 'assets/tray/tray_icon.png');
     if (!Platform.isLinux) await trayManager.setToolTip('Mochi');
-    await trayManager.setContextMenu(Menu(items: trayItems(roaming: _roaming, updateReady: _updateReady)));
+    await trayManager.setContextMenu(Menu(items: trayItems(style: _style, updateReady: _updateReady)));
+  }
+
+  static const String _appIcon = 'assets/tray/tray_icon.ico';
+  String? _trayIcon;
+  String? _tooltip;
+
+  @override
+  Future<void> setTrayIcon({String? path, required String tooltip}) async {
+    final icon = path ?? (Platform.isWindows ? _appIcon : 'assets/tray/tray_icon.png');
+    if (icon != _trayIcon) {
+      _trayIcon = icon;
+      // An absolute path is used as it is (tray_manager joins it to the assets folder otherwise).
+      await trayManager.setIcon(icon);
+    }
+    if (tooltip != _tooltip && !Platform.isLinux) {
+      _tooltip = tooltip;
+      await trayManager.setToolTip(tooltip);
+    }
   }
 
   /// The tray menu.
-  static List<MenuItem> trayItems({required bool roaming, bool updateReady = false}) => [
+  static List<MenuItem> trayItems({required DesktopStyle style, bool updateReady = false}) => [
     if (updateReady) ...[MenuItem(key: ShellAction.restartToUpdate.name, label: 'Restart to Update'), MenuItem.separator()],
     MenuItem(key: ShellAction.showMain.name, label: 'Show Mochi'),
     MenuItem(key: ShellAction.pair.name, label: 'Pair a Phone…'),
     MenuItem(key: ShellAction.settings.name, label: 'Settings'),
     MenuItem.separator(),
-    MenuItem.checkbox(key: ShellAction.toggleRoaming.name, label: 'Roam along the taskbar', checked: roaming),
-    MenuItem(key: ShellAction.backToTaskbar.name, label: 'Back to the taskbar', disabled: roaming),
+    // Where Mochi lives, as the Mac's status menu lists its styles.
+    MenuItem.checkbox(key: ShellAction.roamTaskbar.name, label: DesktopStyle.roam.title, checked: style == DesktopStyle.roam),
+    MenuItem.checkbox(key: ShellAction.playInSpot.name, label: DesktopStyle.spot.title, checked: style == DesktopStyle.spot),
+    MenuItem.checkbox(key: ShellAction.trayIcon.name, label: DesktopStyle.icon.title, checked: style == DesktopStyle.icon),
     MenuItem.separator(),
     MenuItem(key: ShellAction.quit.name, label: 'Quit Mochi'),
   ];
 
   @override
-  Future<void> setRoaming(bool roaming) async {
-    if (roaming == _roaming) return;
-    _roaming = roaming;
-    await trayManager.setContextMenu(Menu(items: trayItems(roaming: roaming, updateReady: _updateReady)));
+  Future<void> setStyle(DesktopStyle style) async {
+    if (style == _style) return;
+    _style = style;
+    await trayManager.setContextMenu(Menu(items: trayItems(style: style, updateReady: _updateReady)));
   }
 
   @override
   Future<void> setUpdateReady(bool ready) async {
     if (ready == _updateReady) return;
     _updateReady = ready;
-    await trayManager.setContextMenu(Menu(items: trayItems(roaming: _roaming, updateReady: ready)));
+    await trayManager.setContextMenu(Menu(items: trayItems(style: _style, updateReady: ready)));
     if (!Platform.isLinux) await trayManager.setToolTip(ready ? 'Mochi: an update is ready' : 'Mochi');
   }
 
   @override
-  Future<void> show(Surface surface, {Offset? petPosition, Size petSize = SurfaceSizes.pet}) async {
+  Future<void> show(Surface surface, {Offset? petPosition, Size petSize = SurfaceSizes.pet, bool onTop = true, PixelRect? petFrame}) async {
     final previous = _surface;
     _surface = surface;
     if (surface != Surface.main) _mainShown = null;
@@ -231,10 +261,14 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
       case Surface.hidden:
         await windowManager.hide();
       case Surface.pet:
-        await _form(onTop: true, skipTaskbar: true, resizable: false, shadow: false);
+        await _form(onTop: onTop, skipTaskbar: true, resizable: false, shadow: false);
         await windowManager.setMinimumSize(SurfaceSizes.petMinimum);
         // Back from the popover on Windows, the stroll has already put the window back exactly where it was.
-        if (previous != Surface.popover || _petWindow == null) {
+        final window = _petWindow;
+        if (window != null && petFrame != null) {
+          // Exactly, in physical pixels on the display it goes to (its place there).
+          await window.setFrame(petFrame);
+        } else if (previous != Surface.popover || window == null) {
           await windowManager.setSize(petSize);
           if (petPosition != null) {
             await windowManager.setPosition(petPosition);

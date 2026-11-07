@@ -224,9 +224,15 @@ class Win32TaskbarInfo implements TaskbarInfo {
     }
   }
 
+  /// The taskbar is light (Settings › Personalization › Colors: "Choose your default Windows mode" light).
+  static bool lightTheme() => _dword(r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize', 'SystemUsesLightTheme') == 1;
+
   /// A DWORD under HKCU\…\Explorer\Advanced (null if it isn't set: Windows 11's defaults, centred with widgets).
-  static int? _explorerSetting(String value) {
-    final key = r'Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'.toNativeUtf16();
+  static int? _explorerSetting(String value) => _dword(r'Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced', value);
+
+  /// A DWORD under HKCU\[path] (null if it isn't set).
+  static int? _dword(String path, String value) {
+    final key = path.toNativeUtf16();
     final name = value.toNativeUtf16();
     final data = calloc<Uint32>();
     final size = calloc<Uint32>()..value = sizeOf<Uint32>();

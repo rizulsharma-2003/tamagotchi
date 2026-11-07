@@ -51,6 +51,88 @@ class MemorySettingsDocument implements SettingsDocument {
   void write(Map<String, Object?> json) => this.json = json;
 }
 
+/// Where Mochi lives (the Mac's menu-bar style, `MenuBarStyle`, on the taskbar).
+enum DesktopStyle {
+  /// Mochi strolls in the taskbar's empty stretches (the Mac's "Roam the menu bar").
+  roam('Roams the taskbar'),
+
+  /// Mochi stays in one spot on the taskbar and plays there (the Mac's "Play in the status item").
+  spot('Plays in its spot'),
+
+  /// Off the taskbar: the tray icon is Mochi, blinking, pulsing while Claude works and hopping when a turn completes
+  /// (the Mac's "Classic icon"); the desktop pet, if it shows, stands where you leave it.
+  icon('Classic tray icon');
+
+  const DesktopStyle(this.title);
+  final String title;
+
+  bool get onTaskbar => this != icon;
+}
+
+/// Small, medium or large (the Mac's `DesktopPetSize`, and its status-item widths for the spot).
+enum PetSize {
+  small('Small'),
+  medium('Medium'),
+  large('Large');
+
+  const PetSize(this.title);
+  final String title;
+
+  /// The desktop pet's box (logical pixels): Mochi's stage, with the window's room for a bubble above it. Medium is the
+  /// size it always had; small and large follow the Mac's 84 : 116 : 156.
+  double get stage => switch (this) {
+    small => 104,
+    medium => 144,
+    large => 194,
+  };
+
+  /// How far Mochi plays either way of its spot on the taskbar, all told (logical pixels; the Mac's 40, 64 and 96-point
+  /// items, less Mochi itself, and a little more for the wider taskbar).
+  double get spotRoom => switch (this) {
+    small => 24,
+    medium => 64,
+    large => 120,
+  };
+}
+
+/// How the classic tray icon moves (the Mac's `MenuBarAnimation`).
+enum TrayAnimation {
+  off('Static'),
+  subtle('Subtle'),
+  full('Expressive');
+
+  const TrayAnimation(this.title);
+  final String title;
+}
+
+/// Where the desktop pet was left on one display: its window's top-left as a share of the room the display's work area
+/// leaves it (0 at the left or top, 1 at the right or bottom), as the Mac keeps it.
+@immutable
+class PetPlace {
+  const PetPlace(this.x, this.y);
+
+  final double x;
+  final double y;
+
+  static PetPlace? fromJson(Object? json) {
+    if (json is! List || json.length != 2 || !json.every((value) => value is num)) return null;
+    final x = (json[0] as num).toDouble(), y = (json[1] as num).toDouble();
+    if (!x.isFinite || !y.isFinite) return null;
+    return PetPlace(x.clamp(0, 1), y.clamp(0, 1));
+  }
+
+  List<double> toJson() => [x, y];
+
+  @override
+  bool operator ==(Object other) => other is PetPlace && other.x == x && other.y == y;
+
+  @override
+  int get hashCode => Object.hash(x, y);
+
+  @override
+  String toString() => 'PetPlace($x, $y)';
+}
+
 /// When the coding companion is around (the Mac's `CompanionVisibility`).
 enum CompanionVisibility {
   /// While a Claude Code session is open, and a while after the last one ends.
@@ -77,8 +159,11 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   /// The file's format. Version 1 had no number (theme, the pet, phones, Ask Mochi); 2 adds the names, the look,
   /// holidays, reactions and the day Mochi arrived; 3 the companion (when he's around, and on the taskbar); 4 the Mac's
   /// notifications (quiet mode and hours, each category's animate/badge/banner/sound, sounds), naps that follow the
-  /// PC, "only when I'm away" for the phones, and the global shortcuts.
-  static const int version = 4;
+  /// PC, "only when I'm away" for the phones, and the global shortcuts; 5 the desktop pet's options (where Mochi lives,
+  /// its spot and room, the size, always on top, clicks passing through, a place on each display, the tray icon's
+  /// animation, and Patch only for interesting moments). `roamTaskbar` is still written (whether Mochi is on the
+  /// taskbar) for an older Mochi reading the file.
+  static const int version = 5;
 
   /// The Mac's stepper for "Rests after … min without typing or clicking".
   static const int maxRestAfterMinutes = 60;
@@ -98,7 +183,6 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
 
   ThemeMode _themeMode = ThemeMode.system;
   bool _showPet = true;
-  bool _roamTaskbar = true;
   bool _shareSummaries = false;
   bool _acceptCommands = true;
   String _model = 'haiku';
@@ -134,6 +218,17 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   bool _companionOnTaskbar = true;
   bool _autoUpdate = true;
   bool _installDeclined = false;
+  DesktopStyle _petStyle = DesktopStyle.roam;
+  DesktopStyle _taskbarStyle = DesktopStyle.roam;
+  PetSize _petSize = PetSize.medium;
+  PetSize _spotRoom = PetSize.medium;
+  double? _spotX;
+  bool _petOnTop = true;
+  bool _petClickThrough = false;
+  final Map<String, PetPlace> _petPlaces = {};
+  String? _petDisplay;
+  TrayAnimation _trayAnimation = TrayAnimation.subtle;
+  bool _companionOnlyMoments = false;
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -141,7 +236,29 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     T? named<T extends Enum>(List<T> values, Object? name) => values.where((value) => value.name == name).firstOrNull;
     _themeMode = named(ThemeMode.values, json['theme']) ?? ThemeMode.system;
     _showPet = flag('showPet', true);
-    _roamTaskbar = flag('roamTaskbar', true);
+    // Before version 5 there was only "Roam along the taskbar": off is Mochi off the taskbar (the classic tray icon).
+    final roam = flag('roamTaskbar', true);
+    _taskbarStyle = named(DesktopStyle.values, json['taskbarStyle']) ?? DesktopStyle.roam;
+    if (_taskbarStyle == DesktopStyle.icon) _taskbarStyle = DesktopStyle.roam;
+    _petStyle = named(DesktopStyle.values, json['petStyle']) ?? (roam ? DesktopStyle.roam : DesktopStyle.icon);
+    if (_petStyle.onTaskbar) _taskbarStyle = _petStyle;
+    _petSize = named(PetSize.values, json['petSize']) ?? PetSize.medium;
+    _spotRoom = named(PetSize.values, json['spotRoom']) ?? PetSize.medium;
+    final spot = json['spotX'];
+    _spotX = spot is num && spot.isFinite ? spot.toDouble() : null;
+    _petOnTop = flag('petOnTop', true);
+    _petClickThrough = flag('petClickThrough', false);
+    _petPlaces.clear();
+    final places = json['petPlaces'];
+    if (places is Map) {
+      for (final MapEntry(:key, :value) in places.entries) {
+        final place = PetPlace.fromJson(value);
+        if (key is String && place != null && key.isNotEmpty) _petPlaces[key] = place;
+      }
+    }
+    _petDisplay = json['petDisplay'] is String ? json['petDisplay']! as String : null;
+    _trayAnimation = named(TrayAnimation.values, json['trayAnimation']) ?? TrayAnimation.subtle;
+    _companionOnlyMoments = flag('companionOnlyMoments', false);
     _shareSummaries = flag('shareSummaries', false);
     _acceptCommands = flag('acceptCommands', true);
     _model = json['model'] == 'sonnet' ? 'sonnet' : 'haiku';
@@ -234,10 +351,66 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   bool get showPet => _showPet;
   set showPet(bool value) => _set(() => _showPet = value);
 
-  /// The desktop pet strolls along the top of the taskbar (Windows, with the taskbar at the bottom). Dragging Mochi off
-  /// the taskbar turns it off, so Mochi stays where it's dropped; the tray's "Back to the taskbar" turns it on again.
-  bool get roamTaskbar => _roamTaskbar;
-  set roamTaskbar(bool value) => _set(() => _roamTaskbar = value);
+  /// Mochi is on the taskbar (Windows, with the taskbar at the bottom): it roams it or plays in its spot ([petStyle]).
+  /// Dragging Mochi off the taskbar turns it off: Mochi stays where it's dropped and the tray icon is Mochi (the classic
+  /// tray icon); turning it on again puts Mochi back the way it was on the taskbar.
+  bool get roamTaskbar => _petStyle.onTaskbar;
+  set roamTaskbar(bool value) => petStyle = value ? _taskbarStyle : DesktopStyle.icon;
+
+  /// Where Mochi lives: roaming the taskbar, playing in its spot there, or off it as the classic tray icon.
+  DesktopStyle get petStyle => _petStyle;
+  set petStyle(DesktopStyle value) => _set(() {
+    _petStyle = value;
+    if (value.onTaskbar) _taskbarStyle = value;
+  });
+
+  /// How much room Mochi plays in, in its spot on the taskbar (the Mac's status-item width).
+  PetSize get spotRoom => _spotRoom;
+  set spotRoom(PetSize value) => _set(() => _spotRoom = value);
+
+  /// Mochi's spot on the taskbar (its centre, logical pixels from the screen's left), where you last dragged it; null:
+  /// beside the notification area, as the Mac's item sits by the clock.
+  double? get spotX => _spotX;
+  set spotX(double? value) => _set(() => _spotX = value == null || !value.isFinite ? null : value);
+
+  /// The desktop pet's size (off the taskbar; on it, Mochi takes the taskbar's size).
+  PetSize get petSize => _petSize;
+  set petSize(PetSize value) => _set(() => _petSize = value);
+
+  /// The desktop pet stays above other windows (off the taskbar; on it, it's always over the taskbar).
+  bool get petOnTop => _petOnTop;
+  set petOnTop(bool value) => _set(() => _petOnTop = value);
+
+  /// Clicks pass through the desktop pet to whatever is under it (so it can't be dragged or petted; hide it with the
+  /// shortcut or the tray menu).
+  bool get petClickThrough => _petClickThrough;
+  set petClickThrough(bool value) => _set(() => _petClickThrough = value);
+
+  /// Where the desktop pet was left on each display (by its name and size), and the display it was last on.
+  Map<String, PetPlace> get petPlaces => Map.unmodifiable(_petPlaces);
+  String? get petDisplay => _petDisplay;
+
+  /// The desktop pet was left at [place] on [display] (its key, [DisplayArea.key]).
+  void placePet(String display, PetPlace place) => _set(() {
+    _petPlaces[display] = place;
+    _petDisplay = display;
+  });
+
+  /// Settings › Desktop Pet › Reset Position: bottom left on the main display again, everywhere forgotten.
+  void resetPetPosition() => _set(() {
+    _petPlaces.clear();
+    _petDisplay = null;
+    _petPosition = null;
+  });
+
+  /// How the classic tray icon moves.
+  TrayAnimation get trayAnimation => _trayAnimation;
+  set trayAnimation(TrayAnimation value) => _set(() => _trayAnimation = value);
+
+  /// Patch comes to the taskbar only for interesting moments (arriving, Claude waiting for you, an error, a celebration,
+  /// a moment with Mochi), then leaves again so Mochi stays compact while you work (the Mac's desktop pet).
+  bool get companionOnlyMoments => _companionOnlyMoments;
+  set companionOnlyMoments(bool value) => _set(() => _companionOnlyMoments = value);
 
   /// Send Claude's summaries of finished turns to the paired phones (and let the hook helper read Claude's closing
   /// message). Off by default, as on the Mac.
@@ -481,7 +654,18 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'v': version,
     'theme': _themeMode.name,
     'showPet': _showPet,
-    'roamTaskbar': _roamTaskbar,
+    'roamTaskbar': roamTaskbar,
+    'petStyle': _petStyle.name,
+    'taskbarStyle': _taskbarStyle.name,
+    'spotRoom': _spotRoom.name,
+    'spotX': ?_spotX,
+    'petSize': _petSize.name,
+    'petOnTop': _petOnTop,
+    'petClickThrough': _petClickThrough,
+    if (_petPlaces.isNotEmpty) 'petPlaces': {for (final entry in _petPlaces.entries) entry.key: entry.value.toJson()},
+    'petDisplay': ?_petDisplay,
+    'trayAnimation': _trayAnimation.name,
+    'companionOnlyMoments': _companionOnlyMoments,
     'shareSummaries': _shareSummaries,
     'acceptCommands': _acceptCommands,
     'model': _model,

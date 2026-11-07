@@ -306,27 +306,40 @@ void main() {
     expect((stroll.moving, stroll.waiting, stroll.watchingPointer), (false, false, false));
   });
 
-  group('Roam along the taskbar', () {
-    test('on by default, saved and read back', () {
+  group('Where Mochi lives', () {
+    test('roaming the taskbar by default; off the taskbar is the classic tray icon, and back is the style it had', () {
       final document = MemorySettingsDocument();
       final settings = DesktopSettings(document);
-      expect(settings.roamTaskbar, isTrue);
+      expect((settings.petStyle, settings.roamTaskbar), (DesktopStyle.roam, true));
+      settings.petStyle = DesktopStyle.spot;
       settings.roamTaskbar = false;
-      expect(document.json!['roamTaskbar'], isFalse);
+      expect((settings.petStyle, document.json!['roamTaskbar'], document.json!['petStyle']), (DesktopStyle.icon, false, 'icon'));
       expect(DesktopSettings(document).roamTaskbar, isFalse);
+      settings.roamTaskbar = true;
+      expect(settings.petStyle, DesktopStyle.spot, reason: 'back the way it was on the taskbar');
+      expect(DesktopSettings(document).petStyle, DesktopStyle.spot);
+      // A file from before version 5 had only "Roam along the taskbar".
+      expect(DesktopSettings(MemorySettingsDocument({'roamTaskbar': false})).petStyle, DesktopStyle.icon);
+      expect(DesktopSettings(MemorySettingsDocument({'roamTaskbar': true})).petStyle, DesktopStyle.roam);
     });
 
-    test('the tray menu: a tick, and "Back to the taskbar" while it\'s off', () {
+    test('the tray menu ticks where Mochi lives, as the Mac\'s status menu lists its styles', () {
       MenuItem item(List<MenuItem> items, ShellAction action) => items.firstWhere((item) => item.key == action.name);
-      final on = NativeShell.trayItems(roaming: true);
-      expect((item(on, ShellAction.toggleRoaming).type, item(on, ShellAction.toggleRoaming).checked), ('checkbox', true));
-      expect(item(on, ShellAction.backToTaskbar).disabled, isTrue);
-      final off = NativeShell.trayItems(roaming: false);
-      expect(item(off, ShellAction.toggleRoaming).checked, isFalse);
-      expect(item(off, ShellAction.backToTaskbar).disabled, isFalse);
+      for (final style in DesktopStyle.values) {
+        final items = NativeShell.trayItems(style: style);
+        final ticks = {
+          for (final action in [ShellAction.roamTaskbar, ShellAction.playInSpot, ShellAction.trayIcon]) item(items, action).label: item(items, action).checked,
+        };
+        expect(ticks, {
+          'Roams the taskbar': style == DesktopStyle.roam,
+          'Plays in its spot': style == DesktopStyle.spot,
+          'Classic tray icon': style == DesktopStyle.icon,
+        });
+        expect(item(items, ShellAction.roamTaskbar).type, 'checkbox');
+      }
     });
 
-    testWidgets('the tray item switches it, "Back to the taskbar" turns it (and the pet) on, the tick follows', (tester) async {
+    testWidgets('the tray\'s styles: the classic icon takes Mochi off the taskbar, a taskbar style puts it (and the pet) back', (tester) async {
       tester.view.physicalSize = SurfaceSizes.pet;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -336,22 +349,22 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       final state = tester.state<DesktopAppState>(find.byType(DesktopApp));
       expect(state.stroll.placement, PetPlacement.taskbar);
-      expect(shell.trayRoaming.last, isTrue);
+      expect(shell.trayStyles.last, DesktopStyle.roam);
 
-      shell.controller.add(ShellAction.toggleRoaming);
+      shell.controller.add(ShellAction.trayIcon);
       await tester.pump();
       expect(t.desktop.settings.roamTaskbar, isFalse);
-      expect(shell.trayRoaming.last, isFalse);
+      expect(shell.trayStyles.last, DesktopStyle.icon);
       await tester.pump();
       expect(state.stroll.placement, PetPlacement.standing);
 
       t.desktop.settings.showPet = false;
       await tester.pump();
-      shell.controller.add(ShellAction.backToTaskbar);
+      shell.controller.add(ShellAction.playInSpot);
       await tester.pump();
       await tester.pump();
-      expect((t.desktop.settings.roamTaskbar, t.desktop.settings.showPet), (true, true));
-      expect(shell.trayRoaming.last, isTrue);
+      expect((t.desktop.settings.petStyle, t.desktop.settings.showPet), (DesktopStyle.spot, true));
+      expect(shell.trayStyles.last, DesktopStyle.spot);
       expect(state.stroll.placement, PetPlacement.taskbar);
 
       // A right-click on Mochi in the taskbar shows the tray's menu (its window is too small for its own).

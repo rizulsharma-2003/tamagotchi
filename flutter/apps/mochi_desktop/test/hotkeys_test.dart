@@ -259,7 +259,7 @@ void main() {
       await tester.tap(find.text('Change…'));
       await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
-      expect(find.text(SoonRow.tag), findsWidgets, reason: 'the pane’s other Mac features');
+      expect(find.text(SoonRow.tag), findsNothing, reason: 'W7 built the pane’s last Mac features (size, clicks passing through)');
     });
 
     testWidgets('where shortcuts can’t be registered (the macOS build), the buttons are off and it says so', (tester) async {

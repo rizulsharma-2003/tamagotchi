@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_art/pose_tracks.dart';
+import 'package:mochi_desktop/src/core/desktop_settings.dart' show DesktopStyle;
 import 'package:mochi_desktop/src/ui/app.dart';
 import 'package:mochi_desktop/src/ui/pet/room_view.dart';
 import 'package:mochi_desktop/src/ui/screens/settings_screen.dart';
@@ -293,9 +294,13 @@ void main() {
 
       state.settingsNavigation.tab = SettingsTab.desktop;
       await tester.pump(const Duration(milliseconds: 300));
-      await flip('Roam along the taskbar');
-      expect(settings.roamTaskbar, isFalse);
-      expect(shell.trayRoaming.last, isFalse, reason: 'the tray’s tick follows');
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Classic tray icon'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect((settings.petStyle, settings.roamTaskbar), (DesktopStyle.icon, false));
+      expect(shell.trayStyles.last, DesktopStyle.icon, reason: 'the tray’s tick follows');
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Plays in its spot'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect((t.document.json!['petStyle'], t.document.json!['roamTaskbar']), ('spot', true));
       await flip('Show the desktop pet');
       expect(t.document.json!['showPet'], false);
 
