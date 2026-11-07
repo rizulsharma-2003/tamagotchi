@@ -756,6 +756,15 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
             legacy: settings.petPosition,
           );
     log?.call('stand: ${place?.frame} on ${place?.display.key} size=$size onTop=${settings.petOnTop} through=${settings.petClickThrough}');
+    // Onto a display at another scale: there first at the size it has, so Windows rescales it (WM_DPICHANGED) before
+    // it's given its size there; otherwise the new size would be scaled again.
+    final current = window?.frame();
+    if (place != null && window != null && current != null) {
+      final from = PetPlacing.displayOf(list, current);
+      if (from != null && from.scale != place.display.scale) {
+        await window.setFrame(PixelRect.ltwh(place.frame.left, place.frame.top, current.width, current.height));
+      }
+    }
     await shell.show(Surface.pet, petPosition: settings.petPosition, petSize: size, onTop: settings.petOnTop, petFrame: place?.frame);
     if (_surface != Surface.pet || _disposed || window == null) return;
     final through = settings.petClickThrough;
