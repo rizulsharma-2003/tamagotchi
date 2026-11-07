@@ -109,6 +109,35 @@ class WorldCalendar {
   }
 
   int month(DateTime moment) => local(moment).month;
+
+  int year(DateTime moment) => local(moment).year;
+
+  int day(DateTime moment) => local(moment).day;
+
+  int hour(DateTime moment) => local(moment).hour;
+
+  /// Midnight at the start of [moment]'s day (Swift `startOfDay(for:)`).
+  DateTime startOfDay(DateTime moment) {
+    final t = local(moment);
+    return date(t.year, t.month, t.day);
+  }
+
+  /// The same time of day [days] days later (Swift `date(byAdding: .day, value:to:)`); local time keeps the wall clock
+  /// across daylight-saving changes.
+  DateTime addingDays(DateTime moment, int days) {
+    final t = local(moment);
+    return _utc
+        ? DateTime.utc(t.year, t.month, t.day + days, t.hour, t.minute, t.second, t.millisecond, t.microsecond)
+        : DateTime(t.year, t.month, t.day + days, t.hour, t.minute, t.second, t.millisecond, t.microsecond);
+  }
+
+  /// Midnight of a calendar date in this calendar's time zone (months and days past their end roll over).
+  DateTime date(int year, int month, int day) => _utc ? DateTime.utc(year, month, day) : DateTime(year, month, day);
+
+  bool isSameDay(DateTime a, DateTime b) => dayNumber(a) == dayNumber(b);
+
+  /// Whole days from [from]'s day to [to]'s day (negative when [to] is earlier).
+  int daysBetween(DateTime from, DateTime to) => dayNumber(to) - dayNumber(from);
 }
 
 /// A daily quiet window, e.g. 22:00–08:00 (wrapping past midnight is supported).
@@ -166,6 +195,7 @@ class WorldSettings {
     this.pinnedSessionID,
     this.speechEnabled = true,
     this.chattiness = Chattiness.normal,
+    this.speechFreshLines = true,
     this.lifeStages = true,
   });
 
@@ -201,6 +231,10 @@ class WorldSettings {
   /// `speech.chattiness` on the Mac.
   final Chattiness chattiness;
 
+  /// Now and then use a few fresh lines written for the moment (`speech.useAppleIntelligence` on the Mac, which writes
+  /// them with Apple Intelligence; Windows asks Claude Haiku). Curated lines otherwise.
+  final bool speechFreshLines;
+
   /// Mochi grows up (kitten → young → grown-up).
   final bool lifeStages;
 
@@ -233,6 +267,7 @@ class WorldSettings {
     String? Function()? pinnedSessionID,
     bool? speechEnabled,
     Chattiness? chattiness,
+    bool? speechFreshLines,
     bool? lifeStages,
   }) => WorldSettings(
     pauseReactions: pauseReactions ?? this.pauseReactions,
@@ -256,6 +291,7 @@ class WorldSettings {
     pinnedSessionID: pinnedSessionID == null ? this.pinnedSessionID : pinnedSessionID(),
     speechEnabled: speechEnabled ?? this.speechEnabled,
     chattiness: chattiness ?? this.chattiness,
+    speechFreshLines: speechFreshLines ?? this.speechFreshLines,
     lifeStages: lifeStages ?? this.lifeStages,
   );
 
@@ -280,7 +316,7 @@ class WorldSettings {
     'workSounds': workSounds,
     'keepNotificationText': keepNotificationText,
     'pinnedSessionID': ?pinnedSessionID,
-    'speech': {'enabled': speechEnabled, 'chattiness': chattiness.name},
+    'speech': {'enabled': speechEnabled, 'useAppleIntelligence': speechFreshLines, 'chattiness': chattiness.name},
     'lifeStages': lifeStages,
   };
 
@@ -312,6 +348,7 @@ class WorldSettings {
       pinnedSessionID: string(j, 'pinnedSessionID'),
       speechEnabled: boolean(speech, 'enabled', d.speechEnabled),
       chattiness: enumByName(Chattiness.values, speech['chattiness']) ?? d.chattiness,
+      speechFreshLines: boolean(speech, 'useAppleIntelligence', d.speechFreshLines),
       lifeStages: boolean(j, 'lifeStages', d.lifeStages),
     );
   }
