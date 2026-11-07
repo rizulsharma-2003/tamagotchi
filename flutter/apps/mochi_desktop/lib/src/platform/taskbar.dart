@@ -150,6 +150,12 @@ abstract interface class PetWindow {
 
   /// Back to an ordinary window (off the taskbar): takes clicks, not layered.
   void settle();
+
+  /// The window that has the focus now (0: none, or it can't be told).
+  int focusOwner();
+
+  /// Gives the focus back to [window] (from [focusOwner]), if this window still has it.
+  void giveFocus(int window);
 }
 
 /// No taskbar (the macOS development build): the pet stays still where it was left.
@@ -290,6 +296,62 @@ abstract final class TaskbarZones {
   ];
 }
 
+/// Patch's spot on the taskbar (logical pixels along it), as on the Mac, where mini Patch sits beside Mochi's bed in
+/// the menu bar: his desk (with the laptop and the desk thing) in a free stretch, and Mochi's place beside it on the
+/// left, with room to potter about further left when the stretch is roomy ([potter] > 0) or none when it's snug (Mochi
+/// sits right by the desk). Mochi and Patch are drawn at the same scale ([unit]), spaced as in the room.
+@immutable
+class HomeStage {
+  const HomeStage({required this.petHome, required this.potter, required this.unit});
+
+  /// Art units from Mochi's place to the desk's origin (the rooms' spacing between Mochi's home and Patch's).
+  static const double path = 112;
+
+  /// Half the workstation's width (the desk, its shadow and the desk thing), in art units.
+  static const double deskHalf = 63;
+
+  /// Patch's body on the desk (art units from the desk's origin): the part that takes clicks.
+  static const double bodyX = 14;
+  static const double bodyHalfWidth = 24;
+  static const double bodyBottom = 20;
+  static const double bodyTop = 64;
+
+  /// Mochi's place beside the desk (its centre).
+  final double petHome;
+
+  /// How far left of [petHome] Mochi may potter (0: it stays by the desk).
+  final double potter;
+
+  /// The art's scale (logical pixels per art unit).
+  final double unit;
+
+  /// Where the desk's origin is (CompanionRenderer's).
+  double get deskX => petHome + path * unit;
+  double get deskRight => deskX + deskHalf * unit;
+
+  /// Mochi's leftmost centre.
+  double get minX => petHome - potter;
+
+  /// The distance from Mochi's place to Patch's, in logical pixels (an interaction's path unit).
+  double get span => path * unit;
+
+  /// The stage's left edge (Mochi's box at its leftmost) and right edge (the desk's, with a hair of room).
+  double left(double boxWidth) => minX - boxWidth / 2;
+  double get right => deskRight + 4;
+
+  /// Mochi can potter about (not just sit by the desk).
+  bool get roomy => potter > 0;
+
+  @override
+  bool operator ==(Object other) => other is HomeStage && other.petHome == petHome && other.potter == potter && other.unit == unit;
+
+  @override
+  int get hashCode => Object.hash(petHome, potter, unit);
+
+  @override
+  String toString() => 'HomeStage(Mochi at $petHome, potters ${potter.toStringAsFixed(0)}, desk at ${deskX.toStringAsFixed(1)})';
+}
+
 /// The taskbar as a stage for Mochi: its free stretches, and where the pet's window goes for a spot in them — Mochi's
 /// box inside the taskbar, vertically centred (like the Mac's menu-bar Mochi), growing upwards for a speech bubble.
 @immutable
@@ -357,6 +419,85 @@ class TaskbarStage {
 
   /// [frame]'s top-left in logical pixels (window_manager's coordinates on this screen).
   Offset logical(PixelRect frame) => Offset(frame.left / scale, frame.top / scale);
+
+  // MARK: Patch's spot
+
+  /// How far Mochi potters from Patch's desk when there's room (logical pixels): a box and a half.
+  double get potterRoom => (box.width * 1.5).roundToDouble();
+
+  /// Less than this to potter in and Mochi just sits by the desk.
+  static const double minPotter = 16;
+
+  /// Patch's desk with Mochi's place at [petHome] in [zone], with as much room to potter as there is (up to
+  /// [potterRoom]), or null if it doesn't fit there. The desk's right edge keeps the stretch's distance from the next
+  /// button, as Mochi's box does.
+  HomeStage? fit(TaskbarZone zone, double petHome, {required double unit}) {
+    if (petHome < zone.minX - 0.5) return null;
+    final home = HomeStage(petHome: petHome, potter: 0, unit: unit);
+    if (home.deskRight > zone.maxX + box.width / 2 + 0.5) return null;
+    final potter = math.min(potterRoom, petHome - zone.minX);
+    return HomeStage(petHome: petHome, potter: potter >= minPotter ? potter : 0, unit: unit);
+  }
+
+  /// Where Patch's desk goes, with Mochi beside it (art drawn at [unit] logical pixels per art unit): where it was
+  /// ([previous]) while that still fits, else in the stretch with room for Mochi to potter nearest [near] (Mochi's
+  /// centre), else tucked into a snug stretch. Null when no stretch has room for both: Patch stays off the taskbar and
+  /// Mochi has it to itself.
+  HomeStage? home({required double unit, double? near, HomeStage? previous}) {
+    if (previous != null && previous.unit == unit) {
+      for (final zone in zones) {
+        final kept = fit(zone, previous.petHome, unit: unit);
+        // Kept as long as it's no worse off (a roomy spot that turned snug looks for room elsewhere first).
+        if (kept != null && (kept.roomy || !previous.roomy)) return kept;
+      }
+    }
+    HomeStage? best;
+    var bestDistance = double.infinity;
+    for (final roomy in [true, false]) {
+      for (final zone in zones) {
+        final low = zone.minX + (roomy ? potterRoom : 0);
+        final high = zone.maxX + box.width / 2 - (HomeStage.path + HomeStage.deskHalf) * unit;
+        if (high < low) continue;
+        final target = near ?? (zone.minX + zone.maxX) / 2;
+        final petHome = target.clamp(low, high).roundToDouble().clamp(low, high);
+        final distance = (petHome - target).abs();
+        if (distance < bestDistance) {
+          best = fit(zone, petHome, unit: unit);
+          bestDistance = distance;
+        }
+      }
+      if (best != null) return best;
+    }
+    return null;
+  }
+
+  /// The window for [home] at [size] (logical: the stage's width, or wider for a speech bubble; Mochi's box tall, or
+  /// taller with a bubble), centred on the stage and growing upwards from Mochi's box.
+  PixelRect homeFrame(HomeStage home, Size size) {
+    final width = (size.width * scale).round();
+    final height = (size.height * scale).round();
+    final centre = (home.left(box.width) + home.right) / 2 * scale;
+    return PixelRect.ltwh((centre - width / 2).round(), boxBottom - height, width, height);
+  }
+
+  /// The home stage's width (logical).
+  double homeWidth(HomeStage home) => (home.right - home.left(box.width)).ceilToDouble();
+
+  /// Mochi's body with its centre at [x] (logical): what takes clicks on the home stage.
+  PixelRect bodyAt(double x) {
+    final height = (box.height * scale).round();
+    final width = (box.height * 0.95 * scale).round();
+    final centre = (x * scale).round();
+    return PixelRect(centre - width ~/ 2, boxBottom - height, centre + width ~/ 2, boxBottom);
+  }
+
+  /// Patch's body at his desk (just him, not the desk): the part of the home stage that takes clicks for him.
+  PixelRect companionBody(HomeStage home) {
+    final k = home.unit * scale;
+    final centre = ((home.deskX + HomeStage.bodyX * home.unit) * scale).round();
+    final half = (HomeStage.bodyHalfWidth * k).round();
+    return PixelRect(centre - half, boxBottom - (HomeStage.bodyTop * k).round(), centre + half, boxBottom - (HomeStage.bodyBottom * k).round());
+  }
 
   @override
   bool operator ==(Object other) =>

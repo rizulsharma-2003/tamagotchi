@@ -7,14 +7,20 @@ import 'package:mochi_art/pose_tracks.dart';
 
 import '../../core/pet_cues.dart';
 import '../../core/session_store.dart';
+import 'companion_director.dart';
 import 'pet_director.dart';
 import 'stroller.dart';
+import 'taskbar_stroll.dart' show DuoLayout;
 
 /// Mochi, alive: drawn by mochi_art's renderer from the recorded animations, following Claude's sessions and reacting
 /// to [cues]. With animations off (Windows' Animation effects, macOS' Reduce Motion), Mochi keeps living, calmer.
 ///
 /// It's drawn only as often as what it's doing needs ([frameRate], as the Mac's menu-bar stage does): smooth while
 /// it walks or plays a moment, a calm 12 frames a second otherwise, 6 asleep.
+///
+/// On the taskbar with Patch ([duo]), the view is Patch's and Mochi's stage: Patch at his desk (with the laptop and
+/// the desk thing) and Mochi wherever its stroll has it, or both playing a moment together; and Claude's finishes get
+/// a burst of confetti there ([burst]), as in the Mac's menu bar.
 class MochiView extends StatefulWidget {
   const MochiView({
     super.key,
@@ -29,6 +35,12 @@ class MochiView extends StatefulWidget {
     this.detail = RenderDetail.standard,
     this.color = PetColor.cream,
     this.accessory,
+    this.companion,
+    this.duo,
+    this.theme = OfficeTheme.cozyDesk,
+    this.companionAccessory,
+    this.deskAccessory,
+    this.burst = false,
   });
 
   final SessionStore sessions;
@@ -62,12 +74,31 @@ class MochiView extends StatefulWidget {
   /// What Mochi wears: your choice, or the holiday's costume (DesktopSettings.wornByPet).
   final Accessory? accessory;
 
+  /// Patch, for the moments he shares with Mochi and (with [duo]) to draw him.
+  final CompanionDirector? companion;
+
+  /// On the taskbar with Patch: where his desk and Mochi's place are in the view (null: Mochi alone, centred).
+  final DuoLayout? Function()? duo;
+
+  /// Patch's desk: the room's style, what Patch wears and what stands on his desk.
+  final OfficeTheme theme;
+  final Accessory? companionAccessory;
+  final Accessory? deskAccessory;
+
+  /// Claude's finishes get a burst of confetti (on the taskbar, as in the Mac's menu bar).
+  final bool burst;
+
   @override
   State<MochiView> createState() => _MochiViewState();
 
   /// Frames a second for Mochi doing this: 25 while it walks (the window moves as often), 24 for a moment (a pet, a
   /// finished turn, a stretch), 12 for a calm loop (a blink still shows), 6 asleep; at most 10 with animations off.
-  static double frameRate({required PetMood mood, StrollSample? roam, bool oneShot = false, bool calm = false}) {
+  static double frameRate({required PetMood mood, StrollSample? roam, bool oneShot = false, bool calm = false, double companion = 0}) {
+    final rate = math.max(_petRate(mood: mood, roam: roam, oneShot: oneShot), companion);
+    return calm ? math.min(rate, 10) : rate;
+  }
+
+  static double _petRate({required PetMood mood, StrollSample? roam, bool oneShot = false}) {
     final double rate;
     if (roam?.travelling ?? false) {
       rate = 25;
@@ -77,7 +108,7 @@ class MochiView extends StatefulWidget {
       final loop = roam?.animation ?? mood.loop;
       rate = loop == PetAnimation.sleep || loop == PetAnimation.curl ? 6 : 12;
     }
-    return calm ? math.min(rate, 10) : rate;
+    return rate;
   }
 }
 
@@ -101,6 +132,7 @@ class _MochiViewState extends State<MochiView> {
     widget.sessions.addListener(_follow);
     // The mood also changes with time alone (a finish fades, a nap begins).
     _moodTimer = Timer.periodic(const Duration(seconds: 5), (_) => _follow());
+    widget.companion?.addListener(_frame);
     _follow();
   }
 
@@ -115,6 +147,19 @@ class _MochiViewState extends State<MochiView> {
       unawaited(_cues?.cancel());
       _cues = widget.cues.listen(_cue);
     }
+    if (old.companion != widget.companion) {
+      old.companion?.removeListener(_frame);
+      widget.companion?.addListener(_frame);
+    }
+  }
+
+  /// What Patch needs drawn: on the taskbar beside Mochi, his loop and moments; elsewhere only a burst.
+  double _companionRate() {
+    final companion = widget.companion;
+    if (companion == null) return 0;
+    final t = companion.time;
+    if (widget.duo?.call() != null) return companion.frameRate(t);
+    return widget.burst && companion.burstAt(t) != null ? 24 : 0;
   }
 
   /// One frame: Mochi's clock moves on (so it's repainted), and the frame rate follows what it's doing.
@@ -126,6 +171,7 @@ class _MochiViewState extends State<MochiView> {
       roam: widget.stroll?.call(),
       oneShot: _director.playing(widget.library, time),
       calm: _calm,
+      companion: _companionRate(),
     );
     if (fps == _fps) return;
     _fps = fps;
@@ -154,6 +200,7 @@ class _MochiViewState extends State<MochiView> {
   @override
   void dispose() {
     widget.sessions.removeListener(_follow);
+    widget.companion?.removeListener(_frame);
     unawaited(_cues?.cancel());
     _moodTimer?.cancel();
     _frames?.cancel();
@@ -188,6 +235,12 @@ class _MochiViewState extends State<MochiView> {
             detail: widget.detail,
             color: widget.color,
             accessory: widget.accessory,
+            companion: widget.companion,
+            duo: widget.duo,
+            theme: widget.theme,
+            companionAccessory: widget.companionAccessory,
+            deskAccessory: widget.deskAccessory,
+            burst: widget.burst,
           ),
           size: Size.infinite,
         ),
@@ -209,6 +262,12 @@ class _MochiPainter extends CustomPainter {
     required this.detail,
     required this.color,
     required this.accessory,
+    required this.companion,
+    required this.duo,
+    required this.theme,
+    required this.companionAccessory,
+    required this.deskAccessory,
+    required this.burst,
   }) : super(repaint: clock);
 
   final PetDirector director;
@@ -222,21 +281,91 @@ class _MochiPainter extends CustomPainter {
   final RenderDetail detail;
   final PetColor color;
   final Accessory? accessory;
+  final CompanionDirector? companion;
+  final DuoLayout? Function()? duo;
+  final OfficeTheme theme;
+  final Accessory? companionAccessory;
+  final Accessory? deskAccessory;
+  final bool burst;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final pose = director.pose(library, clock.value, calm: calm, roam: stroll?.call());
+    final g = GContext(canvas);
+    final baseline = size.height - size.height * feet;
+    final layout = duo?.call();
+    final patch = companion;
+    if (layout != null && patch != null) return _paintDuo(g, size, baseline, layout, patch);
+    final roam = stroll?.call();
+    final pose = director.pose(library, clock.value, calm: calm, roam: roam);
     final scale = size.height * fill / 66;
-    PetRenderer.draw(
-      pose,
-      GContext(canvas),
-      Offset(size.width / 2, size.height - size.height * feet),
-      scale,
-      PetPalette(color),
-      accessory: accessory,
-      dark: dark,
-      detail: detail,
-    );
+    PetRenderer.draw(pose, g, Offset(size.width / 2, baseline), scale, PetPalette(color), accessory: accessory, dark: dark, detail: detail);
+    final elapsed = burst ? patch?.burstAt(patch.time) : null;
+    if (elapsed != null) {
+      Celebration.draw(
+        g,
+        elapsed,
+        center: Offset(size.width / 2, baseline),
+        petHeight: PetRenderer.bodyHeight * scale,
+        spread: size.width * 0.42,
+        unit: size.height / 24,
+        reduced: calm,
+      );
+    }
+  }
+
+  /// Patch at his desk and Mochi beside him (or wherever it's pottering), or both in a moment together.
+  void _paintDuo(GContext g, Size size, double baseline, DuoLayout layout, CompanionDirector patch) {
+    final home = layout.home;
+    final k = home.unit;
+    final t = patch.time;
+    final scene = patch.scene(t);
+    final art = 100 + (calm ? t * 0.5 : t);
+    if (patch.visible) {
+      final pose = scene?.companion ?? patch.pose(library, t, calm: calm);
+      CompanionRenderer.draw(
+        pose,
+        g,
+        Offset(layout.local(home.deskX), baseline),
+        k,
+        offsetX: pose.x * home.span,
+        accessory: companionAccessory,
+        dark: dark,
+        time: art,
+        reduced: calm,
+        deskFront: (desk) => ThemeRenderer.deskFront(theme, desk, dark: dark, accessory: deskAccessory),
+      );
+    }
+    final PetPose pet;
+    final double x;
+    if (scene != null) {
+      // The moment's own Mochi, from its place beside Patch (its x in path units towards him; each frame is a fresh
+      // blend, so it can be changed).
+      pet = scene.pet;
+      x = home.petHome + pet.x * home.span;
+      pet.x = 0;
+    } else {
+      final roam = stroll?.call();
+      pet = director.pose(library, clock.value, calm: calm, roam: roam);
+      x = roam?.x ?? home.petHome;
+    }
+    PetRenderer.draw(pet, g, Offset(layout.local(x), baseline), k, PetPalette(color), accessory: accessory, dark: dark, detail: detail);
+    for (final prop in scene?.props ?? const <SceneProp>[]) {
+      final point = Offset(layout.local(home.petHome + prop.x * home.span), baseline - prop.y * PetRenderer.bodyHeight * k);
+      EffectRenderer.drawProp(prop, g, point, k, dark);
+    }
+    final elapsed = burst ? patch.burstAt(t) : null;
+    if (elapsed != null) {
+      Celebration.draw(
+        g,
+        elapsed,
+        center: Offset(layout.local((home.petHome + home.deskX) / 2), baseline),
+        petHeight: PetRenderer.bodyHeight * k,
+        spread: home.span * 0.85,
+        unit: size.height / 24,
+        big: patch.burst?.big ?? false,
+        reduced: calm,
+      );
+    }
   }
 
   @override
@@ -250,5 +379,11 @@ class _MochiPainter extends CustomPainter {
       old.stroll != stroll ||
       old.detail != detail ||
       old.color != color ||
-      old.accessory != accessory;
+      old.accessory != accessory ||
+      old.companion != companion ||
+      old.duo != duo ||
+      old.theme != theme ||
+      old.companionAccessory != companionAccessory ||
+      old.deskAccessory != deskAccessory ||
+      old.burst != burst;
 }

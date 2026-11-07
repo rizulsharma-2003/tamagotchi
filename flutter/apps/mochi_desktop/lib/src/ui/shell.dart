@@ -1,8 +1,9 @@
 // The native window and the tray icon, behind interfaces so the screens can be tested without them.
 //
-// Flutter 3.35 has one window per app, so the window has two forms: the desktop pet (small, frameless, transparent,
-// always on top, not in the taskbar) and the main window (Mochi's sessions, Ask Mochi, pairing, settings). The window
-// is frameless in both: the main window draws its own title bar and rounded corners. Closing it brings the pet back;
+// Flutter 3.35 has one window per app, so the window has three forms: the desktop pet (small, frameless, transparent,
+// always on top, not in the taskbar), the popover (the Mac's menu-bar popover: a flyout above the taskbar where Mochi
+// is, opened by clicking it) and the main window (Mochi's sessions, Ask Mochi, pairing, settings). The window is
+// frameless in all of them: the main window and the popover draw their own rounded corners. Closing it brings the pet back;
 // Quit is in the tray menu. On Windows the pet strolls along the taskbar in a smaller window (ui/pet/taskbar_stroll.dart),
 // moved through Win32 (`petWindow`).
 
@@ -18,7 +19,7 @@ import '../platform/taskbar.dart';
 import '../platform/win32_taskbar.dart';
 
 /// Which form the window has.
-enum Surface { pet, main, hidden }
+enum Surface { pet, popover, main, hidden }
 
 /// What the tray menu (and the pet's menu) can ask for.
 enum ShellAction {
@@ -32,6 +33,9 @@ enum ShellAction {
 
   /// "Back to the taskbar": roaming on again after Mochi was dragged off it.
   backToTaskbar,
+
+  /// The popover lost the focus (a click somewhere else): it closes, as a flyout does.
+  dismissPopover,
   quit,
 }
 
@@ -43,6 +47,9 @@ abstract interface class DesktopShell {
   /// The pet's window for Win32 moves (Windows only; null elsewhere, where Mochi doesn't roam).
   PetWindow? get petWindow;
 
+  /// Shows [surface]: the popover's top-left is [petPosition] and its size [petSize]; it takes the focus (and gives it
+  /// back to the window that had it when it closes with the keyboard or a button).
+  ///
   /// The size the main window form takes the next time it's shown: [SurfaceSizes.main] for Mochi's own pages,
   /// [SurfaceSizes.settings] for Settings. Changing it while the main window shows resizes it on the next [show].
   Size get mainSize;
@@ -97,6 +104,9 @@ abstract final class SurfaceSizes {
 
   /// The Settings window: the Mac's Settings size, a sidebar and the open pane side by side.
   static const Size settings = Size(900, 660);
+
+  /// The popover: the Mac popover's width, a little taller (it holds the toggles the Mac keeps in its menu too).
+  static const Size popover = Size(360, 540);
 }
 
 /// window_manager and tray_manager (Windows; the macOS development build).
@@ -113,6 +123,9 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
 
   /// The main window's size as last set here (null: it isn't showing).
   Size? _mainShown;
+
+  /// The window that had the focus before the popover opened (Windows), to give it back.
+  int _focusBefore = 0;
 
   Surface get surface => _surface;
 
@@ -179,6 +192,13 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
     final previous = _surface;
     _surface = surface;
     if (surface != Surface.main) _mainShown = null;
+    // Closing the popover with the keyboard or a button: the focus goes back where it was (a click elsewhere already
+    // moved it).
+    if (previous == Surface.popover && surface != Surface.main && surface != Surface.popover) {
+      final before = _focusBefore;
+      _focusBefore = 0;
+      if (before != 0) _petWindow?.giveFocus(before);
+    }
     switch (surface) {
       case Surface.hidden:
         await windowManager.hide();
@@ -197,6 +217,18 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
         }
         // Shown without taking the focus from whatever you're typing in.
         await windowManager.show(inactive: true);
+      case Surface.popover:
+        _focusBefore = _petWindow?.focusOwner() ?? 0;
+        // A flyout: over everything, not in the taskbar, its own shadow and rounded corners, with the focus.
+        await windowManager.setAlwaysOnTop(true);
+        await windowManager.setSkipTaskbar(true);
+        await windowManager.setResizable(false);
+        await windowManager.setHasShadow(false);
+        await windowManager.setMinimumSize(SurfaceSizes.petMinimum);
+        await windowManager.setSize(petSize);
+        if (petPosition != null) await windowManager.setPosition(petPosition);
+        await windowManager.show();
+        await windowManager.focus();
       case Surface.main:
         await windowManager.setAlwaysOnTop(false);
         await windowManager.setSkipTaskbar(false);
@@ -243,6 +275,12 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   // quitting is only in the tray menu.
   @override
   void onWindowClose() => _actions.add(ShellAction.closeWindow);
+
+  // A click outside the popover (or another window coming forward) closes it, as a flyout does.
+  @override
+  void onWindowBlur() {
+    if (_surface == Surface.popover) _actions.add(ShellAction.dismissPopover);
+  }
 
   // Windows: a left click opens Mochi, a right click shows the menu. macOS: a click shows the menu.
   @override

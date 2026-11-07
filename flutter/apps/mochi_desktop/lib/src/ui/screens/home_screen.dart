@@ -7,45 +7,90 @@ import 'package:mochi_ui/mochi_ui.dart';
 import '../../core/ask_mochi.dart';
 import '../../core/sessions.dart';
 import '../../desktop.dart';
-import '../pet/mochi_view.dart';
+import '../pet/companion_director.dart';
 import '../pet/pet_director.dart';
+import '../pet/room_view.dart';
 import '../widgets/session_card.dart';
 
-/// The main window: Mochi and how Claude is doing, the sessions, Ask Mochi.
-class HomeScreen extends StatelessWidget {
+/// The main window, as the phones' home screens: Mochi's name and how Claude is doing, the room with Mochi and Patch,
+/// then the sessions and Ask Mochi.
+class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     required this.desktop,
+    required this.companion,
     required this.library,
     required this.lastActivity,
     required this.onPair,
     required this.onSettings,
+    this.askFirst = false,
   });
 
   final MochiDesktop desktop;
+
+  /// Opened from the popover's "Ask Mochi": the question box has the focus.
+  final bool askFirst;
+
+  /// Patch (in the room at his desk).
+  final CompanionDirector companion;
   final PoseLibrary? library;
   final DateTime Function() lastActivity;
   final VoidCallback onPair;
   final VoidCallback onSettings;
 
+  /// The room's height: the phone's room card, a little shorter for the window.
+  static const double roomHeight = 250;
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final ScrollController _scroll = ScrollController();
+
+  MochiDesktop get desktop => widget.desktop;
+  CompanionDirector get companion => widget.companion;
+
+  @override
+  void initState() {
+    super.initState();
+    // Opened for Ask Mochi: down to the question box (the list builds it once it's near), which takes the focus.
+    if (widget.askFirst) {
+      void down(int times) => WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scroll.hasClients) return;
+        _scroll.jumpTo(_scroll.position.maxScrollExtent);
+        if (times > 1) down(times - 1);
+      });
+      down(3);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([desktop.sessions, desktop.hooks, desktop.link, desktop.bridgeProblem, desktop.settings]),
+    listenable: Listenable.merge([desktop.sessions, desktop.hooks, desktop.link, desktop.bridgeProblem, desktop.settings, companion]),
     builder: (context, _) {
       final sessions = desktop.sessions;
       final live = sessions.all.where((session) => session.isLive || session.phase == SessionPhase.ended).take(8).toList();
       return Scrollbar(
+        controller: _scroll,
         child: ListView(
+          controller: _scroll,
           padding: const EdgeInsets.fromLTRB(Space.l, Space.xs, Space.l, Space.xl),
           children: [
-            _Header(desktop: desktop, library: library, lastActivity: lastActivity, onPair: onPair),
+            _Header(desktop: desktop, companion: companion, library: widget.library, lastActivity: widget.lastActivity, onPair: widget.onPair),
             if (desktop.bridgeProblem.value != null) ...[
               const SizedBox(height: Space.m),
               ClayCard(
                 child: NoteLabel(text: desktop.bridgeProblem.value!, icon: Icons.warning_amber_rounded, tint: context.palette.warning),
               ),
             ],
-            if (!desktop.hooks.connected) ...[const SizedBox(height: Space.m), _ConnectCard(desktop: desktop, onSettings: onSettings)],
+            if (!desktop.hooks.connected) ...[const SizedBox(height: Space.m), _ConnectCard(desktop: desktop, onSettings: widget.onSettings)],
             const SizedBox(height: Space.m),
             SectionTitle(title: 'Claude sessions', note: live.isEmpty ? null : '${sessions.live.length} open'),
             const SizedBox(height: Space.s),
@@ -63,7 +108,7 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: Space.m),
             const SectionTitle(title: 'Ask Mochi'),
             const SizedBox(height: Space.s),
-            AskBox(ask: desktop.ask),
+            AskBox(ask: desktop.ask, autofocus: widget.askFirst),
           ],
         ),
       );
@@ -72,9 +117,10 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.desktop, required this.library, required this.lastActivity, required this.onPair});
+  const _Header({required this.desktop, required this.companion, required this.library, required this.lastActivity, required this.onPair});
 
   final MochiDesktop desktop;
+  final CompanionDirector companion;
   final PoseLibrary? library;
   final DateTime Function() lastActivity;
   final VoidCallback onPair;
@@ -85,6 +131,8 @@ class _Header extends StatelessWidget {
     final settings = desktop.settings;
     final now = desktop.sessions.now;
     final holiday = settings.holidayOn(now);
+    final pet = settings.petName;
+    final patch = settings.companionName;
     String greeting(SeasonalEvent event) => switch (event) {
       SeasonalEvent.halloween => 'Happy Halloween',
       SeasonalEvent.diwali => 'Happy Diwali',
@@ -92,7 +140,7 @@ class _Header extends StatelessWidget {
       SeasonalEvent.newYear => 'Happy New Year',
       SeasonalEvent.valentines => "Happy Valentine's Day",
       SeasonalEvent.userBirthday => 'Happy birthday!',
-      SeasonalEvent.mochiBirthday => "${settings.petName}'s birthday",
+      SeasonalEvent.mochiBirthday => "$pet's birthday",
     };
     final mood = PetMood.of(desktop.sessions, now: now, lastActivity: lastActivity());
     final link = desktop.link;
@@ -117,54 +165,49 @@ class _Header extends StatelessWidget {
       PetMood.concerned => 'Claude hit a snag',
       _ => desktop.sessions.live.isEmpty ? 'No Claude sessions' : 'Claude is idle',
     };
-    return ClayCard(
-      padding: const EdgeInsets.all(Space.m),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 92,
-            height: 92,
-            child: MochiView(
-              sessions: desktop.sessions,
-              cues: desktop.cues,
-              library: library,
-              lastActivity: lastActivity,
-              color: settings.petColor,
-              accessory: settings.wornByPet(now),
+    // "and Patch" while he's around, as the phones say it; otherwise what Mochi is doing.
+    final subtitle = companion.visible ? 'and $patch · ${mood.describe(pet)}' : mood.describe(pet);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(header: true, child: Text(pet, style: context.type.largeTitle)),
+        const SizedBox(height: 2),
+        Text(subtitle, style: context.type.subheadline.copyWith(color: p.inkSecondary)),
+        const SizedBox(height: Space.s),
+        Wrap(
+          spacing: Space.s,
+          runSpacing: Space.s,
+          children: [
+            if (holiday != null) StatusPill(text: greeting(holiday), icon: Icons.celebration_rounded, tint: p.pet),
+            StatusPill(text: claudeText, icon: Icons.auto_awesome_rounded, tint: mood == PetMood.needsYou ? p.warning : p.indigo),
+            Semantics(
+              button: true,
+              label: '$linkText. Pair a phone',
+              excludeSemantics: true,
+              child: ClayPress(
+                onTap: onPair,
+                borderRadius: BorderRadius.circular(40),
+                child: StatusPill(text: linkText, icon: Icons.smartphone_rounded, tint: linkTint),
+              ),
             ),
+          ],
+        ),
+        const SizedBox(height: Space.m),
+        Container(
+          height: HomeScreen.roomHeight,
+          decoration: claySurface(p),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(Radii.card),
+            child: RoomView(desktop: desktop, companion: companion, library: library, lastActivity: lastActivity),
           ),
-          const SizedBox(width: Space.m),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(settings.petName, style: context.type.title3),
-                Text(mood.describe(settings.petName), style: context.type.footnote),
-                const SizedBox(height: Space.s),
-                Wrap(
-                  spacing: Space.s,
-                  runSpacing: Space.s,
-                  children: [
-                    if (holiday != null)
-                      StatusPill(text: greeting(holiday), icon: Icons.celebration_rounded, tint: p.pet),
-                    StatusPill(text: claudeText, icon: Icons.auto_awesome_rounded, tint: mood == PetMood.needsYou ? p.warning : p.indigo),
-                    Semantics(
-                      button: true,
-                      label: '$linkText. Pair a phone',
-                      excludeSemantics: true,
-                      child: ClayPress(
-                        onTap: onPair,
-                        borderRadius: BorderRadius.circular(40),
-                        child: StatusPill(text: linkText, icon: Icons.smartphone_rounded, tint: linkTint),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: Space.s),
+        Text(
+          companion.present ? 'Click $pet to pet, or $patch for a wave' : 'Click $pet to pet',
+          textAlign: TextAlign.center,
+          style: context.type.footnote.copyWith(fontWeight: FontWeight.w500),
+        ),
+      ],
     );
   }
 }
@@ -220,9 +263,12 @@ class _ConnectCard extends StatelessWidget {
 
 /// Type a question for Mochi; answers (and what the phones asked) below, newest first.
 class AskBox extends StatefulWidget {
-  const AskBox({super.key, required this.ask});
+  const AskBox({super.key, required this.ask, this.autofocus = false});
 
   final AskMochi ask;
+
+  /// Start with the focus in the question box (and scrolled into view).
+  final bool autofocus;
 
   @override
   State<AskBox> createState() => _AskBoxState();
@@ -263,6 +309,7 @@ class _AskBoxState extends State<AskBox> {
                   child: TextField(
                     controller: _text,
                     focusNode: _focus,
+                    autofocus: widget.autofocus,
                     onSubmitted: (_) => _send(),
                     textInputAction: TextInputAction.send,
                     decoration: const InputDecoration(hintText: 'Ask Mochi, or try “status”', semanticCounterText: ''),

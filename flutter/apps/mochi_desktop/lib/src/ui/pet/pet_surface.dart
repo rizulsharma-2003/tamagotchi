@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -8,8 +9,10 @@ import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 
 import '../../core/pet_cues.dart';
+import '../../core/sessions.dart' show Attention;
 import '../../desktop.dart';
 import '../shell.dart';
+import 'companion_director.dart';
 import 'mochi_view.dart';
 import 'pet_director.dart';
 import 'taskbar_stroll.dart';
@@ -21,6 +24,10 @@ import 'taskbar_stroll.dart';
 ///
 /// Mochi has a fixed box at the bottom of the window and the bubble goes above it, so the window can grow upwards for
 /// the bubble (on the taskbar) without Mochi moving.
+///
+/// With Patch on the taskbar ([TaskbarStroll.duo]) the box is his and Mochi's stage: his desk on the right, Mochi
+/// beside it. Clicking Patch gets a wave back; the bubble rises over Mochi's place beside him, and when Claude is
+/// asking for your permission it's Patch asking (by the name you gave him), as on the Mac.
 class PetSurface extends StatefulWidget {
   const PetSurface({
     super.key,
@@ -32,6 +39,8 @@ class PetSurface extends StatefulWidget {
     required this.onDragStart,
     required this.onHide,
     this.onNativeMenu,
+    this.onOpenPopover,
+    this.companion,
   });
 
   final MochiDesktop desktop;
@@ -46,6 +55,12 @@ class PetSurface extends StatefulWidget {
 
   /// The tray's menu at the pointer: Mochi's window in the taskbar is too small for its own menu.
   final VoidCallback? onNativeMenu;
+
+  /// Patch (drawn beside Mochi while he's on the taskbar).
+  final CompanionDirector? companion;
+
+  /// Clicking Mochi (or Patch) on the taskbar opens the popover, as clicking Mochi in the Mac's menu bar does.
+  final VoidCallback? onOpenPopover;
 
   @override
   State<PetSurface> createState() => _PetSurfaceState();
@@ -117,11 +132,36 @@ class _PetSurfaceState extends State<PetSurface> {
     if (action == 'hide') widget.onHide();
   }
 
+  /// What the bubble says while Claude needs you: Claude's question, or Patch asking for your OK when it's a
+  /// permission and he's on the taskbar with Mochi (on the Mac, permission prompts are his line).
+  String _needsYou({required bool patch}) {
+    final primary = widget.desktop.sessions.primary;
+    final project = primary?.project;
+    final where = project == null ? '' : ' in $project';
+    if (patch && primary?.waitingFor == Attention.permission) return '${widget.desktop.settings.companionName} needs your OK$where';
+    return 'Claude needs you$where';
+  }
+
+  /// A click on Mochi (or Patch) in the taskbar opens the popover, as on the Mac; off the taskbar a click pets Mochi.
+  void _tap() {
+    final popover = widget.onOpenPopover;
+    if (widget.stroll.onTaskbar && popover != null) return popover();
+    widget.desktop.interact('pet');
+  }
+
+  /// Enter: the popover from the taskbar, Mochi's window from the desktop.
+  void _activate() {
+    final popover = widget.onOpenPopover;
+    if (widget.stroll.onTaskbar && popover != null) return popover();
+    widget.onAction(ShellAction.showMain);
+  }
+
   @override
   Widget build(BuildContext context) {
     final needsYou = _mood == PetMood.needsYou;
-    final project = widget.desktop.sessions.primary?.project;
-    final bubble = needsYou ? (project == null ? 'Claude needs you' : 'Claude needs you in $project') : _bubble;
+    final duo = widget.stroll.onTaskbar ? widget.stroll.duo : null;
+    final companion = widget.companion;
+    final bubble = needsYou ? _needsYou(patch: duo != null) : _bubble;
     if ((bubble != null) != _bubbleShown) {
       _bubbleShown = bubble != null;
       // The taskbar window makes room for it (after this frame: never during a build).
@@ -130,7 +170,11 @@ class _PetSurfaceState extends State<PetSurface> {
       });
     }
     final onTaskbar = widget.stroll.onTaskbar;
-    final name = widget.desktop.settings.petName;
+    final settings = widget.desktop.settings;
+    final name = settings.petName;
+    final now = widget.desktop.sessions.now;
+    // With Patch beside Mochi, the spoken label says what he's up to too.
+    final patchText = duo != null && companion != null ? ' ${companion.describe(settings.companionName)}.' : '';
     // Mochi's box at the bottom of the window: taskbar-sized in the taskbar (the Mac's menu-bar Mochi), the bubble above.
     final stage = onTaskbar ? widget.stroll.box.height : SurfaceSizes.petStage;
     final p = context.palette;
@@ -147,15 +191,15 @@ class _PetSurfaceState extends State<PetSurface> {
           SingleActivator(LogicalKeyboardKey.contextMenu): _MenuIntent(),
         },
         actions: {
-          ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => widget.onAction(ShellAction.showMain)),
+          ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => _activate()),
           _PetIntent: CallbackAction<_PetIntent>(onInvoke: (_) => widget.desktop.interact('pet')),
           _MenuIntent: CallbackAction<_MenuIntent>(onInvoke: (_) => _menu(const Offset(40, 60))),
         },
         child: Semantics(
           container: true,
           button: true,
-          label: '$name. ${_mood.describe(name)}.${bubble != null && bubble != _mood.describe(name) ? ' $bubble.' : ''}',
-          hint: 'Press Enter to open Mochi, Space to pet',
+          label: '$name. ${_mood.describe(name)}.$patchText${bubble != null && bubble != _mood.describe(name) ? ' $bubble.' : ''}',
+          hint: onTaskbar && widget.onOpenPopover != null ? 'Press Enter for the popover, Space to pet' : 'Press Enter to open Mochi, Space to pet',
           excludeSemantics: true,
           child: Stack(
             children: [
@@ -169,8 +213,10 @@ class _PetSurfaceState extends State<PetSurface> {
                   message: onTaskbar ? '' : _mood.describe(name),
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => widget.desktop.interact('pet'),
-                    onDoubleTap: () => widget.onAction(ShellAction.showMain),
+                    onTap: _tap,
+                    // On the taskbar a click opens the popover at once (no wait for a second click); standing on the
+                    // desktop, a double-click opens Mochi's window.
+                    onDoubleTap: onTaskbar ? null : () => widget.onAction(ShellAction.showMain),
                     onSecondaryTapUp: (details) => _menu(details.globalPosition),
                     onPanStart: (_) => widget.onDragStart(),
                     child: MouseRegion(
@@ -194,8 +240,14 @@ class _PetSurfaceState extends State<PetSurface> {
                           feet: onTaskbar ? SurfaceSizes.taskbarFeet : SurfaceSizes.standingFeet,
                           stroll: onTaskbar ? widget.stroll.sample : null,
                           detail: onTaskbar ? RenderDetail.tiny : RenderDetail.standard,
-                          color: widget.desktop.settings.petColor,
-                          accessory: widget.desktop.settings.wornByPet(widget.desktop.sessions.now),
+                          color: settings.petColor,
+                          accessory: settings.wornByPet(now),
+                          companion: companion,
+                          duo: duo == null ? null : () => widget.stroll.duo,
+                          theme: settings.officeTheme,
+                          companionAccessory: settings.wornByCompanion(now),
+                          deskAccessory: settings.deskAccessory,
+                          burst: onTaskbar,
                         ),
                       ),
                     ),
@@ -208,9 +260,29 @@ class _PetSurfaceState extends State<PetSurface> {
                   right: 4,
                   bottom: stage,
                   height: SurfaceSizes.bubble,
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: _Bubble(text: bubble, urgent: needsYou),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Over Mochi's place beside Patch (kept inside the window), or centred over Mochi alone.
+                      final width = constraints.maxWidth;
+                      final span = math.min(_Bubble.maxWidth, width);
+                      final centre = duo == null
+                          ? width / 2
+                          : (duo.local(duo.home.petHome) - 4).clamp(span / 2, math.max(span / 2, width - span / 2));
+                      return Stack(
+                        children: [
+                          Positioned(
+                            left: centre - span / 2,
+                            width: span,
+                            top: 0,
+                            bottom: 0,
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: _Bubble(text: bubble, urgent: needsYou),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
             ],
@@ -236,11 +308,13 @@ class _Bubble extends StatelessWidget {
   final String text;
   final bool urgent;
 
+  static const double maxWidth = 168;
+
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
     return Container(
-      constraints: const BoxConstraints(maxWidth: 168),
+      constraints: const BoxConstraints(maxWidth: maxWidth),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: claySurface(p, radius: 14, outline: urgent ? p.warning : null),
       child: Text(

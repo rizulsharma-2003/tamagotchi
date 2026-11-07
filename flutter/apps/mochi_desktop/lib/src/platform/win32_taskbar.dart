@@ -317,6 +317,18 @@ class Win32PetWindow implements PetWindow {
   }
 
   @override
+  int focusOwner() {
+    final owner = GetForegroundWindow();
+    return owner == hwnd ? 0 : owner;
+  }
+
+  @override
+  void giveFocus(int window) {
+    if (window == 0 || IsWindow(window) == 0 || GetForegroundWindow() != hwnd) return;
+    SetForegroundWindow(window);
+  }
+
+  @override
   void settle() {
     final style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
     final next = style & ~(WS_EX_LAYERED | WS_EX_TRANSPARENT);

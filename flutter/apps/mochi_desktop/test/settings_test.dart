@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_desktop/src/ui/app.dart';
-import 'package:mochi_desktop/src/ui/pet/mochi_view.dart';
+import 'package:mochi_desktop/src/ui/pet/room_view.dart';
 import 'package:mochi_desktop/src/ui/screens/settings_screen.dart';
 import 'package:mochi_desktop/src/ui/settings/settings_kit.dart';
 import 'package:mochi_desktop/src/ui/shell.dart';
@@ -355,15 +355,21 @@ void main() {
       expect(t.document.json!['deskAccessory'], 'rubberDuck');
       expect(tester.takeException(), isNull);
 
-      // Mochi's window: the pet in lavender with round glasses.
+      // Mochi's window: the room, the pet in lavender with round glasses, Patch in headphones at a Space Station desk
+      // with the duck.
       state.open(MainPage.home);
       await tester.pump(const Duration(milliseconds: 300));
-      final view = tester.widget<MochiView>(find.byType(MochiView));
-      expect((view.color, view.accessory), (PetColor.lavender, Accessory.roundGlasses));
+      SceneConfig room() => (tester.widget<CustomPaint>(
+        find.descendant(of: find.byType(RoomView), matching: find.byWidgetPredicate((widget) => widget is CustomPaint && widget.painter is LiveRoomPainter)),
+      ).painter! as LiveRoomPainter).config;
+      expect(
+        (room().petColor, room().wornByPet, room().wornByCompanion, room().deskAccessory, room().theme),
+        (PetColor.lavender, Accessory.roundGlasses, Accessory.headphones, Accessory.rubberDuck, OfficeTheme.spaceStation),
+      );
       // Nothing chosen: Diwali's flower crown.
       settings.petAccessory = null;
       await tester.pump();
-      expect(tester.widget<MochiView>(find.byType(MochiView)).accessory, Accessory.flowerCrown);
+      expect(room().wornByPet, Accessory.flowerCrown);
       expect(find.text('Happy Diwali'), findsOneWidget);
     });
   });

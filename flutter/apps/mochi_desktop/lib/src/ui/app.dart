@@ -11,8 +11,10 @@ import 'package:mochi_wire/mochi_wire.dart' show HookStatus;
 import '../core/pet_cues.dart';
 import '../desktop.dart';
 import '../platform/taskbar.dart';
+import 'pet/companion_director.dart';
 import 'pet/pet_surface.dart';
 import 'pet/taskbar_stroll.dart';
+import 'popover/popover_view.dart';
 import 'screens/home_screen.dart';
 import 'screens/pairing_screen.dart';
 import 'screens/settings_screen.dart';
@@ -69,14 +71,34 @@ class DesktopAppState extends State<DesktopApp> {
   PoseLibrary? _library;
   late DateTime _lastActivity = widget.desktop.sessions.now;
   final List<StreamSubscription<Object?>> _subscriptions = [];
+
+  /// One clock (seconds) for the stroll and Patch, so a moment together starts when Mochi gets to him.
+  late final double Function() _clock = widget.strollClock ?? _monotonic();
+
+  static double Function() _monotonic() {
+    final watch = Stopwatch()..start();
+    return () => watch.elapsedMicroseconds / 1e6;
+  }
+
+  /// Patch, Mochi's coding companion: on the taskbar beside Mochi and in the room in Mochi's window.
+  late final CompanionDirector _companion = CompanionDirector(
+    sessions: desktop.sessions,
+    settings: desktop.settings,
+    cues: desktop.cues,
+    lastActivity: () => _lastActivity,
+    clock: _clock,
+    random: widget.strollRandom,
+    reducedMotion: () => desktop.motion.reduced,
+  );
   late final TaskbarStroll _stroll = TaskbarStroll(
     shell: widget.shell,
     taskbar: widget.taskbar ?? systemTaskbar(),
     settings: desktop.settings,
     motion: desktop.motion,
     cues: desktop.cues,
+    companion: _companion,
     idle: () => desktop.sessions.now.difference(_lastActivity),
-    clock: widget.strollClock,
+    clock: _clock,
     random: widget.strollRandom,
     log: _strollLog(),
   );
@@ -88,6 +110,9 @@ class DesktopAppState extends State<DesktopApp> {
 
   /// Mochi's stroll along the taskbar (and every change to the window).
   TaskbarStroll get stroll => _stroll;
+
+  /// Patch.
+  CompanionDirector get companion => _companion;
 
   /// Development: with a `stroll-debug` file in Mochi's folder, the stroll writes what it sees to `stroll.log` there.
   void Function(String)? _strollLog() {
@@ -119,6 +144,7 @@ class DesktopAppState extends State<DesktopApp> {
   Future<void> _loadLibrary() async {
     try {
       final library = await (widget.library ?? PoseLibrary.load(rootBundle, DesktopApp.poseAsset));
+      _companion.library = library;
       if (mounted) setState(() => _library = library);
     } on Object catch (error) {
       debugPrint('Mochi: the animations could not be loaded (${error.runtimeType})');
@@ -138,7 +164,8 @@ class DesktopAppState extends State<DesktopApp> {
       _trayRoaming = desktop.settings.roamTaskbar;
       unawaited(widget.shell.setRoaming(_trayRoaming));
     }
-    if (_surface == Surface.main) return;
+    // The popover's own switches take effect when it closes.
+    if (_surface == Surface.main || _surface == Surface.popover) return;
     final wanted = desktop.settings.showPet ? Surface.pet : Surface.hidden;
     if (wanted != _surface) _show(wanted);
   }
@@ -161,9 +188,13 @@ class DesktopAppState extends State<DesktopApp> {
       case ShellAction.closeWindow:
         if (_surface == Surface.main) {
           closeMain();
+        } else if (_surface == Surface.popover) {
+          closePopover();
         } else {
           _show(Surface.hidden);
         }
+      case ShellAction.dismissPopover:
+        if (_surface == Surface.popover) closePopover();
       case ShellAction.quit:
         unawaited(_quit());
     }
@@ -212,9 +243,35 @@ class DesktopAppState extends State<DesktopApp> {
   /// Back to the desktop pet (or nothing, with the pet turned off). Mochi keeps running in the tray.
   void closeMain() => _show(desktop.settings.showPet ? Surface.pet : Surface.hidden);
 
+  /// The popover (the Mac's menu-bar popover): clicking Mochi on the taskbar opens it above where Mochi is; clicking
+  /// again (anywhere outside it, Mochi's spot included) or Escape closes it, and Mochi is back where it was.
+  void openPopover() {
+    if (_surface == Surface.pet) _show(Surface.popover);
+  }
+
+  /// Back to the taskbar (or nothing, if the desktop pet was switched off in the popover).
+  void closePopover() {
+    if (_surface == Surface.popover) _show(desktop.settings.showPet ? Surface.pet : Surface.hidden);
+  }
+
+  /// "Ask Mochi" in the popover: Mochi's window with the question box ready.
+  void openAsk() {
+    _askFirst = true;
+    open(MainPage.home);
+  }
+
+  bool _askFirst = false;
+
   void _show(Surface surface) {
     setState(() => _surface = surface);
     unawaited(_stroll.show(surface));
+  }
+
+  /// Whether Mochi's window should open on the question box (once).
+  bool _takeAskFirst() {
+    final ask = _askFirst;
+    _askFirst = false;
+    return ask;
   }
 
   /// Moves the pet with the mouse until it's dropped (window_manager's drag returns then): off the taskbar, Mochi
@@ -241,12 +298,13 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.sessions.removeListener(_sessionsChanged);
     desktop.settings.removeListener(_settingsChanged);
     _stroll.dispose();
+    _companion.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([desktop.settings, desktop.motion, _stroll]),
+    listenable: Listenable.merge([desktop.settings, desktop.motion, _stroll, _companion]),
     builder: (context, _) => MaterialApp(
       title: 'Mochi',
       debugShowCheckedModeBanner: false,
@@ -269,6 +327,19 @@ class DesktopAppState extends State<DesktopApp> {
           onDragStart: () => unawaited(_drag()),
           onHide: () => desktop.settings.showPet = false,
           onNativeMenu: () => unawaited(widget.shell.popUpMenu()),
+          onOpenPopover: openPopover,
+          companion: _companion,
+        ),
+        Surface.popover => PopoverView(
+          desktop: desktop,
+          companion: _companion,
+          library: _library,
+          lastActivity: () => _lastActivity,
+          onClose: closePopover,
+          onOpenMain: () => open(MainPage.home),
+          onAsk: openAsk,
+          onSettings: () => open(MainPage.settings),
+          onSetUpClaude: () => open(MainPage.settings, pane: SettingsTab.claude),
         ),
         Surface.main => _MainSurface(state: this),
         Surface.hidden => const SizedBox.shrink(),
@@ -312,6 +383,8 @@ class _MainSurface extends StatelessWidget {
             child: switch (page) {
               MainPage.home => HomeScreen(
                 desktop: desktop,
+                companion: state._companion,
+                askFirst: state._takeAskFirst(),
                 library: state._library,
                 lastActivity: () => state._lastActivity,
                 onPair: () => state.open(MainPage.pairing),
@@ -329,6 +402,7 @@ class _MainSurface extends StatelessWidget {
                   onPair: state.pairPhone,
                   onHome: back,
                   stroll: state.stroll,
+                  patch: state.companion,
                   library: state._library,
                 ),
               ),

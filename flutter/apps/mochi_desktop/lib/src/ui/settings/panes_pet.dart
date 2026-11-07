@@ -258,15 +258,50 @@ class CharactersPane extends StatelessWidget {
           ],
         ),
         SettingsGroup(
+          title: 'Companion',
+          footer: switch (settings.companionVisibility) {
+            CompanionVisibility.duringSessions =>
+              '$companion joins you when a Claude Code session starts, at his desk on the taskbar and in $pet’s room, '
+                  'and packs up after the last one ends.',
+            CompanionVisibility.always => '$companion stays at his desk all the time, even with no Claude Code session.',
+            CompanionVisibility.never => '$companion’s desk stays empty, and $pet has the taskbar to itself.',
+          },
+          children: [
+            MenuRow<CompanionVisibility>(
+              label: 'Show $companion',
+              value: settings.companionVisibility,
+              items: [for (final visibility in CompanionVisibility.values) (visibility, visibility.title)],
+              onChanged: (value) => settings.companionVisibility = value,
+            ),
+            MenuRow<int>(
+              label: 'Stays after the last session ends',
+              value: settings.companionLingerMinutes,
+              items: [
+                for (final minutes in _minuteChoices(const [0, 5, 10, 15, 20, 30, 45, 60, 90, 120], settings.companionLingerMinutes))
+                  (minutes, minutes == 0 ? 'Leaves at once' : '$minutes min'),
+              ],
+              onChanged: settings.companionVisibility == CompanionVisibility.duringSessions
+                  ? (value) => settings.companionLingerMinutes = value
+                  : null,
+            ),
+            MenuRow<int>(
+              label: 'Naps after, without news from Claude',
+              value: settings.companionSleepAfterMinutes,
+              items: [
+                for (final minutes in _minuteChoices(const [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 45, 60], settings.companionSleepAfterMinutes))
+                  (minutes, '$minutes min'),
+              ],
+              onChanged: settings.companionVisibility == CompanionVisibility.never ? null : (value) => settings.companionSleepAfterMinutes = value,
+            ),
+            ActionsRow(children: [PaneLink(host: host, tab: SettingsTab.desktop, label: '$companion on the taskbar')]),
+          ],
+        ),
+        SettingsGroup(
           title: 'From the Mac',
           children: [
             SoonRow(
               title: 'Friendship and achievements',
               detail: 'Petting, play and treats earn friendship on a Mac, and achievements unlock new things to wear. Here everything is unlocked.',
-            ),
-            SoonRow(
-              title: '$companion on this PC',
-              detail: '$companion joins Claude’s sessions in the room on your phones; on this PC only $pet is on the desktop.',
             ),
           ],
         ),
@@ -274,6 +309,10 @@ class CharactersPane extends StatelessWidget {
     );
   }
 }
+
+/// The Mac's stepper values as a menu, with [current] in it even if it's between them (an older file, the Mac's
+/// own).
+List<int> _minuteChoices(List<int> choices, int current) => ({...choices, current}.toList()..sort());
 
 class _CoatSwatch extends StatelessWidget {
   const _CoatSwatch({required this.color, required this.selected, required this.onTap});
@@ -327,6 +366,16 @@ class DesktopPetPane extends StatelessWidget {
     final pet = host.pet;
     final block = host.stroll?.block;
     final roamNote = settings.roamTaskbar && block != null && block != RoamBlock.turnedOff ? block.note : null;
+    final patch = host.patch;
+    final name = host.companion;
+    final never = settings.companionVisibility == CompanionVisibility.never;
+    // Patch is around and should be on the taskbar, but there's no stretch roomy enough for both right now.
+    final noRoom = patch != null &&
+        patch.visible &&
+        settings.companionOnTaskbar &&
+        settings.roamTaskbar &&
+        (host.stroll?.onTaskbar ?? false) &&
+        host.stroll?.home == null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -353,6 +402,22 @@ class DesktopPetPane extends StatelessWidget {
               onChanged: settings.showPet ? (value) => settings.roamTaskbar = value : null,
             ),
             if (roamNote != null) NoteRow(text: roamNote),
+            ToggleRow(
+              title: '$name on the taskbar',
+              subtitle:
+                  'While $name is around, he keeps a little desk in an empty stretch beside $pet: he types while Claude '
+                  'works, waves when Claude needs you and celebrates with $pet when it’s done, and now and then they '
+                  'play or nap together.',
+              value: settings.companionOnTaskbar,
+              onChanged: settings.showPet && settings.roamTaskbar && !never ? (value) => settings.companionOnTaskbar = value : null,
+            ),
+            if (never)
+              NoteRow(text: '$name is set never to show, in Characters.')
+            else if (!settings.roamTaskbar && settings.companionOnTaskbar)
+              NoteRow(text: '$name joins $pet on the taskbar while $pet roams it.')
+            else if (noRoom)
+              NoteRow(text: 'There’s no stretch of the taskbar roomy enough for both right now, so $name waits in $pet’s room.'),
+            if (never) ActionsRow(children: [PaneLink(host: host, tab: SettingsTab.characters, label: 'Show $name')]),
           ],
         ),
         SettingsGroup(
@@ -390,7 +455,6 @@ class DesktopPetPane extends StatelessWidget {
           children: [
             SoonRow(title: 'Size', detail: 'Small, medium or large. On Windows $pet takes the taskbar’s size, or a standard size on the desktop.'),
             SoonRow(title: 'Let clicks pass through $pet', detail: 'Off the taskbar, $pet always catches clicks so you can pet and drag it.'),
-            SoonRow(title: '${host.companion} visits', detail: '${host.companion} appears beside $pet for Claude’s big moments, then leaves.'),
           ],
         ),
       ],
