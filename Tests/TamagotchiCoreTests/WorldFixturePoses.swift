@@ -21,15 +21,15 @@ enum PoseFixtures {
         o.str("note", note)
         o.str("animation", animation.rawValue)
         if let variant { o.int("variant", variant) }
-        o.optionalNum("duration", duration)
+        o.optionalExact("duration", duration)
         o.raw("context", PoseJSON.context(context(time: start, reduced: reduced, intensity: intensity, seed: seed, returnLoop: returnLoop)))
         o.list("samples", times.map { t in
             let ctx = context(time: start + t, reduced: reduced, intensity: intensity, seed: seed, returnLoop: returnLoop)
             let pose = variant.map { PetPoseEvaluator.pose(animation, elapsed: t, duration: duration, context: ctx, variant: $0) }
                 ?? PetPoseEvaluator.pose(animation, elapsed: t, duration: duration, context: ctx)
             var s = FixtureObject()
-            s.num("t", t)
-            s.num("time", start + t)
+            s.exact("t", t)
+            s.exact("time", start + t)
             if variant == nil { s.int("variant", PetPoseEvaluator.variant(for: animation, startedAt: start, seed: seed)) }
             s.raw("pose", PoseJSON.pet(pose))
             return s.json
@@ -121,7 +121,7 @@ enum PoseFixtures {
             var o = FixtureObject()
             o.str("note", note)
             o.str("animation", animation.rawValue)
-            o.optionalNum("duration", duration)
+            o.optionalExact("duration", duration)
             o.raw("context", PoseJSON.context(context(time: start, reduced: reduced, intensity: intensity)))
             var d = FixtureObject()
             d.str("waitingFor", detail.waitingFor?.rawValue)
@@ -131,8 +131,8 @@ enum PoseFixtures {
                 let pose = CompanionPoseEvaluator.pose(animation, elapsed: t, duration: duration,
                                                        context: context(time: start + t, reduced: reduced, intensity: intensity), detail: detail)
                 var s = FixtureObject()
-                s.num("t", t)
-                s.num("time", start + t)
+                s.exact("t", t)
+                s.exact("time", start + t)
                 s.raw("pose", PoseJSON.companion(pose))
                 return s.json
             }, omitEmpty: false)
@@ -177,7 +177,7 @@ enum PoseFixtures {
             o.str("interaction", id.rawValue)
             o.int("variant", variant)
             o.str("companionLoop", loop.rawValue)
-            o.num("duration", script.duration)
+            o.exact("duration", script.duration)
             o.bool("requiresCompanion", script.requiresCompanion)
             o.raw("petContext", PoseJSON.context(context(time: startedAt, reduced: reduced, intensity: intensity)))
             o.raw("companionContext", PoseJSON.context(context(time: startedAt, reduced: reduced, intensity: intensity, seed: seed &+ 0x5EED)))
@@ -202,7 +202,7 @@ enum PoseFixtures {
                                                      companionContext: context(time: startedAt + t, reduced: reduced, intensity: intensity, seed: seed &+ 0x5EED),
                                                      detail: detail)
                 var f = FixtureObject()
-                f.num("t", t)
+                f.exact("t", t)
                 f.raw("pet", PoseJSON.pet(frame.pet))
                 f.raw("companion", PoseJSON.companion(frame.companion))
                 f.list("props", frame.props.map(PoseJSON.prop))

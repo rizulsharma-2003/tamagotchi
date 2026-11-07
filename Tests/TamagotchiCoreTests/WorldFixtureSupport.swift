@@ -84,6 +84,17 @@ struct FixtureObject {
         raw(key, FixtureJSON.num(value))
     }
 
+    /// An input value (a time, a duration) at full precision: the shortest text that reads back as the same Double,
+    /// so a replay feeds the port exactly what Swift used.
+    mutating func exact(_ key: String, _ value: Double) {
+        raw(key, value.isFinite ? "\(value)" : "null")
+    }
+
+    mutating func optionalExact(_ key: String, _ value: Double?) {
+        guard let value else { return }
+        exact(key, value)
+    }
+
     mutating func optionalNum(_ key: String, _ value: Double?) {
         guard let value else { return }
         raw(key, FixtureJSON.num(value))
@@ -237,7 +248,7 @@ enum PoseJSON {
 
     static func context(_ c: PoseContext) -> String {
         var o = FixtureObject()
-        o.num("time", c.time)
+        o.exact("time", c.time)
         o.bool("reducedMotion", c.reducedMotion, default: false)
         o.str("intensity", c.intensity.rawValue, default: "normal")
         o.raw("seed", FixtureJSON.str(String(c.seed)))
