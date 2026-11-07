@@ -1,6 +1,6 @@
 // Mochi's stroll along the taskbar: where it is and what it's doing, as a timeline of segments that are pure
 // functions of time (so it can be drawn at any frame rate). It follows the Mac's MenuBarRoamer
-// (Sources/TamagotchiCore/Roaming/MenuBarRoamer.swift), cut down to a strip with no bed and no Patch.
+// (Sources/TamagotchiCore/Roaming/MenuBarRoamer.swift), cut down to a strip with no bed: Patch's desk is home.
 //
 // Mochi walks only in the taskbar's empty stretches (zones) and never over its buttons: to get to another stretch it
 // fades out and back in there (a hop), as the Mac's Mochi does with Reduce Motion on.
@@ -13,6 +13,10 @@
 // - A long quiet stretch (Mochi's napping mood): a yawn, and it sleeps where it is.
 // - Animation effects off: it stays where it is, expressions only.
 // - A pet, a game, a finished turn: it holds still while that plays (facing you for news), then carries on.
+// - Patch around (a home: his desk is to the right of it, ui/pet/companion_director.dart): Mochi keeps him company as
+//   on the Mac (`RoamMode.companion`, `.working`): it sits with him, potters a little way off and comes back, watches
+//   him work, waves from beside him when Claude needs you and naps there. For a moment together (a high five, a coffee
+//   delivery) it trots over and holds still while it plays (`summon`).
 //
 // Positions are Mochi's centre in logical pixels along the taskbar; times are seconds on the caller's clock. The plan
 // reaches a couple of seconds ahead and is extended as time passes (`update`). Every choice comes from the `Random`
@@ -51,7 +55,7 @@ enum StrollMode {
 }
 
 /// What Mochi is up to.
-enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react }
+enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react, company, visit }
 
 /// Small accents the pose gets on top of its animation.
 enum StrollStyle {
@@ -238,6 +242,9 @@ class Stroller {
   /// The plan always reaches at least this far ahead (seconds).
   static const double lookahead = 2;
 
+  /// Where Mochi keeps Patch company (his desk is to the right), or null while he isn't on the taskbar.
+  double? _home;
+
   /// The stretches Mochi may walk in, left to right, and the one it's in (as far as the plan has got).
   List<StrollLine> _zones = const [];
   StrollLine? _line;
@@ -258,13 +265,15 @@ class Stroller {
   StrollActivity _activity = StrollActivity.settle;
 
   StrollLine? get line => _line;
+  double? get home => _home;
   List<StrollLine> get zones => _zones;
   StrollMode get mode => _mode;
   bool get isPlaced => _line != null && _segments.isNotEmpty;
   List<StrollSegment> get segments => List.unmodifiable(_segments);
 
   /// Starts the stroll in [zones] at [x] (or carries on from where Mochi is), in [mode]. Carrying on from a spot
-  /// that's no longer in a free stretch (the buttons moved), Mochi hops to the nearest free one.
+  /// that's no longer in a free stretch (the buttons moved), Mochi hops to the nearest free one. With a [home] (Patch's
+  /// spot: [zones] is then the little stretch beside his desk), Mochi keeps him company.
   void place(
     List<StrollLine> zones, {
     required double now,
@@ -272,9 +281,11 @@ class Stroller {
     double? facing,
     StrollMode? mode,
     double idleSeconds = 0,
+    double? home,
   }) {
     if (zones.isEmpty) return clear();
     final state = _segments.isEmpty ? null : _state(now);
+    _home = home;
     _zones = [...zones]..sort((a, b) => a.minX.compareTo(b.minX));
     if (mode != null) _mode = mode;
     _idle = idleSeconds;
@@ -324,7 +335,29 @@ class Stroller {
   void clear() {
     _zones = const [];
     _line = null;
+    _home = null;
     _segments.clear();
+  }
+
+  /// A moment with Patch is about to play for [duration] seconds: Mochi trots over to its place beside him and holds
+  /// still there, facing him, while it plays. Returns when Mochi gets there (null: there's no Patch to go to).
+  double? summon(double now, double duration) {
+    final home = _home;
+    if (!isPlaced || home == null) return null;
+    _cut(now);
+    _activity = StrollActivity.visit;
+    if ((_x - home).abs() > 1) {
+      final direction = home > _x ? 1.0 : -1.0;
+      if (direction != _facing) _turn(direction);
+      _walk(home, speed: tuning.trotSpeed);
+    }
+    if (_facing != 1) _turn(1);
+    final arrival = _t;
+    _holdUntil = arrival + duration;
+    _hold(PetAnimation.idle, duration);
+    _open();
+    _extend(now);
+    return arrival;
   }
 
   /// Follows [mode] (re-planning from where Mochi is when it changes) and keeps the plan reaching ahead.
@@ -573,8 +606,17 @@ class Stroller {
     return _random.nextDouble() < right / total ? 1 : -1;
   }
 
+  /// Back to Mochi's place beside Patch, facing him.
+  void _goHome() {
+    final home = _home;
+    if (home == null) return;
+    if ((_x - home).abs() > 0.5) _walk(home);
+    if (_facing != 1) _turn(1);
+  }
+
   /// How a mode begins, from where Mochi is.
   void _open() {
+    if (_home != null) return _openBesidePatch();
     switch (_mode) {
       case StrollMode.free:
         _activity = StrollActivity.settle;
@@ -602,8 +644,79 @@ class Stroller {
     }
   }
 
+  /// How a mode begins with Patch around (`RoamBuilder.open` for `.companion`, `.working`, `.attending`, `.asleep`,
+  /// `.reducedMotion`): from Mochi's place beside his desk.
+  void _openBesidePatch() {
+    switch (_mode) {
+      case StrollMode.free:
+        _activity = StrollActivity.company;
+        _goHome();
+        _hold(_chance(0.55) ? PetAnimation.sit : PetAnimation.idle, _uniform(1.5, 3.5));
+      case StrollMode.working:
+        _activity = StrollActivity.watch;
+        _goHome();
+        _hold(PetAnimation.watch, _uniform(1.5, 3.5));
+      case StrollMode.attending:
+        _activity = StrollActivity.attend;
+        _goHome();
+        _hold(PetAnimation.waveGently, 8.4, style: StrollStyle.attentive);
+        for (var i = 0; i < 10; i++) {
+          _hold(PetAnimation.sit, 55.8, style: StrollStyle.attentive);
+          _hold(PetAnimation.waveGently, 4.2, style: StrollStyle.attentive);
+        }
+        _holdForever(PetAnimation.sit, style: StrollStyle.attentive);
+      case StrollMode.asleep:
+        _activity = StrollActivity.sleep;
+        _goHome();
+        _act(PetAnimation.yawn);
+        _holdForever(PetAnimation.sleep);
+      case StrollMode.still:
+        // Animation effects off: Mochi fades over to its place, then stays.
+        _activity = StrollActivity.still;
+        final home = _home!;
+        if ((_x - home).abs() > 0.5) _hopTo(home);
+        _facing = 1;
+        _hold(_chance(0.5) ? PetAnimation.sit : PetAnimation.idle, _uniform(2, 4));
+    }
+  }
+
+  /// The next stretch with Patch around: sitting with him or watching him work, with a little potter now and then.
+  void _chunkBesidePatch() {
+    switch (_mode) {
+      case StrollMode.free:
+        if (_chance(0.45)) _potterNearHome();
+        _activity = StrollActivity.company;
+        _goHome();
+        _rest(_chance(0.55) ? PetAnimation.sit : PetAnimation.idle, _uniform(12, 40) * tuning.restScale);
+      case StrollMode.working:
+        if (_chance(0.22)) _potterNearHome();
+        _activity = StrollActivity.watch;
+        _goHome();
+        _rest(PetAnimation.watch, _uniform(14, 40) * tuning.restScale);
+      default:
+        _chunkAlone();
+    }
+  }
+
+  /// A few steps away from Patch's desk and a sniff or a look round, or a stretch where Mochi is (`potterNearHome`).
+  void _potterNearHome() {
+    _activity = StrollActivity.potter;
+    final room = _room(-1);
+    if (room >= 24 && _chance(0.7)) {
+      _walk(_x - _uniform(math.min(24, room), room));
+      _act(_chance(0.5) ? PetAnimation.sniff : PetAnimation.lookAround);
+    } else {
+      _act(_chance(0.5) ? PetAnimation.stretch : PetAnimation.scratch);
+    }
+  }
+
   /// The next stretch of the mode.
   void _chunk() {
+    if (_home != null) return _chunkBesidePatch();
+    _chunkAlone();
+  }
+
+  void _chunkAlone() {
     switch (_mode) {
       case StrollMode.free:
         final activity = _chooseFree();

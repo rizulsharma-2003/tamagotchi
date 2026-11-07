@@ -21,36 +21,16 @@ class SceneDirector {
   ({CompanionAnimation animation, double start})? companionShot;
   String? _phase;
 
-  /// Patch's work loop for a tool category (`workLoop(for:)`).
-  static CompanionAnimation workLoop(String? category) => switch (category) {
-    'think' => CompanionAnimation.thinking,
-    'read' => CompanionAnimation.reading,
-    'search' => CompanionAnimation.searching,
-    'shell' => CompanionAnimation.runningCommand,
-    'web' => CompanionAnimation.browsing,
-    'agent' => CompanionAnimation.delegating,
-    _ => CompanionAnimation.typing,
-  };
+  /// Patch's work loop for a tool category (`workLoop(for:)`, shared with Windows in mochi_art).
+  static CompanionAnimation workLoop(String? category) => ClaudeLoops.workLoop(category);
 
   /// Follows Claude on the Mac: Patch works while Claude works, Mochi watches, both sleep while the Mac rests, and a
   /// finished or failed turn gets a reaction.
   void follow(ClaudeMirror? claude, {required double time}) {
     final phase = claude?.phase ?? 'none';
     final resting = claude?.resting ?? false;
-    petLoop = resting
-        ? PetAnimation.sleep
-        : switch (phase) {
-            'working' => PetAnimation.watch,
-            'waiting' => PetAnimation.waveGently,
-            _ => PetAnimation.idle,
-          };
-    companionLoop = resting
-        ? CompanionAnimation.sleep
-        : switch (phase) {
-            'working' => workLoop(claude?.category),
-            'waiting' => CompanionAnimation.waiting,
-            _ => CompanionAnimation.idleAtDesk,
-          };
+    petLoop = ClaudeLoops.petLoop(phase, resting: resting);
+    companionLoop = ClaudeLoops.companionLoop(phase, category: claude?.category, resting: resting);
     final previous = _phase;
     _phase = phase;
     if (previous == null || previous == phase || resting) return;

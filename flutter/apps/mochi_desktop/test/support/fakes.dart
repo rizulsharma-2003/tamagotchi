@@ -205,8 +205,12 @@ class FakeShell implements DesktopShell {
   Future<void> quit() async => quit_ = true;
 }
 
-/// The pet's window in physical pixels: records every move and resize, and whether clicks go through it.
+/// The pet's window in physical pixels: records every move and resize, and whether clicks go through it. With a
+/// [minimum], it never gets smaller than that, as Windows keeps a window with a title bar at least 136 × 39 at 100%.
 class FakePetWindow implements PetWindow {
+  FakePetWindow({this.minimum});
+
+  final (int, int)? minimum;
   PixelRect? current;
   final List<PixelRect> frames = [];
   final List<PixelRect> moves = [];
@@ -220,10 +224,17 @@ class FakePetWindow implements PetWindow {
     moves.add(current!);
   }
 
+  /// For each [frames] entry, whether the window was covered when it was set.
+  final List<bool> framedCovered = [];
+
   @override
   Future<void> setFrame(PixelRect frame) async {
-    current = frame;
-    frames.add(frame);
+    framedCovered.add(covered);
+    final least = minimum;
+    current = least == null
+        ? frame
+        : PixelRect.ltwh(frame.left, frame.top, frame.width < least.$1 ? least.$1 : frame.width, frame.height < least.$2 ? least.$2 : frame.height);
+    frames.add(current!);
   }
 
   @override
@@ -239,6 +250,49 @@ class FakePetWindow implements PetWindow {
 
   @override
   void settle() => settles++;
+
+  /// The window with the focus (the test sets it), and where the focus was given back to.
+  int focused = 42;
+  final List<int> focusGiven = [];
+
+  @override
+  int focusOwner() => focused;
+
+  @override
+  void giveFocus(int window) => focusGiven.add(window);
+
+  /// The window's covers ([cover], [uncover]) in order: true for each cover, false for each uncover.
+  final List<bool> covers = [];
+
+  /// Whether [cover] puts a picture up (a real window's does).
+  bool coverable = true;
+  bool covered = false;
+
+  @override
+  bool cover() {
+    if (!coverable) return false;
+    covered = true;
+    covers.add(true);
+    return true;
+  }
+
+  @override
+  void uncover() {
+    if (!covered) return;
+    covered = false;
+    covers.add(false);
+  }
+
+  /// Whether the timers are precise now (an animation runs), and every change.
+  bool precise = false;
+  final List<bool> preciseChanges = [];
+
+  @override
+  void preciseTimers(bool on) {
+    if (on == precise) return;
+    precise = on;
+    preciseChanges.add(on);
+  }
 }
 
 /// A taskbar the test sets up: at the bottom of a 1920×1080 screen at 100% by default, with the tray at the right,

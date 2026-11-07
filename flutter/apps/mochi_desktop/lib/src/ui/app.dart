@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter/services.dart';
 import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_ui/mochi_ui.dart';
@@ -11,8 +12,12 @@ import 'package:mochi_wire/mochi_wire.dart' show HookStatus;
 import '../core/pet_cues.dart';
 import '../desktop.dart';
 import '../platform/taskbar.dart';
+import 'pet/companion_director.dart';
 import 'pet/pet_surface.dart';
 import 'pet/taskbar_stroll.dart';
+import 'popover/frame_meter.dart';
+import 'popover/popover_stage.dart';
+import 'popover/popover_view.dart';
 import 'screens/home_screen.dart';
 import 'screens/pairing_screen.dart';
 import 'screens/settings_screen.dart';
@@ -69,18 +74,44 @@ class DesktopAppState extends State<DesktopApp> {
   PoseLibrary? _library;
   late DateTime _lastActivity = widget.desktop.sessions.now;
   final List<StreamSubscription<Object?>> _subscriptions = [];
+
+  /// One clock (seconds) for the stroll and Patch, so a moment together starts when Mochi gets to him.
+  late final double Function() _clock = widget.strollClock ?? _monotonic();
+
+  static double Function() _monotonic() {
+    final watch = Stopwatch()..start();
+    return () => watch.elapsedMicroseconds / 1e6;
+  }
+
+  /// Patch, Mochi's coding companion: on the taskbar beside Mochi and in the room in Mochi's window.
+  late final CompanionDirector _companion = CompanionDirector(
+    sessions: desktop.sessions,
+    settings: desktop.settings,
+    cues: desktop.cues,
+    lastActivity: () => _lastActivity,
+    clock: _clock,
+    random: widget.strollRandom,
+    reducedMotion: () => desktop.motion.reduced,
+  );
   late final TaskbarStroll _stroll = TaskbarStroll(
     shell: widget.shell,
     taskbar: widget.taskbar ?? systemTaskbar(),
     settings: desktop.settings,
     motion: desktop.motion,
     cues: desktop.cues,
+    companion: _companion,
     idle: () => desktop.sessions.now.difference(_lastActivity),
-    clock: widget.strollClock,
+    clock: _clock,
     random: widget.strollRandom,
     log: _strollLog(),
   );
   late bool _trayRoaming = desktop.settings.roamTaskbar;
+
+  /// Development: the popover's frame times, with the stroll's debug log on.
+  late final FrameMeter? _meter = switch (_stroll.log) {
+    final log? => FrameMeter(log),
+    null => null,
+  };
 
   MochiDesktop get desktop => widget.desktop;
   Surface get surface => _surface;
@@ -88,6 +119,9 @@ class DesktopAppState extends State<DesktopApp> {
 
   /// Mochi's stroll along the taskbar (and every change to the window).
   TaskbarStroll get stroll => _stroll;
+
+  /// Patch.
+  CompanionDirector get companion => _companion;
 
   /// Development: with a `stroll-debug` file in Mochi's folder, the stroll writes what it sees to `stroll.log` there.
   void Function(String)? _strollLog() {
@@ -106,6 +140,16 @@ class DesktopAppState extends State<DesktopApp> {
   @override
   void initState() {
     super.initState();
+    if (Platform.isWindows) _warmUpTimer = Timer.periodic(const Duration(seconds: 5), (_) => _warmUp());
+    // Development: with the stroll's debug log on, Flutter's errors go there too (a release build has no console).
+    final log = _stroll.log;
+    if (log != null) {
+      final previous = FlutterError.onError;
+      FlutterError.onError = (details) {
+        log('error: ${details.exceptionAsString()} ${details.stack.toString().split('\n').take(6).join(' | ')}');
+        previous?.call(details);
+      };
+    }
     unawaited(_loadLibrary());
     _subscriptions.add(widget.shell.actions.listen(handle));
     _subscriptions.add(desktop.cues.listen(_noteActivity));
@@ -119,6 +163,7 @@ class DesktopAppState extends State<DesktopApp> {
   Future<void> _loadLibrary() async {
     try {
       final library = await (widget.library ?? PoseLibrary.load(rootBundle, DesktopApp.poseAsset));
+      _companion.library = library;
       if (mounted) setState(() => _library = library);
     } on Object catch (error) {
       debugPrint('Mochi: the animations could not be loaded (${error.runtimeType})');
@@ -138,13 +183,15 @@ class DesktopAppState extends State<DesktopApp> {
       _trayRoaming = desktop.settings.roamTaskbar;
       unawaited(widget.shell.setRoaming(_trayRoaming));
     }
-    if (_surface == Surface.main) return;
+    // The popover's own switches take effect when it closes.
+    if (_surface == Surface.main || _surface == Surface.popover) return;
     final wanted = desktop.settings.showPet ? Surface.pet : Surface.hidden;
     if (wanted != _surface) _show(wanted);
   }
 
   /// The tray menu, the pet's menu and the window's close button.
   void handle(ShellAction action) {
+    _stroll.log?.call('action: ${action.name} (showing ${_surface.name})');
     switch (action) {
       case ShellAction.showMain:
         open(MainPage.home);
@@ -161,9 +208,16 @@ class DesktopAppState extends State<DesktopApp> {
       case ShellAction.closeWindow:
         if (_surface == Surface.main) {
           closeMain();
+        } else if (_surface == Surface.popover) {
+          closePopover();
         } else {
           _show(Surface.hidden);
         }
+      case ShellAction.dismissPopover:
+        // Windows can take the focus away for a moment while the window changes form: only a click elsewhere after
+        // it opened closes it.
+        final opened = _popoverOpenedAt;
+        if (_surface == Surface.popover && (opened == null || _clock() - opened > popoverSettle)) closePopover();
       case ShellAction.quit:
         unawaited(_quit());
     }
@@ -212,9 +266,111 @@ class DesktopAppState extends State<DesktopApp> {
   /// Back to the desktop pet (or nothing, with the pet turned off). Mochi keeps running in the tray.
   void closeMain() => _show(desktop.settings.showPet ? Surface.pet : Surface.hidden);
 
+  /// The popover (the Mac's menu-bar popover): clicking Mochi on the taskbar opens it above where Mochi is; clicking
+  /// again (anywhere outside it, Mochi's spot included) or Escape closes it, and Mochi is back where it was.
+  void openPopover() {
+    if (_surface != Surface.pet) return;
+    _popoverOpenedAt = _clock();
+    // Where it goes and what it comes out of, worked out before Mochi leaves the taskbar.
+    _popover = _stroll.popover = _stroll.popoverGeometry(SurfaceSizes.popover);
+    _popoverClosing = false;
+    _show(Surface.popover);
+  }
+
+  /// The popover's geometry while it's up, and whether it's on its way out.
+  PopoverGeometry? _popover;
+  bool _popoverClosing = false;
+
+  /// The popover's stage (for tests).
+  bool get popoverClosing => _popoverClosing;
+  PopoverGeometry? get popoverGeometry => _popover;
+
+  /// When the popover opened (the stroll's clock), and how long a lost focus doesn't count as a click elsewhere.
+  double? _popoverOpenedAt;
+  static const double popoverSettle = 0.6;
+
+  /// Back to the taskbar (or nothing, if the desktop pet was switched off in the popover): the popover genies back into
+  /// Mochi's spot as Mochi leaps home (popover_stage.dart), and then the window is the pet's again.
+  void closePopover() {
+    if (_surface != Surface.popover || _popoverClosing) return;
+    _stroll.popoverClosing();
+    setState(() => _popoverClosing = true);
+  }
+
+  /// Mochi leaps back to its spot on the taskbar when the popover closes (if it's going back there).
+  bool get _leapBack => _popover?.mochi != null && desktop.settings.showPet && desktop.settings.roamTaskbar;
+
+  Future<void> _popoverClosed() async {
+    if (_surface != Surface.popover) return;
+    if (_leapBack) await _stroll.returnFromPopover();
+    if (!mounted || _surface != Surface.popover) return;
+    _show(desktop.settings.showPet ? Surface.pet : Surface.hidden);
+  }
+
+  /// "Ask Mochi" in the popover: Mochi's window with the question box ready.
+  void openAsk() {
+    _askFirst = true;
+    open(MainPage.home);
+  }
+
+  bool _askFirst = false;
+
   void _show(Surface surface) {
+    if (surface != Surface.popover) {
+      _popover = null;
+      _popoverClosing = false;
+    }
     setState(() => _surface = surface);
-    unawaited(_stroll.show(surface));
+    final shown = _stroll.show(surface);
+    if (surface == Surface.popover) _popoverReady = shown;
+    unawaited(shown);
+  }
+
+  /// Completes once the window is in place for the popover.
+  Future<void>? _popoverReady;
+
+  Widget _popoverPanel(bool hidePet) => PopoverView(
+    desktop: desktop,
+    companion: _companion,
+    library: _library,
+    lastActivity: () => _lastActivity,
+    hidePet: hidePet,
+    onClose: closePopover,
+    onOpenMain: () => open(MainPage.home),
+    onAsk: openAsk,
+    onSettings: () => open(MainPage.settings),
+    onSetUpClaude: () => open(MainPage.settings, pane: SettingsTab.claude),
+  );
+
+  /// The popover is drawn once out of sight soon after launch, on Windows (see [_PopoverWarmUp]).
+  Timer? _warmUpTimer;
+  bool _warmingUp = false;
+  bool _warm = false;
+
+  void _warmUp() {
+    if (_warm) {
+      _warmUpTimer?.cancel();
+      return;
+    }
+    // While Mochi stands on the taskbar (its walk would stutter once).
+    if (_surface == Surface.pet && !_warmingUp && _library != null && !_stroll.moving && mounted) setState(() => _warmingUp = true);
+  }
+
+  void _warmedUp() {
+    _warmUpTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _warmingUp = false;
+        _warm = true;
+      });
+    }
+  }
+
+  /// Whether Mochi's window should open on the question box (once).
+  bool _takeAskFirst() {
+    final ask = _askFirst;
+    _askFirst = false;
+    return ask;
   }
 
   /// Moves the pet with the mouse until it's dropped (window_manager's drag returns then): off the taskbar, Mochi
@@ -240,13 +396,16 @@ class DesktopAppState extends State<DesktopApp> {
     }
     desktop.sessions.removeListener(_sessionsChanged);
     desktop.settings.removeListener(_settingsChanged);
+    _warmUpTimer?.cancel();
     _stroll.dispose();
+    _companion.dispose();
+    _meter?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([desktop.settings, desktop.motion, _stroll]),
+    listenable: Listenable.merge([desktop.settings, desktop.motion, _stroll, _companion]),
     builder: (context, _) => MaterialApp(
       title: 'Mochi',
       debugShowCheckedModeBanner: false,
@@ -260,21 +419,112 @@ class DesktopAppState extends State<DesktopApp> {
         child: child!,
       ),
       home: switch (_surface) {
-        Surface.pet => PetSurface(
+        Surface.pet => Stack(
+          children: [
+            Positioned.fill(
+              child: PetSurface(
+                desktop: desktop,
+                stroll: _stroll,
+                library: _library,
+                lastActivity: () => _lastActivity,
+                onAction: handle,
+                onDragStart: () => unawaited(_drag()),
+                onHide: () => desktop.settings.showPet = false,
+                onNativeMenu: () => unawaited(widget.shell.popUpMenu()),
+                onOpenPopover: openPopover,
+                companion: _companion,
+              ),
+            ),
+            if (_warmingUp) _PopoverWarmUp(panel: _popoverPanel(false), onDone: _warmedUp),
+          ],
+        ),
+        Surface.popover => PopoverStage(
+          geometry: _popover ?? _stroll.popoverGeometry(SurfaceSizes.popover),
+          closing: _popoverClosing,
+          leapBack: _leapBack,
           desktop: desktop,
-          stroll: _stroll,
+          companion: _companion,
           library: _library,
-          lastActivity: () => _lastActivity,
-          onAction: handle,
-          onDragStart: () => unawaited(_drag()),
-          onHide: () => desktop.settings.showPet = false,
-          onNativeMenu: () => unawaited(widget.shell.popUpMenu()),
+          onOpened: _stroll.popoverOpened,
+          ready: _popoverReady,
+          meter: _meter,
+          onClosed: () => unawaited(_popoverClosed()),
+          panel: (hidePet) => _popoverPanel(hidePet),
         ),
         Surface.main => _MainSurface(state: this),
         Surface.hidden => const SizedBox.shrink(),
       },
     ),
   );
+}
+
+/// The popover, drawn once out of sight (a picture taken of it and thrown away) a few seconds after Mochi shows on
+/// Windows: the first time it's drawn takes several times longer than after (the renderer prepares its shaders and
+/// caches, the text is laid out), and the first click on Mochi would otherwise wait for that before the genie starts.
+class _PopoverWarmUp extends StatefulWidget {
+  const _PopoverWarmUp({required this.panel, required this.onDone});
+
+  final Widget panel;
+  final VoidCallback onDone;
+
+  @override
+  State<_PopoverWarmUp> createState() => _PopoverWarmUpState();
+}
+
+class _PopoverWarmUpState extends State<_PopoverWarmUp> {
+  final GlobalKey _key = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_draw()));
+  }
+
+  Future<void> _draw() async {
+    try {
+      final boundary = _key.currentContext?.findRenderObject();
+      if (boundary is RenderRepaintBoundary && mounted) {
+        final ratio = MediaQuery.devicePixelRatioOf(context);
+        final image = await boundary.toImage(pixelRatio: ratio);
+        image.dispose();
+      }
+    } on Object {
+      // Only a head start.
+    }
+    if (mounted) widget.onDone();
+  }
+
+  @override
+  Widget build(BuildContext context) => Positioned(
+    left: 0,
+    top: 0,
+    width: SurfaceSizes.popover.width,
+    height: SurfaceSizes.popover.height,
+    child: IgnorePointer(
+      child: ExcludeSemantics(
+        child: ExcludeFocus(
+          child: TickerMode(
+            enabled: false,
+            child: ClipRect(
+              clipper: const _NoArea(),
+              child: RepaintBoundary(key: _key, child: widget.panel),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Clips to nothing: painted, never seen.
+class _NoArea extends CustomClipper<Rect> {
+  const _NoArea();
+
+  @override
+  Rect getClip(Size size) => Rect.zero;
+
+  @override
+  bool shouldReclip(_NoArea old) => false;
 }
 
 /// The main window's frame: rounded backdrop, title bar, the page. Settings has its own backdrop (its pane's colours)
@@ -306,12 +556,16 @@ class _MainSurface extends StatelessWidget {
             onBack: page == MainPage.home ? null : back,
             onPair: page == MainPage.pairing || settingsPage ? null : () => state.open(MainPage.pairing),
             onSettings: settingsPage ? null : () => state.open(MainPage.settings),
-            trailing: settingsPage ? _ClaudeStatusPill(desktop: desktop, onTap: () => state.settingsNavigation.tab = SettingsTab.claude) : null,
+            trailing: settingsPage
+                ? _ClaudeStatusPill(desktop: desktop, onTap: () => state.settingsNavigation.tab = SettingsTab.claude)
+                : null,
           ),
           Expanded(
             child: switch (page) {
               MainPage.home => HomeScreen(
                 desktop: desktop,
+                companion: state._companion,
+                askFirst: state._takeAskFirst(),
                 library: state._library,
                 lastActivity: () => state._lastActivity,
                 onPair: () => state.open(MainPage.pairing),
@@ -329,6 +583,7 @@ class _MainSurface extends StatelessWidget {
                   onPair: state.pairPhone,
                   onHome: back,
                   stroll: state.stroll,
+                  patch: state.companion,
                   library: state._library,
                 ),
               ),

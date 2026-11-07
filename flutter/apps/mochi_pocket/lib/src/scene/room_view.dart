@@ -86,6 +86,12 @@ class _RoomViewState extends State<RoomView> with SingleTickerProviderStateMixin
     super.dispose();
   }
 
+  /// Everyone's poses at [time] on the room's clock (calmer with animations off).
+  SceneFrame _frame(double time) {
+    final poses = _director.poses(widget.library, time, calm: _config.reducedMotion);
+    return SceneFrame(pet: poses.pet, companion: poses.companion);
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -101,10 +107,9 @@ class _RoomViewState extends State<RoomView> with SingleTickerProviderStateMixin
             Positioned.fill(
               child: RepaintBoundary(
                 child: CustomPaint(
-                  painter: _RoomPainter(
+                  painter: LiveRoomPainter(
                     config: _config,
-                    director: _director,
-                    library: widget.library,
+                    frame: _frame,
                     clock: _clock,
                     calm: calm,
                     dark: context.palette.isDark,
@@ -125,49 +130,4 @@ class _RoomViewState extends State<RoomView> with SingleTickerProviderStateMixin
       );
     },
   );
-}
-
-class _RoomPainter extends CustomPainter {
-  _RoomPainter({
-    required this.config,
-    required this.director,
-    required this.library,
-    required this.clock,
-    required this.calm,
-    required this.dark,
-  }) : super(repaint: clock);
-
-  final SceneConfig config;
-  final SceneDirector director;
-  final PoseLibrary? library;
-  final ValueNotifier<double> clock;
-
-  /// Animations are off: calmer, not frozen.
-  final bool calm;
-
-  /// The room's night colours, with the dark theme.
-  final bool dark;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final time = clock.value;
-    final poses = director.poses(library, time, calm: calm);
-    canvas.save();
-    canvas.clipRect(Offset.zero & size);
-    SceneRenderer.draw(
-      config,
-      SceneFrame(pet: poses.pet, companion: poses.companion),
-      SceneLayout.phone(size),
-      GContext(canvas),
-      // The art's own clock (blinks, steam, the laptop cursor) starts well past zero, as in the gallery.
-      time: 100 + (calm ? time * SceneDirector.calmSpeed : time),
-      dark: dark,
-      hour: DateTime.now().hour,
-    );
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_RoomPainter old) =>
-      old.config != config || old.library != library || old.director != director || old.calm != calm || old.dark != dark;
 }

@@ -8,6 +8,7 @@ import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 
 import '../../desktop.dart';
+import '../pet/companion_director.dart';
 import '../pet/taskbar_stroll.dart';
 import 'settings_tabs.dart';
 
@@ -19,6 +20,7 @@ class SettingsHost {
     required this.onPair,
     required this.onHome,
     this.stroll,
+    this.patch,
     this.library,
     this.clock,
   });
@@ -34,6 +36,9 @@ class SettingsHost {
 
   /// The pet's stroll along the taskbar: why it isn't roaming, if it isn't.
   final TaskbarStroll? stroll;
+
+  /// The companion himself: whether he's around, and on the taskbar ([companion] is his name).
+  final CompanionDirector? patch;
 
   /// The recorded animations, for the previews' poses (null while they load).
   final PoseLibrary? library;

@@ -3,7 +3,7 @@
 /// that the iPhone shares (iOS/SharedArt).
 ///
 /// Start with the `CustomPainter`s in `painters.dart` (`PetPainter`, `CompanionPainter`,
-/// `ScenePainter`, `FurniturePainter`), or draw into a [GContext] with the renderers directly
+/// `ScenePainter`, `LiveRoomPainter`, `FurniturePainter`), or draw into a [GContext] with the renderers directly
 /// (`PetRenderer.draw`, `CompanionRenderer.draw`, `SceneRenderer.draw`, …). The model types
 /// (`PetPose`, `CompanionPose`, `SceneConfig`, `RoomLayout`, …) read the JSON the Swift side
 /// writes: enum names are the Swift raw values, keys the Swift property names.
@@ -12,14 +12,17 @@
 /// - The pose evaluators (TamagotchiCore/Animation: `PetPoseEvaluator`, `CompanionPoseEvaluator`,
 ///   `PetIdleLife`, `PetPlay`/`PetTreat`/`PetAffection`, `InteractionLibrary`) and the world that
 ///   drives them. Poses come ready-made (from Swift, or recorded tracks as in the gallery).
-/// - Menu-bar-only drawing (`MenuBarGlyph`, `MenuBarPetCanvas`, the bed), the popover's speech
-///   bubbles (`SceneSpeechOverlay`) and the desktop pet; the seasonal calendar and greetings.
+/// - Menu-bar-only drawing (`MenuBarGlyph`, most of `MenuBarPetCanvas`, the bed; its celebration burst is
+///   [Celebration]), the popover's speech bubbles (`SceneSpeechOverlay`) and the desktop pet; the seasonal calendar
+///   and greetings.
 /// - Fonts: Swift draws z/?/! and the bunting letters in SF Pro Rounded; here they use
 ///   [MochiArtText.family] (the platform font by default). Bundle an OFL rounded font for
 ///   Android and Windows. SF Symbols in speech bubbles are vector approximations.
 library;
 
 export 'src/accessory_renderer.dart';
+export 'src/celebration.dart';
+export 'src/claude_loops.dart';
 export 'src/companion_renderer.dart';
 export 'src/drawing.dart';
 export 'src/furniture_art.dart';

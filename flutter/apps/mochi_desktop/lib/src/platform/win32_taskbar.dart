@@ -11,7 +11,12 @@
 // - The pet's window: SetWindowPos with SWP_NOACTIVATE | SWP_NOZORDER (| SWP_NOSIZE for a step), so it never takes the
 //   focus; SetWindowPos(HWND_TOPMOST) to stay over the taskbar; WS_EX_LAYERED | WS_EX_TRANSPARENT to let clicks
 //   through to the taskbar except on Mochi.
+// - Changing its size without a flash: a copy of the screen there (BitBlt) in a click-through layered window of its own
+//   (UpdateLayeredWindow) in front of it, while the window itself is cloaked (DwmSetWindowAttribute(DWMWA_CLOAK)),
+//   with DwmFlush between the steps so each is on screen before the next.
+// - timeBeginPeriod(1) while the popover's transitions run.
 
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:isolate';
 
@@ -263,6 +268,18 @@ List<PixelRect>? _automationRects(int tray) {
   }
 }
 
+// user32's UpdateLayeredWindow (package:win32 has only the Indirect form).
+final int Function(int, int, Pointer<POINT>, Pointer<SIZE>, int, Pointer<POINT>, int, Pointer<BLENDFUNCTION>, int) _updateLayeredWindow =
+    DynamicLibrary.open('user32.dll').lookupFunction<
+      Int32 Function(IntPtr, IntPtr, Pointer<POINT>, Pointer<SIZE>, IntPtr, Pointer<POINT>, Uint32, Pointer<BLENDFUNCTION>, Uint32),
+      int Function(int, int, Pointer<POINT>, Pointer<SIZE>, int, Pointer<POINT>, int, Pointer<BLENDFUNCTION>, int)
+    >('UpdateLayeredWindow');
+
+// winmm's timer resolution (not in package:win32).
+final DynamicLibrary _winmm = DynamicLibrary.open('winmm.dll');
+final int Function(int) _timeBeginPeriod = _winmm.lookupFunction<Uint32 Function(Uint32), int Function(int)>('timeBeginPeriod');
+final int Function(int) _timeEndPeriod = _winmm.lookupFunction<Uint32 Function(Uint32), int Function(int)>('timeEndPeriod');
+
 /// The Flutter window (its HWND from window_manager's `getId`), placed with SetWindowPos.
 class Win32PetWindow implements PetWindow {
   Win32PetWindow(this.hwnd);
@@ -314,6 +331,129 @@ class Win32PetWindow implements PetWindow {
     final layered = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
     final next = through ? layered | WS_EX_TRANSPARENT : layered & ~WS_EX_TRANSPARENT;
     if (next != layered) SetWindowLongPtr(hwnd, GWL_EXSTYLE, next);
+  }
+
+  @override
+  int focusOwner() {
+    final owner = GetForegroundWindow();
+    return owner == hwnd ? 0 : owner;
+  }
+
+  @override
+  void giveFocus(int window) {
+    if (window == 0 || IsWindow(window) == 0 || GetForegroundWindow() != hwnd) return;
+    SetForegroundWindow(window);
+  }
+
+  bool _precise = false;
+
+  /// The picture in front of the window while it changes size (0: none), and the guard that takes it down if nothing
+  /// else does.
+  int _curtain = 0;
+  Timer? _curtainGuard;
+
+  @override
+  bool cover() {
+    if (_curtain != 0) return true;
+    final rect = frame();
+    if (rect == null || rect.width <= 0 || rect.height <= 0) return false;
+    final (width, height) = (rect.width, rect.height);
+    final screen = GetDC(NULL);
+    final memory = CreateCompatibleDC(screen);
+    final info = calloc<BITMAPINFO>();
+    final bits = calloc<Pointer>();
+    final at = calloc<POINT>();
+    final origin = calloc<POINT>();
+    final size = calloc<SIZE>();
+    final className = 'STATIC'.toNativeUtf16();
+    final title = ''.toNativeUtf16();
+    var bitmap = 0, previous = 0, curtain = 0;
+    try {
+      info.ref.bmiHeader
+        ..biSize = sizeOf<BITMAPINFOHEADER>()
+        ..biWidth = width
+        ..biHeight = -height
+        ..biPlanes = 1
+        ..biBitCount = 32
+        ..biCompression = BI_RGB;
+      bitmap = CreateDIBSection(memory, info, DIB_RGB_COLORS, bits, NULL, 0);
+      if (bitmap == 0) return false;
+      previous = SelectObject(memory, bitmap);
+      // What's on screen there now: Mochi (and Patch) over the taskbar.
+      if (BitBlt(memory, 0, 0, width, height, screen, rect.left, rect.top, SRCCOPY) == 0) return false;
+      curtain = CreateWindowEx(
+        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
+        className,
+        title,
+        WS_POPUP,
+        rect.left,
+        rect.top,
+        width,
+        height,
+        NULL,
+        NULL,
+        GetModuleHandle(nullptr),
+        nullptr,
+      );
+      if (curtain == 0) return false;
+      at.ref
+        ..x = rect.left
+        ..y = rect.top;
+      size.ref
+        ..cx = width
+        ..cy = height;
+      if (_updateLayeredWindow(curtain, screen, at, size, memory, origin, 0, nullptr, ULW_OPAQUE) == 0) {
+        DestroyWindow(curtain);
+        return false;
+      }
+      ShowWindow(curtain, SW_SHOWNOACTIVATE);
+      SetWindowPos(curtain, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+      _curtain = curtain;
+    } finally {
+      if (previous != 0) SelectObject(memory, previous);
+      if (bitmap != 0) DeleteObject(bitmap);
+      DeleteDC(memory);
+      ReleaseDC(NULL, screen);
+      for (final pointer in [info, bits, at, origin, size, className, title]) {
+        calloc.free(pointer);
+      }
+    }
+    // The picture is on screen; then the window goes out of sight behind it.
+    DwmFlush();
+    _cloak(true);
+    _curtainGuard = Timer(const Duration(seconds: 2), uncover);
+    return true;
+  }
+
+  @override
+  void uncover() {
+    _curtainGuard?.cancel();
+    _curtainGuard = null;
+    if (_curtain == 0) return;
+    // Flutter's frame at the new size is on screen (out of sight); the window comes back, then the picture goes.
+    DwmFlush();
+    _cloak(false);
+    DwmFlush();
+    DestroyWindow(_curtain);
+    _curtain = 0;
+  }
+
+  void _cloak(bool on) {
+    final value = calloc<Int32>()..value = on ? 1 : 0;
+    try {
+      DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, value, sizeOf<Int32>());
+    } finally {
+      calloc.free(value);
+    }
+  }
+
+  // Since Windows 10 2004 this only changes this process's timers, and only while it's asked for (each begin has its
+  // end).
+  @override
+  void preciseTimers(bool on) {
+    if (on == _precise) return;
+    _precise = on;
+    on ? _timeBeginPeriod(1) : _timeEndPeriod(1);
   }
 
   @override
