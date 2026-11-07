@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_ui/mochi_ui.dart';
+import 'package:mochi_wire/mochi_wire.dart' show HookStatus;
 
 import '../core/pet_cues.dart';
 import '../desktop.dart';
@@ -17,6 +18,8 @@ import 'screens/pairing_screen.dart';
 import 'screens/settings_screen.dart';
 import 'shell.dart';
 import 'widgets/title_bar.dart';
+
+export 'screens/settings_screen.dart' show SettingsNavigation, SettingsTab;
 
 enum MainPage { home, pairing, settings }
 
@@ -161,9 +164,44 @@ class DesktopAppState extends State<DesktopApp> {
     }
   }
 
-  void open(MainPage page) {
+  /// Which Settings pane is open (kept while Settings is closed, so it opens where you left it).
+  final SettingsNavigation settingsNavigation = SettingsNavigation();
+
+  /// Settings was opened from Mochi's window (Escape goes back to it), not from the tray or the pet.
+  bool _settingsFromWindow = false;
+
+  /// Shows [page] in the main window; Settings at its own, larger size, at [pane] if given.
+  void open(MainPage page, {SettingsTab? pane}) {
+    if (pane != null) settingsNavigation.tab = pane;
+    if (page == MainPage.settings && (_page != MainPage.settings || _surface != Surface.main)) {
+      _settingsFromWindow = _surface == Surface.main;
+    }
+    widget.shell.mainSize = page == MainPage.settings ? settingsSize() : SurfaceSizes.main;
     setState(() => _page = page);
     _show(Surface.main);
+  }
+
+  /// Escape in Settings: back to Mochi's window if Settings was opened from it, else back to the desktop.
+  void closeSettings() => _settingsFromWindow ? open(MainPage.home) : closeMain();
+
+  /// Settings › Phones › Pair a Phone…: the pairing page, with a fresh code.
+  void pairPhone() {
+    open(MainPage.pairing);
+    if (desktop.link.code == null && !desktop.link.working) unawaited(desktop.link.showCode());
+  }
+
+  /// The Settings window's size: the Mac's, or as much of a small screen as fits (Windows' work area).
+  Size settingsSize() {
+    const wanted = SurfaceSizes.settings;
+    if (!Platform.isWindows || !_stroll.taskbar.available) return wanted;
+    final reading = _stroll.taskbar.read();
+    if (reading == null) return wanted;
+    final width = reading.workArea.width / reading.scale - 32;
+    final height = reading.workArea.height / reading.scale - 32;
+    return Size(
+      math.max(SurfaceSizes.mainMinimum.width, math.min(wanted.width, width)),
+      math.max(SurfaceSizes.mainMinimum.height, math.min(wanted.height, height)),
+    );
   }
 
   /// Back to the desktop pet (or nothing, with the pet turned off). Mochi keeps running in the tray.
@@ -234,7 +272,8 @@ class DesktopAppState extends State<DesktopApp> {
   );
 }
 
-/// The main window's frame: rounded clay backdrop, title bar, the page.
+/// The main window's frame: rounded backdrop, title bar, the page. Settings has its own backdrop (its pane's colours)
+/// and the Claude Code status in the title bar.
 class _MainSurface extends StatelessWidget {
   const _MainSurface({required this.state});
 
@@ -244,15 +283,62 @@ class _MainSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final page = state.page;
     final desktop = state.desktop;
+    final settingsPage = page == MainPage.settings;
     void back() => state.open(MainPage.home);
     final title = switch (page) {
       MainPage.home => 'Mochi',
-      MainPage.pairing => 'Pair a phone',
+      MainPage.pairing => 'Pair a Phone',
       MainPage.settings => 'Settings',
     };
+    final column = Material(
+      type: MaterialType.transparency,
+      child: Column(
+        children: [
+          MochiTitleBar(
+            title: title,
+            onDragStart: () => unawaited(state.widget.shell.startDragging()),
+            onClose: state.closeMain,
+            onBack: page == MainPage.home ? null : back,
+            onPair: page == MainPage.pairing || settingsPage ? null : () => state.open(MainPage.pairing),
+            onSettings: settingsPage ? null : () => state.open(MainPage.settings),
+            trailing: settingsPage ? _ClaudeStatusPill(desktop: desktop, onTap: () => state.settingsNavigation.tab = SettingsTab.claude) : null,
+          ),
+          Expanded(
+            child: switch (page) {
+              MainPage.home => HomeScreen(
+                desktop: desktop,
+                library: state._library,
+                lastActivity: () => state._lastActivity,
+                onPair: () => state.open(MainPage.pairing),
+                onSettings: () => state.open(MainPage.settings, pane: SettingsTab.claude),
+              ),
+              MainPage.pairing => PairingScreen(
+                link: desktop.link,
+                onTestNotification: desktop.phone.sendTestNotification,
+                clock: () => desktop.sessions.now,
+              ),
+              MainPage.settings => SettingsScreen(
+                host: SettingsHost(
+                  desktop: desktop,
+                  navigation: state.settingsNavigation,
+                  onPair: state.pairPhone,
+                  onHome: back,
+                  stroll: state.stroll,
+                  library: state._library,
+                ),
+              ),
+            },
+          ),
+        ],
+      ),
+    );
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): page == MainPage.home ? state.closeMain : back,
+        const SingleActivator(LogicalKeyboardKey.escape): switch (page) {
+          MainPage.home => state.closeMain,
+          MainPage.settings => state.closeSettings,
+          MainPage.pairing => back,
+        },
         const SingleActivator(LogicalKeyboardKey.comma, control: true): () => state.open(MainPage.settings),
         const SingleActivator(LogicalKeyboardKey.comma, meta: true): () => state.open(MainPage.settings),
       },
@@ -260,46 +346,50 @@ class _MainSurface extends StatelessWidget {
         autofocus: true,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
-          child: MochiBackground(
-            child: Material(
-              type: MaterialType.transparency,
-              child: Column(
-                children: [
-                  MochiTitleBar(
-                    title: title,
-                    onDragStart: () => unawaited(state.widget.shell.startDragging()),
-                    onClose: state.closeMain,
-                    onBack: page == MainPage.home ? null : back,
-                    onPair: page == MainPage.pairing ? null : () => state.open(MainPage.pairing),
-                    onSettings: page == MainPage.settings ? null : () => state.open(MainPage.settings),
-                  ),
-                  Expanded(
-                    child: switch (page) {
-                      MainPage.home => HomeScreen(
-                        desktop: desktop,
-                        library: state._library,
-                        lastActivity: () => state._lastActivity,
-                        onPair: () => state.open(MainPage.pairing),
-                        onSettings: () => state.open(MainPage.settings),
-                      ),
-                      MainPage.pairing => PairingScreen(
-                        link: desktop.link,
-                        onTestNotification: desktop.phone.sendTestNotification,
-                        clock: () => desktop.sessions.now,
-                      ),
-                      MainPage.settings => SettingsScreen(
-                        desktop: desktop,
-                        stroll: state.stroll,
-                        onPair: () => state.open(MainPage.pairing),
-                      ),
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
+          child: settingsPage
+              ? ListenableBuilder(
+                  listenable: state.settingsNavigation,
+                  builder: (context, child) => SettingsBackdrop(tab: state.settingsNavigation.tab, child: child!),
+                  child: column,
+                )
+              : MochiBackground(child: column),
         ),
       ),
     );
   }
+}
+
+/// Settings' title bar: is Claude Code connected? Click for the Claude Code pane (the Mac's toolbar pill).
+class _ClaudeStatusPill extends StatelessWidget {
+  const _ClaudeStatusPill({required this.desktop, required this.onTap});
+
+  final MochiDesktop desktop;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: desktop.hooks,
+    builder: (context, _) {
+      final p = context.palette;
+      final (text, tint) = switch (desktop.hooks.inspection?.status) {
+        HookStatus.installed => ('Connected to Claude Code', p.success),
+        HookStatus.needsUpdate => ('Claude Code needs an update', p.warning),
+        HookStatus.unreadable => ('Claude Code needs attention', p.danger),
+        _ => ('Claude Code not connected', p.warning),
+      };
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Space.xs),
+        child: Semantics(
+          button: true,
+          label: '$text. Open Claude Code settings',
+          excludeSemantics: true,
+          child: ClayPress(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(40),
+            child: StatusPill(text: text, icon: Icons.circle, tint: tint),
+          ),
+        ),
+      );
+    },
+  );
 }

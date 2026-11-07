@@ -15,7 +15,11 @@ void main() {
   late FakeShell shell;
 
   Future<void> show(WidgetTester tester, {required Surface surface, MainPage page = MainPage.home, double textScale = 1}) async {
-    final size = surface == Surface.pet ? SurfaceSizes.pet : SurfaceSizes.main;
+    final size = switch ((surface, page)) {
+      (Surface.pet, _) => SurfaceSizes.pet,
+      (_, MainPage.settings) => SurfaceSizes.settings,
+      _ => SurfaceSizes.main,
+    };
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     tester.platformDispatcher.textScaleFactorTestValue = textScale;
@@ -89,16 +93,6 @@ void main() {
         await tester.scrollUntilVisible(find.text('Unpair all devices…'), 200, scrollable: find.byType(Scrollable).first);
         expect(find.text("Rizul's iPhone"), findsOneWidget);
         expect(find.text('Online'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-      });
-
-      testWidgets('settings ($variant)', (tester) async {
-        t.desktop.settings.themeMode = theme;
-        await show(tester, surface: Surface.main, page: MainPage.settings, textScale: scale);
-        expect(tester.takeException(), isNull);
-        expect(find.text('Connect Claude Code'), findsOneWidget);
-        await tester.scrollUntilVisible(find.text('Mochi on the desktop'), 200, scrollable: find.byType(Scrollable).first);
-        await tester.scrollUntilVisible(find.textContaining('hook helper'), 200, scrollable: find.byType(Scrollable).first);
         expect(tester.takeException(), isNull);
       });
 

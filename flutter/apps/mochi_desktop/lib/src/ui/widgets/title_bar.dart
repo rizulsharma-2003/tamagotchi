@@ -12,6 +12,7 @@ class MochiTitleBar extends StatelessWidget {
     this.onBack,
     this.onPair,
     this.onSettings,
+    this.trailing,
   });
 
   final String title;
@@ -20,6 +21,9 @@ class MochiTitleBar extends StatelessWidget {
   final VoidCallback? onBack;
   final VoidCallback? onPair;
   final VoidCallback? onSettings;
+
+  /// Shown before the buttons when there's room (Settings: Claude Code's status).
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +53,12 @@ class MochiTitleBar extends StatelessWidget {
                 child: Text(title, style: context.type.headline, overflow: TextOverflow.ellipsis),
               ),
             ),
+            if (trailing != null)
+              LayoutBuilder(
+                builder: (context, constraints) => MediaQuery.sizeOf(context).width < 560
+                    ? const SizedBox.shrink()
+                    : ConstrainedBox(constraints: const BoxConstraints(maxWidth: 260), child: trailing),
+              ),
             if (onPair != null)
               IconButton(
                 onPressed: onPair,

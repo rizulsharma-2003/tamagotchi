@@ -54,6 +54,19 @@ class HookSetup extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Claude Code's settings.json as Connect would leave it (Settings › Claude Code › Preview Changes); null when the
+  /// file can't be read.
+  String? preview() {
+    try {
+      return _installer.preview();
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Whether the hook helper is in Mochi's folder, where the hooks run it.
+  bool get helperInstalled => File(paths.installedHelper).existsSync();
+
   /// Copies the helper into place and adds the hooks.
   Future<void> connect() => _change(() {
     _installHelper();
