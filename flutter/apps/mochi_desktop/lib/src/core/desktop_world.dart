@@ -25,9 +25,10 @@
 // nothing is said twice.
 //
 // It ticks four times a second (as the Mac and the iPhone do) while the screen can be seen, and not at all while it
-// can't (the display off, the PC locked or asleep). Progress and the last hours of Claude's events are kept in
-// `world.json` in Mochi's folder (no paths, no prompts: project keys are hashes), saved when progress changes, every few
-// minutes and on quit.
+// can't (the display off, the PC locked or asleep). Progress and the last three hours of Claude's events are kept in
+// `world.json` in Mochi's folder, so Mochi picks up where it was after a restart: event names, session ids, project
+// folder names and their hashes, tool names; never paths, prompts or Claude Code's notification text. It's saved at
+// the next tick after progress changes, every few minutes and on quit.
 
 import 'dart:async';
 import 'dart:convert';
@@ -203,6 +204,12 @@ class DesktopWorld extends ChangeNotifier {
   w.LifeStage _stage = w.LifeStage.grownUp;
   Object? _signature;
 
+  /// Where the world is kept (Settings › Privacy), or null in memory.
+  String? get file => switch (store) {
+    final FileWorldStore file => file.path,
+    _ => null,
+  };
+
   /// The world's clock (seconds, monotonic): what the views draw by.
   double now() => world.now;
 
@@ -356,8 +363,7 @@ class DesktopWorld extends ChangeNotifier {
     );
   }
 
-  /// One step (the timer's, or a test's).
-  @visibleForTesting
+  /// One step (the timer's; tests and tools step it themselves).
   void tick() {
     if (_disposed) return;
     _feedSystem();
@@ -468,7 +474,11 @@ class DesktopWorld extends ChangeNotifier {
     _dirty = false;
     _lastSave = _clock();
     try {
-      store.write({'v': 1, 'seed': world.seed, 'world': world.toJson()});
+      final json = world.toJson();
+      // Claude Code's notification text stays in memory: what's kept are the events, not what they said.
+      final history = json['history'];
+      if (history is List) json['history'] = [for (final e in history) e is Map ? (Map<String, Object?>.of(e.cast<String, Object?>())..remove('message')) : e];
+      store.write({'v': 1, 'seed': world.seed, 'world': json});
     } on Object catch (error) {
       debugPrint('Mochi: its world could not be saved (${error.runtimeType})');
     }
@@ -479,8 +489,9 @@ class DesktopWorld extends ChangeNotifier {
   /// What the views show changed (a new moment, a bubble, a note, progress, the stage, Patch arriving): listeners hear
   /// about it once, not every tick.
   void _changed({bool force = false}) {
+    // By identity: a bubble's id starts again at 1 once the last one was cleared.
     final speaking = world.activeSpeech;
-    if (speaking?.id != speechNow.value?.id) speechNow.value = speaking;
+    if (!identical(speaking, speechNow.value)) speechNow.value = speaking;
     final toast = world.activeToast;
     if (toast?.title != toastNow.value?.title || toast?.until != toastNow.value?.until) toastNow.value = toast;
     final signature = _currentSignature();
@@ -501,7 +512,7 @@ class DesktopWorld extends ChangeNotifier {
       world.interaction?.startedAt,
       world.companionPresent,
       asleep,
-      world.activeSpeech?.id,
+      world.activeSpeech,
       world.activeToast?.title,
       world.burst?.startedAt,
       (progress.affectionPoints, progress.unlocked.length),

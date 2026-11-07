@@ -216,6 +216,13 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('Settings › Privacy says what Mochi’s world keeps, and where', (tester) async {
+      await open(tester, theme: ThemeMode.light, scale: 1, pane: SettingsTab.privacy);
+      expect(find.text('Mochi’s world'), findsOneWidget);
+      expect(find.textContaining('Claude Code’s events of the last three hours'), findsOneWidget);
+      expect(find.textContaining('No history of your sessions is kept'), findsNothing);
+    });
+
     testWidgets('the popover: five hearts, the level and the points to the next, as on the Mac', (tester) async {
       tester.view.physicalSize = SurfaceSizes.popover;
       tester.view.devicePixelRatio = 1;

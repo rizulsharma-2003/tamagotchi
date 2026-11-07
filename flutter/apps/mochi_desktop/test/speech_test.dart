@@ -113,6 +113,19 @@ void main() {
       expect(musings, greaterThan(0));
     });
 
+    test('a new line right after the last one cleared (bubble ids start again) still reaches the bubbles', () {
+      final world = t.desktop.world;
+      world.world.say('First!');
+      world.tick();
+      expect(world.speechNow.value?.text, 'First!');
+      seconds += 10;
+      world.world.clearSpeech(world.world.speech!.id);
+      world.world.say('Second!');
+      expect(world.world.speech!.id, 1, reason: 'the same id as the first');
+      world.tick();
+      expect(world.speechNow.value?.text, 'Second!');
+    });
+
     test('Mochi says good morning (once) when you open its window', () {
       now = DateTime(2026, 11, 8, 9);
       later(const Duration(seconds: 6));

@@ -199,7 +199,7 @@ class _RoomViewState extends State<RoomView> {
                     width: MochiBubble.maxWidth,
                     bottom: math.max(0.0, constraints.maxHeight - bottom),
                     child: IgnorePointer(
-                      child: Align(alignment: Alignment.bottomCenter, child: MochiBubble(key: ValueKey(speech.id), text: speech.text)),
+                      child: Align(alignment: Alignment.bottomCenter, child: MochiBubble(key: ObjectKey(speech), text: speech.text)),
                     ),
                   );
                 },

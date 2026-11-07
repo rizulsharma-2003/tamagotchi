@@ -193,6 +193,16 @@ void main() {
       expect(restored.interaction, isNull, reason: 'without reacting');
     });
 
+    test("Claude Code's notification text isn't kept on disk, only the events", () {
+      t.desktop.receive(event('SessionStart'));
+      t.desktop.receive(hook('Notification', notificationType: 'permission_prompt', at: now)..message = 'Claude needs your permission to use Bash');
+      t.desktop.world.save();
+      final history = (t.worldStore.json!['world']! as Map)['history']! as List;
+      expect(history, hasLength(2));
+      expect(history.every((e) => !(e as Map).containsKey('message')), isTrue);
+      expect(world().registry['s1']?.phase, w.SessionPhase.waitingForUser, reason: 'in memory, the session is as it was');
+    });
+
     test('a damaged or missing file starts afresh', () {
       final fresh = TestDesktop.make(worldStore: MemoryWorldStore({'world': 'nonsense', 'seed': 'x'}));
       addTearDown(fresh.dispose);
