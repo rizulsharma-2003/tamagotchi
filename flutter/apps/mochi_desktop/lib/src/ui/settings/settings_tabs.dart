@@ -118,11 +118,12 @@ enum SettingsTab {
         'approvals',
     phones => 'phones phone iphone android mochi pocket pair pairing link relay unpair test devices summaries talking '
         'away only when live activity',
-    agent => 'gmail calendar notion mail meetings tasks briefing vip done cloud watcher',
+    agent => 'gmail calendar notion mail meetings tasks briefing vip done cloud watcher mochi cloud copy settings environment',
     notifications => 'alerts notifications toast toasts banner badge sounds sound volume keyboard taps quiet reactions '
         'celebrate finished needs you snag errors build test categories animate',
     desktop => 'desktop pet taskbar roam stroll walk window position show hide shortcut hotkey keyboard patch companion '
-        'desk',
+        'desk style spot tray icon classic size small medium large always on top click through clicks display monitor '
+        'moments',
     fun => 'games adventure seasons seasonal holidays halloween diwali christmas new year valentine birthday treats '
         'focus recap room furniture talking',
     privacy => 'privacy data history relay encryption summaries share keep folder clear',
