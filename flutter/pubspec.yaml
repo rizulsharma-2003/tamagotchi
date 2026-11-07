@@ -10,6 +10,7 @@ workspace:
   - packages/mochi_link
   - packages/mochi_ui
   - packages/mochi_wire
+  - packages/mochi_world
   - apps/mochi_gallery
   - apps/mochi_pocket
   - apps/mochi_desktop
