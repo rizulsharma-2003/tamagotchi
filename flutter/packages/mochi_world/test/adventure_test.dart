@@ -299,4 +299,59 @@ void main() {
       expect(AdventureFrequency.never.title, 'Never');
     });
   });
+
+  group('Home below (Windows: the taskbar)', () {
+    // The taskbar Mochi's feet, a little under the floor's top (y up).
+    const homeY = 81.0 - 20;
+
+    AdventurePlan floorPlan({int seed = 7}) =>
+        AdventurePlanner.plan(from: start, at: 100, terrain: terrainOf(), bar: bar, seed: seed, homeY: homeY);
+
+    test('ends hopping down into the taskbar at its spot, never out of the top of the screen', () {
+      for (final seed in [1, 7, 21, 99, 314]) {
+        final plan = floorPlan(seed: seed);
+        expect(plan.homeY, homeY);
+        final last = plan.segments.last;
+        expect(last.phase, AdventurePhase.returning);
+        expect(last.to.y, homeY);
+        expect(last.to.x, inInclusiveRange(bar.lower, bar.upper));
+        expect(plan.homeX, last.to.x);
+        for (final (_, sample) in samplesOf(plan).where((entry) => entry.$2.phase != AdventurePhase.arriving)) {
+          expect(sample.point.y, lessThanOrEqualTo(visible.maxY), reason: 'seed $seed stays on the screen');
+        }
+        // It still climbs the edge, and comes down from it before going home.
+        final phases = plan.segments.map((s) => s.phase).toList();
+        expect(phases, contains(AdventurePhase.climbing));
+        final climbEnd = plan.segments.lastWhere((s) => s.phase == AdventurePhase.climbing).end;
+        final afterClimb = plan.segments.where((s) => s.start >= climbEnd && s.move == AdventureMove.walk);
+        for (final walk in afterClimb) {
+          expect(walk.from.y, closeTo(81, 0.5), reason: 'walks home along the floor');
+        }
+      }
+    });
+
+    test('the Mac route is unchanged without it', () {
+      final plan = planOf();
+      expect(plan.homeY, isNull);
+      expect(plan.segments.last.to.y, greaterThan(visible.maxY));
+    });
+
+    test('hurrying home leaps down to the taskbar from a window top', () {
+      final plan = floorPlan();
+      final onLedge = samplesOf(plan).firstWhere((entry) => entry.$2.phase == AdventurePhase.exploring && !entry.$2.isAirborne && entry.$2.point.y > 200);
+      final hurried = AdventurePlanner.hurryHome(plan, at: onLedge.$1, terrain: terrainOf());
+      expect(hurried.homeY, homeY);
+      expect(hurried.segments.last.to.y, homeY);
+      expect(hurried.end, lessThan(onLedge.$1 + 1.6));
+    });
+
+    test('a re-route keeps home below', () {
+      final plan = floorPlan();
+      final t = samplesOf(plan).firstWhere((entry) => entry.$2.phase == AdventurePhase.exploring && !entry.$2.isAirborne && entry.$2.point.y > 200).$1;
+      final adapted = AdventurePlanner.adapt(plan, at: t, to: terrainOf(const []));
+      expect(adapted, isNotNull);
+      expect(adapted!.homeY, homeY);
+      expect(adapted.segments.last.to.y, homeY);
+    });
+  });
 }

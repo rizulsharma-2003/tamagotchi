@@ -621,6 +621,7 @@ class AdventurePlan {
     required this.wall,
     required this.exploreUntil,
     required this.seed,
+    this.homeY,
   });
 
   List<AdventureSegment> segments;
@@ -638,10 +639,15 @@ class AdventurePlan {
   double exploreUntil;
   final int seed;
 
+  /// Where Mochi's feet land when home is below rather than above (Windows: the taskbar at the bottom of the screen).
+  /// Null: home is the Mac's menu bar, out of the top of the screen.
+  final double? homeY;
+
   double get start => segments.isEmpty ? 0 : segments.first.start;
   double get end => segments.isEmpty ? 0 : segments.last.end;
 
-  AdventurePlan copy() => AdventurePlan(segments: List.of(segments), homeX: homeX, bar: bar, wall: wall, exploreUntil: exploreUntil, seed: seed);
+  AdventurePlan copy() =>
+      AdventurePlan(segments: List.of(segments), homeX: homeX, bar: bar, wall: wall, exploreUntil: exploreUntil, seed: seed, homeY: homeY);
 
   AdventureSegment? segment(double t) {
     if (segments.isEmpty) return null;
@@ -747,18 +753,27 @@ abstract final class AdventurePlanner {
     AdventureMetrics? metrics,
     (double, double) length = (40, 75),
     double facing = 1,
+    double? homeY,
   }) {
     final m = metrics ?? AdventureMetrics();
     final rng = SplitMix64(seed ^ 0x4144_5645_4E54_5552);
     final wall = (bar.lower + bar.upper) / 2 >= terrain.bounds.midX ? 1.0 : -1.0;
     final total = rng.nextIn(length.$1, length.$2);
-    final builder = _Builder(t: at, at: from, terrain: terrain, metrics: m, rng: rng);
+    final builder = _Builder(t: at, at: from, terrain: terrain, metrics: m, rng: rng)..homeY = homeY;
     builder.facing = facing >= 0 ? 1 : -1;
     builder.arrive(from);
     final exploreUntil = at + math.max(4, total - builder.estimateWayHome(wall));
     builder.explore(exploreUntil);
     builder.goHome(wall: wall, bar: bar, strollUntil: exploreUntil);
-    return AdventurePlan(segments: builder.segments, homeX: builder.homeX, bar: bar, wall: wall, exploreUntil: exploreUntil, seed: seed);
+    return AdventurePlan(
+      segments: builder.segments,
+      homeX: builder.homeX,
+      bar: bar,
+      wall: wall,
+      exploreUntil: exploreUntil,
+      seed: seed,
+      homeY: homeY,
+    );
   }
 
   /// The windows changed. When that takes the ground from under Mochi (or from where it is about to land), it falls from
@@ -796,7 +811,7 @@ abstract final class AdventurePlanner {
       kept.add(current.cut(t));
     }
     final mixed = plan.seed ^ (resumeAt * 1000).round();
-    final builder = _Builder(t: resumeAt, at: from, terrain: to, metrics: m, rng: SplitMix64(mixed));
+    final builder = _Builder(t: resumeAt, at: from, terrain: to, metrics: m, rng: SplitMix64(mixed))..homeY = plan.homeY;
     builder.facing = sample.facing;
     builder.odometer = sample.odometer;
     builder.phase = current.phase;
@@ -830,6 +845,7 @@ abstract final class AdventurePlanner {
     builder.angle = sample.rotation;
     builder.odometer = sample.odometer;
     builder.phase = AdventurePhase.returning;
+    builder.homeY = plan.homeY;
     final home = math.min(plan.bar.upper, math.max(plan.bar.lower, sample.point.x));
     if (!sample.isAirborne) builder.hold(PetAnimation.idle, 0.15, style: AdventureStyle.crouch);
     builder.leapHome(home);
@@ -909,6 +925,9 @@ class _Builder {
   final SplitMix64 rng;
   final List<AdventureSegment> segments = [];
   double homeX;
+
+  /// Where Mochi's feet land at home when home is below (see [AdventurePlan.homeY]).
+  double? homeY;
   final List<int> visited = [];
   int lines = 0;
   bool strolled = false;
@@ -1202,6 +1221,15 @@ class _Builder {
       walk(foot, run: (foot - at.x).abs() > 160);
     }
     if (phase <= AdventurePhase.climbing) climb(wall);
+    if (homeY != null) {
+      // Home is the taskbar below (Windows): off the wall, down to the floor and over to Mochi's spot, then a hop into it.
+      phase = AdventurePhase.toEdge;
+      if (at.y > terrain.floorY + 0.5) jumpOffWall(wall);
+      final spot = math.min(bar.upper, math.max(bar.lower, at.x));
+      walk(spot, run: (spot - at.x).abs() > 260);
+      leapHome(spot, line: say('Home time!', odds: 0.4));
+      return;
+    }
     phase = AdventurePhase.returning;
     hold(PetAnimation.idle, 0.25, style: AdventureStyle.crouch);
     leapHome(wall > 0 ? bar.upper : bar.lower, line: say('Home time!', odds: 0.4));
@@ -1252,10 +1280,37 @@ class _Builder {
     hold(PetAnimation.idle, 0.35, style: AdventureStyle.notice);
   }
 
-  /// The last hop: up and out of the screen at [x].
+  /// Windows, where home is below: a push off the screen edge and a drop to the floor.
+  void jumpOffWall(double wall) {
+    final side = wall >= 0 ? 1.0 : -1.0;
+    facing = -side;
+    final off = AdventurePoint(math.min(highX, math.max(lowX, at.x - side * (metrics.halfWidth + 48))), at.y);
+    append(AdventureMove.hop, off, duration: 0.32, animation: PetAnimation.idle, arc: 16, turnTo: 0, style: AdventureStyle.launch);
+    fall(AdventurePoint(off.x, terrain.floorY));
+  }
+
+  /// The last hop: up and out of the screen at [x] (the Mac's menu bar), or, when home is below ([homeY]: Windows'
+  /// taskbar), down into it at [x], from wherever Mochi is (one big leap when it hurries home from a window top).
   void leapHome(double x, {String? line}) {
     phase = AdventurePhase.returning;
     homeX = x;
+    final floorHome = homeY;
+    if (floorHome != null) {
+      final target = AdventurePoint(x, floorHome);
+      final drop = math.max(0.0, at.y - target.y);
+      if ((x - at.x).abs() > 2) facing = x > at.x ? 1 : -1;
+      append(
+        AdventureMove.hop,
+        target,
+        duration: math.min(1.1, 0.38 + drop / 1600 + (x - at.x).abs() / 2400),
+        animation: PetAnimation.idle,
+        arc: math.max(18, math.min(90, drop * 0.15 + (x - at.x).abs() * 0.05)),
+        turnTo: 0,
+        style: AdventureStyle.launch,
+        line: line,
+      );
+      return;
+    }
     final target = AdventurePoint(x, bounds.maxY + metrics.height + 12);
     final rise = target.y - at.y;
     final duration = math.min(1.1, 0.45 + rise / 1600 + (x - at.x).abs() / 2400);

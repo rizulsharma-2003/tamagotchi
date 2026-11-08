@@ -27,7 +27,9 @@
 //   hurry it home (one big leap); quiet hours, paused reactions or a focus session do the same.
 // - Cheap: 30 frames a second while it moves, 8 while it holds still, nothing while the screen is unseen (it goes home
 //   first); a frame is sent only when the picture or the place changes; the actor is topmost.
-// - Home is PetHome.comeBack(x:): the hop out of the top of the screen ends with Mochi on the taskbar where it left.
+// - Home is below, unlike the Mac's menu bar: after the climb Mochi pushes off the screen edge, drops to the taskbar,
+//   trots to its spot and hops down into it, landing where the taskbar's Mochi stands (PetHome.comeBack(x:)); called
+//   home early, it leaps straight down there (AdventurePlan.homeY).
 //
 // With the Title-bar walker (docs/SPRINT_2.md X1, Mischief) on, a window Mochi stands on is followed:
 // - While Mochi stands on a window's top, that one window's frame is read (about 8 a second while it is still, every
@@ -451,6 +453,7 @@ class DesktopAdventure extends ChangeNotifier {
       seed: outing.seed,
       metrics: metrics,
       facing: departure?.facing ?? 1,
+      homeY: _homeY(outing),
     );
     _outing = outing;
     outing.windows = frames;
@@ -696,6 +699,12 @@ class DesktopAdventure extends ChangeNotifier {
 
   /// Home on the taskbar at once.
   void _homeNow() => _finish(null);
+
+  /// Where Mochi's feet land at home (the planner's y): where the taskbar's Mochi stands, or the floor.
+  static double _homeY(_Outing outing) {
+    final feet = outing.homeFeet;
+    return feet == null ? outing.terrain.floorY : outing.space.point(feet.$1, feet.$2).y;
+  }
 
   void _displaysChanged() {
     final outing = _outing;
@@ -987,6 +996,7 @@ class DesktopAdventure extends ChangeNotifier {
       metrics: outing.metrics,
       length: (25, 45),
       facing: carry.facing,
+      homeY: _homeY(outing),
     );
     outing.carry = null;
     outing.hurrying = false;
