@@ -142,6 +142,7 @@ class DesktopAppState extends State<DesktopApp> {
     companion: _companion,
     rhythm: desktop.rhythm,
     mischief: desktop.mischief,
+    reacts: desktop.reacts,
     displays: widget.displays ?? systemDisplays(),
     idle: () => desktop.sessions.now.difference(_lastActivity),
     clock: _clock,
@@ -225,6 +226,9 @@ class DesktopAppState extends State<DesktopApp> {
   /// What Mochi is doing, for the perf meter.
   String perfState() {
     final state = _mischief.perfState() ?? _perfState();
+    // What Mochi is reacting to (X7), if anything: "calm, music".
+    final reacting = desktop.reacts.label;
+    if (reacting != null) return desktop.rhythm.unseen ? 'screen off: $state, $reacting' : '$state, $reacting';
     return desktop.rhythm.unseen ? 'screen off: $state' : state;
   }
 

@@ -39,6 +39,7 @@ void main() {
         'landmarks': true,
         'holidayTakeover': true,
         'moods': true,
+        'reacts': true,
       });
       expect(document.json!['v'], 8);
       final again = DesktopSettings(MemorySettingsDocument(document.json));

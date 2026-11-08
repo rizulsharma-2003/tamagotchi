@@ -20,6 +20,7 @@ import 'core/hotkeys.dart';
 import 'core/pc_rhythm.dart';
 import 'core/pet_cues.dart';
 import 'core/purr.dart';
+import 'core/reacts.dart';
 import 'core/recap.dart';
 import 'core/room.dart';
 import 'core/reactions.dart';
@@ -33,6 +34,7 @@ import 'demo.dart';
 import 'link/link_host.dart';
 import 'link/phone_sync.dart';
 import 'platform/credential_vault.dart';
+import 'platform/reacts_readers.dart';
 import 'platform/runner_system.dart';
 import 'platform/startup.dart';
 import 'platform/system.dart';
@@ -82,6 +84,10 @@ class MochiDesktop {
     int? worldSeed,
     bool stage = false,
     bool Function()? fullScreen,
+    MediaReader? media,
+    MicReader? mic,
+    ForegroundApps? foregroundApps,
+    ReactsForce? reactsForce,
   }) : _claude = claude,
        _locateClaude = locateClaude,
        startup = startup ?? const UnsupportedStartup(),
@@ -120,6 +126,16 @@ class MochiDesktop {
       focusing: () => focus.focusing,
       clock: clock,
     );
+    reacts = ReactsDirector(
+      gate: mischief,
+      media: media ?? const NoMedia(),
+      mic: mic ?? const NoMic(),
+      apps: foregroundApps ?? const NoForegroundApp(),
+      force: reactsForce,
+      clock: clock,
+    );
+    // Mochi's sounds are muted while a call has the microphone (X7).
+    sounds.muted = () => reacts.calling;
     holidays = DesktopHolidays(settings: settings, world: world, store: store('seasons.json'), clock: clock, decorating: () => room.isEditing);
     purr = PurrSession(settings: settings, sounds: sounds, rhythm: rhythm, pet: () => interact('pet'), time: world.now, clock: clock);
     recap = DesktopRecap(settings: settings, world: world, focus: focus, toasts: this.toasts, store: store('journal.json'), clock: clock);
@@ -260,6 +276,11 @@ class MochiDesktop {
       // Mischief's native stage is the Windows runner's.
       stage: Platform.isWindows,
       fullScreen: Platform.isWindows ? Win32Usage.fullScreenBusy : null,
+      // Reacts to what you do (X7); `MOCHI_DESKTOP_REACTS=music|call|editor` forces a state for checks.
+      media: systemMedia(),
+      mic: systemMic(),
+      foregroundApps: systemForegroundApp(),
+      reactsForce: ReactsForce.from(environment['MOCHI_DESKTOP_REACTS']),
     );
   }
 
@@ -311,6 +332,9 @@ class MochiDesktop {
 
   /// Mischief, the Windows extras (Settings › Mischief): whether each may run right now.
   late final MischiefGate mischief;
+
+  /// Reacts to what you do (X7: music, calls, an editor coming to the front), read only while Mischief allows it.
+  late final ReactsDirector reacts;
 
   /// The global shortcuts (Settings › Desktop Pet and Assistant).
   late final Hotkeys hotkeys;
@@ -395,6 +419,7 @@ class MochiDesktop {
     rhythm.start();
     world.start();
     mischief.start();
+    reacts.start();
     recap.start();
     holidays.start();
     await toasts.start((target) {
@@ -519,6 +544,7 @@ class MochiDesktop {
     purr.dispose();
     holidays.dispose();
     room.dispose();
+    reacts.dispose();
     mischief.dispose();
     recap.dispose();
     streaks.dispose();
