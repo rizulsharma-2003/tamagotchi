@@ -711,16 +711,32 @@ class FocusRow extends StatefulWidget {
 class _FocusRowState extends State<FocusRow> {
   Timer? _second;
 
+  /// The countdown's second (tests): none while the screen can't be seen.
+  @visibleForTesting
+  bool get ticking => _second != null;
+
   @override
   void initState() {
     super.initState();
-    _second = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && !widget.desktop.rhythm.unseen) setState(() {});
-    });
+    widget.desktop.rhythm.addListener(_count);
+    _count();
+  }
+
+  /// Once a second while the screen can be seen; nothing while it can't.
+  void _count() {
+    if (widget.desktop.rhythm.unseen) {
+      _second?.cancel();
+      _second = null;
+    } else {
+      _second ??= Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   @override
   void dispose() {
+    widget.desktop.rhythm.removeListener(_count);
     _second?.cancel();
     super.dispose();
   }

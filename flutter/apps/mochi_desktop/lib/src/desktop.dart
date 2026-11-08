@@ -137,6 +137,7 @@ class MochiDesktop {
       clock: clock,
       away: () => rhythm.away,
       resting: () => rhythm.resting,
+      friendship: () => world.world.progress.friendshipLevel,
     );
   }
 

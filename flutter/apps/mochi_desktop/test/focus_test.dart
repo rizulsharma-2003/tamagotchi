@@ -238,6 +238,13 @@ void main() {
           now = now.add(const Duration(seconds: 3));
           await tester.pump(const Duration(seconds: 1));
           expect(find.text('Focus 24:57 left'), findsOneWidget, reason: 'it counts down once a second');
+          dynamic row() => tester.state(find.byType(FocusRow));
+          t.usage.activity = const SystemActivity(idleSeconds: 0, displaysAsleep: true);
+          t.desktop.rhythm.sample();
+          expect(row().ticking, isFalse, reason: 'nothing while the screen can’t be seen');
+          t.usage.activity = const SystemActivity(idleSeconds: 0);
+          t.desktop.rhythm.sample();
+          expect(row().ticking, isTrue);
           expect(find.text('Stop'), findsOneWidget, reason: 'the fun row’s Focus is Stop now');
           await tester.tap(find.text('Skip'));
           await tester.pump();
