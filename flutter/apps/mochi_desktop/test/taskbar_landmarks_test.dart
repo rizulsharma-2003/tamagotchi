@@ -393,7 +393,8 @@ void main() {
       for (final kind in [StrollVisit.clock, StrollVisit.widgets]) {
         var tallest = 0;
         expect(stroll.visitNow(kind), isTrue);
-        await elapse(tester, 40, each: () {
+        // (It walks to the free spot beside the landmark first, over the buttons if that's in the other stretch.)
+        await elapse(tester, 90, each: () {
           final frame = stroll.frame!;
           expect(frame.bottom, bottom, reason: '${kind.name}: its window keeps its bottom edge');
           if (frame.height > tallest) tallest = frame.height;
@@ -482,12 +483,18 @@ void main() {
       expect(stroll.visitNow(StrollVisit.clock), isTrue);
       var sawFrames = false;
       var hungWithoutFrames = false;
-      await elapse(tester, 30, each: () {
+      var hanging = 0;
+      await elapse(tester, 90, each: () {
         final sample = stroll.sample()!;
         if (sample.travelling && stroll.moving) sawFrames = true;
         if (sample.style == StrollStyle.hang && !sample.travelling) {
-          hungWithoutFrames = true;
-          expect(stroll.moving, isFalse);
+          // (The frame timer stops at the next tick after the leap has landed.)
+          if (++hanging > 3) {
+            hungWithoutFrames = true;
+            expect(stroll.moving, isFalse);
+          }
+        } else {
+          hanging = 0;
         }
       });
       expect(sawFrames, isTrue, reason: 'the leaps are walking-rate frames');

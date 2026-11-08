@@ -229,7 +229,8 @@ class DesktopAppState extends State<DesktopApp> {
       case Surface.hidden:
         return 'hidden';
       case Surface.main:
-        return 'main window';
+        // Mochi on the taskbar, drawn by the stage, while the window is open.
+        return _stroll.placement == PetPlacement.stage ? 'main window, Mochi ${_stroll.moving ? 'roaming' : 'calm'} on the stage' : 'main window';
       case Surface.popover:
         return _popoverClosing ? 'popover closing' : 'popover';
       case Surface.pet:
@@ -240,6 +241,7 @@ class DesktopAppState extends State<DesktopApp> {
           PetPlacement.standing => 'standing, $mood',
           PetPlacement.hidden => 'out of the way (full screen)',
           PetPlacement.away => 'placing',
+          PetPlacement.stage => 'placing',
         };
     }
   }
@@ -307,6 +309,8 @@ class DesktopAppState extends State<DesktopApp> {
     }
     unawaited(_loadLibrary());
     _mischief.start();
+    // Mochi stays on the taskbar, drawn by the native stage, while Mochi's window is open (W26).
+    if (_mischief.supported) _stroll.stand = _mischief.stand;
     // Adventures (W19): dropped off the taskbar, Mochi sets off from there; the tray's and the menu's Explore item follows.
     _stroll.onDropOff = (x, y) => desktop.settings.adventure.enabled && (_mischief.adventure?.dropped(x, y) ?? false);
     desktop.ask
@@ -798,7 +802,9 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.ask
       ..explore = null
       ..comeHome = null;
-    _stroll.onDropOff = null;
+    _stroll
+      ..onDropOff = null
+      ..stand = null;
     _warmUpTimer?.cancel();
     desktop.updater.removeListener(_updatesChanged);
     desktop.focus.removeListener(_focusChanged);

@@ -13,6 +13,7 @@
 // - W19 desktop adventures (adventure.dart): the Mac's explore-the-desktop, on the same stage and the same StagePet. It's
 //   a Mac feature, so it isn't behind the Mischief switches (only the rules every extra keeps); of the roamer and the
 //   adventure only one has Mochi out at a time, and an adventure you asked for takes Mochi from the roamer.
+// - W26 Mochi on the taskbar while Mochi's window is open (stage_stand.dart): the stroll goes on, drawn by the stage.
 //
 // Development: `MOCHI_DESKTOP_MISCHIEF_DEMO` ("confetti:20,fireworks:45") repeats a preview every so many seconds
 // while the screen can be seen, for checking and measuring on a PC (with the `perf-debug` meter);
@@ -41,6 +42,7 @@ import 'stage_behind.dart';
 import 'stage_cast.dart';
 import 'stage_pet.dart';
 import 'stage_sprites.dart';
+import 'stage_stand.dart';
 import 'sticky_notes.dart';
 
 class MischiefStage extends ChangeNotifier {
@@ -86,6 +88,14 @@ class MischiefStage extends ChangeNotifier {
         settings: desktop.settings,
         dark: dark ?? () => false,
         behind: StageBehind(stage: stage, gate: desktop.mischief, rhythm: desktop.rhythm, foreground: foreground),
+      );
+      // Mochi on the taskbar while Mochi's window is open (W26): its own actor, drawn from the same pictures, and never hiding
+      // behind the window you're using. A click is the tray icon's click: Mochi's own page.
+      stand = StageStand(
+        pet: StagePet(stage: stage, cast: cast, sprites: pet!.sprites, world: desktop.world, settings: desktop.settings, dark: dark ?? () => false),
+        time: desktop.world.now,
+        onTap: onOpen,
+        onMenu: onMenu,
       );
       roamer = ScreenRoamer(
         pet: pet!,
@@ -160,6 +170,9 @@ class MischiefStage extends ChangeNotifier {
   /// of the celebrations alone).
   final PetHome? home;
   StagePet? pet;
+
+  /// Mochi on the taskbar while Mochi's window is open (W26; null without a home).
+  StageStand? stand;
 
   /// X8.
   ScreenRoamer? roamer;
@@ -310,6 +323,7 @@ class MischiefStage extends ChangeNotifier {
     }
     adventure?.stop();
     roamer?.stop();
+    stand?.dispose();
     pet?.dispose();
     pet?.sprites.dispose();
     celebrations.dispose();

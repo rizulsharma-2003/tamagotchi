@@ -1,6 +1,7 @@
-// Mochi's stroll plan (ui/pet/stroller.dart), run on a fake clock: it stays in the taskbar's free stretches and turns
-// at their ends, rests and naps, hops between stretches without walking over buttons, stops for you when Claude
-// needs you, and holds still for a moment. Plus how often the pet is drawn, and the recorded one-shots' lengths.
+// Mochi's stroll plan (ui/pet/stroller.dart), run on a fake clock: it walks along the whole taskbar, over the buttons, but
+// rests and naps only in the free stretches, turns at their ends, goes to another stretch on foot (it fades there only
+// with animation effects off), stops for you when Claude needs you, and holds still for a moment. Plus how often the
+// pet is drawn, and the recorded one-shots' lengths.
 
 import 'dart:io';
 import 'dart:math';
@@ -30,24 +31,31 @@ Set<StrollSegment> run(Stroller stroller, double from, double to, {StrollMode mo
 
 void main() {
   group('Walking', () {
-    test('stays in the free stretches and never walks across a button, with any dice', () {
+    test('walks over the buttons but only stops (rests, sits, naps, fidgets) in the free stretches, with any dice', () {
+      var crossings = 0;
       for (var seed = 0; seed < 12; seed++) {
         final stroller = Stroller(random: Random(seed))..place(zones, now: 0, x: 300);
         final seen = <StrollSegment>{};
         for (var t = 0.0; t < 1800; t += 0.5) {
           stroller.update(t, mode: StrollMode.free);
           seen.addAll(stroller.segments);
-          expect(inZone(stroller.sample(t).x), isTrue, reason: 'seed $seed at $t: ${stroller.sample(t).x}');
+          final sample = stroller.sample(t);
+          if (!sample.travelling) expect(inZone(sample.x), isTrue, reason: 'seed $seed at $t: ${sample.x} lingers over a button');
+          // On the taskbar all the way: never past the first stretch or the last.
+          expect(sample.x, inInclusiveRange(left.minX - 0.01, right.maxX + 0.01));
         }
-        for (final segment in seen.where((segment) => segment.travels)) {
-          expect(inZone(segment.fromX) && inZone(segment.toX), isTrue);
-          if (!segment.hop) {
-            // A walk starts and ends in the same stretch.
+        for (final segment in seen) {
+          // Every piece starts and ends in free room (what happens between is the walk's).
+          expect(inZone(segment.fromX) && inZone(segment.toX), isTrue, reason: '$segment');
+          if (segment.travels && !segment.crosses && !segment.hop) {
+            // A walk that doesn't cross the buttons keeps to one stretch.
             expect(zones.any((zone) => [segment.fromX, segment.toX].every((x) => x >= zone.minX - 0.01 && x <= zone.maxX + 0.01)), isTrue);
           }
+          if (segment.crosses && (segment.fromX < left.maxX) != (segment.toX < left.maxX)) crossings++;
         }
         expect(seen.any((segment) => segment.travels && !segment.hop), isTrue, reason: 'seed $seed walks');
       }
+      expect(crossings, greaterThan(0), reason: 'it walked from one stretch to the other');
     });
 
     test('turns round at the end of a stretch, and walks at an amble with the walk cycle', () {
@@ -65,7 +73,8 @@ void main() {
           // (The play sprints: zoomies and chasing a toy go faster, as the Mac's do; test/stroll_play_test.dart.)
           const play = {StrollActivity.zoomies, StrollActivity.butterfly, StrollActivity.ball, StrollActivity.yarn, StrollActivity.leaf};
           if (!play.contains(walk.activity)) expect(speed, lessThanOrEqualTo(const StrollTuning().trotSpeed + 0.01));
-          final atEnd = zones.any((zone) => (walk.toX - zone.minX).abs() < 0.01 || (walk.toX - zone.maxX).abs() < 0.01);
+          // (Heading into the end of a stretch; a walk over the buttons ends at the near edge of the one it reaches.)
+          final atEnd = zones.any((zone) => (walk.toX - (walk.facing > 0 ? zone.maxX : zone.minX)).abs() < 0.01);
           if (atEnd) {
             final next = seen[i + 1];
             expect(next.facing, -walk.facing, reason: 'turns round at the end of the stretch');
@@ -88,25 +97,64 @@ void main() {
       expect(walking, greaterThan(1200 * 0.03));
     });
 
-    test('hops to the other stretch: fading out and in, never walking over the buttons', () {
-      var hops = 0;
+    test('a trip to the other stretch is a walk (a trot when far) over the buttons, with no fade', () {
+      var trips = 0;
       for (var seed = 0; seed < 12; seed++) {
         final stroller = Stroller(random: Random(seed))..place(zones, now: 0, x: 300);
-        for (final hop in run(stroller, 0, 1800, step: 0.5).where((segment) => segment.hop)) {
-          hops++;
-          final middle = (hop.start + hop.end) / 2;
-          expect(hop.opacityAt(middle), closeTo(0, 0.01));
-          expect(hop.opacityAt(hop.start + 0.01), greaterThan(0.9));
-          expect(hop.xAt(middle - 0.01), hop.fromX, reason: 'still where it was until it has faded out');
-          expect(hop.xAt(middle + 0.01), hop.toX);
+        final seen = run(stroller, 0, 1800, step: 0.5);
+        expect(seen.where((segment) => segment.hop), isEmpty, reason: 'seed $seed fades');
+        for (final trip in seen.where((segment) => segment.crosses && segment.travels && (segment.fromX < left.maxX) != (segment.toX < left.maxX))) {
+          trips++;
+          expect(trip.animation, anyOf(PetAnimation.walk, PetAnimation.run));
+          expect(trip.opacityAt((trip.start + trip.end) / 2), 1, reason: 'in plain sight all the way');
+          final middle = trip.xAt((trip.start + trip.end) / 2);
+          expect(middle, inInclusiveRange(min(trip.fromX, trip.toX), max(trip.fromX, trip.toX)), reason: 'on the way');
         }
       }
-      expect(hops, greaterThan(0));
+      expect(trips, greaterThan(0));
     });
 
-    test('one stretch only: no hops', () {
+    test('with animation effects off Mochi fades to its new stretch instead (as the Mac does with Reduce Motion)', () {
+      final stroller = Stroller(random: Random(1))..place(zones, now: 0, x: 300, mode: StrollMode.still);
+      // The buttons moved: where it stood is no longer free.
+      stroller.place(const [right], now: 10);
+      final hop = stroller.segments.firstWhere((segment) => segment.hop);
+      expect(hop.toX, right.minX, reason: 'the nearest free spot');
+      expect(hop.opacityAt((hop.start + hop.end) / 2), closeTo(0, 0.01));
+      expect(hop.opacityAt(hop.start + 0.01), greaterThan(0.9));
+      expect(hop.xAt((hop.start + hop.end) / 2 - 0.01), hop.fromX, reason: 'still where it was until it has faded out');
+      expect(hop.xAt((hop.start + hop.end) / 2 + 0.01), hop.toX);
+      // The same in free mode is a walk.
+      final walker = Stroller(random: Random(1))..place(zones, now: 0, x: 300);
+      walker.place(const [right], now: 10);
+      final walk = walker.segments.firstWhere((segment) => segment.travels);
+      expect((walk.hop, walk.crosses, walk.animation == PetAnimation.walk || walk.animation == PetAnimation.run), (false, true, true));
+    });
+
+    test('one stretch only: nowhere to cross to, no fades', () {
       final stroller = Stroller(random: Random(1))..place([left], now: 0, x: 300);
-      expect(run(stroller, 0, 1800).where((segment) => segment.hop), isEmpty);
+      final seen = run(stroller, 0, 1800);
+      expect(seen.where((segment) => segment.hop), isEmpty);
+      for (final segment in seen) {
+        expect(segment.fromX >= left.minX - 0.01 && segment.toX <= left.maxX + 0.01, isTrue);
+      }
+    });
+
+    test('wandering picks places anywhere free on the taskbar: every stretch is visited, each in turn as often as it is long', () {
+      const three = [StrollLine(190, 500), StrollLine(700, 1000), StrollLine(1300, 1900)];
+      final visits = List.filled(three.length, 0.0);
+      for (var seed = 0; seed < 30; seed++) {
+        final stroller = Stroller(random: Random(seed))..place(three, now: 0, x: 300);
+        for (final segment in run(stroller, 0, 3600, step: 0.5)) {
+          if (segment.activity != StrollActivity.wander || !segment.travels || segment.oneShot) continue;
+          final index = three.indexWhere((zone) => segment.toX >= zone.minX - 0.01 && segment.toX <= zone.maxX + 0.01);
+          expect(index, isNonNegative, reason: 'a free spot: ${segment.toX}');
+          visits[index]++;
+        }
+      }
+      expect(visits.every((count) => count > 20), isTrue, reason: '$visits');
+      // The longest stretch is the likeliest.
+      expect(visits[2], greaterThan(visits[1]));
     });
 
     test('naps, more the longer Claude has been quiet', () {
