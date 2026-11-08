@@ -170,6 +170,8 @@ class DesktopAppState extends State<DesktopApp> {
     frames: widget.windowFrames ?? systemWindowFrames(),
     foreground: widget.foregroundWindow ?? systemForegroundWindow(),
     adventureDemo: MischiefStage.adventureDemoFrom(Platform.environment['MOCHI_DESKTOP_ADVENTURE_DEMO']),
+    taskbar: () => _stroll.taskbarStage,
+    takeoverOccasion: MischiefStage.takeoverFrom(Platform.environment['MOCHI_DESKTOP_TAKEOVER']),
   );
 
   /// The Windows extras on the native stage (tests).

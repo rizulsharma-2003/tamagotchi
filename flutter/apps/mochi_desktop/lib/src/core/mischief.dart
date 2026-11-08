@@ -57,6 +57,21 @@ enum MischiefExtra {
     'Landmarks',
     'Mochi visits the taskbar’s landmarks: it swings on the clock, bats at the Start button and perches on the widgets tile.',
     moves: true,
+  ),
+
+  /// X11: on a holiday with a takeover (Diwali, Christmas, Halloween), a little decoration on the window you're using or
+  /// the taskbar.
+  holidayTakeover(
+    'Holiday takeover',
+    'On Diwali, Christmas and Halloween: a string of lights or a cap of snow along the top of the window you’re using, or pumpkins on the taskbar.',
+    moves: true,
+  ),
+
+  /// X12: Mochi's morning coffee with Patch, and (with “Local weather”) an umbrella when it rains.
+  moods(
+    'Weather and time moods',
+    'Mochi has coffee with Patch the first time you’re at your PC in the morning, and can bring an umbrella when it rains.',
+    moves: true,
   );
 
   const MischiefExtra(this.title, this.detail, {required this.moves});
@@ -270,8 +285,17 @@ class MischiefGate extends ChangeNotifier {
     notifyListeners();
   }
 
+  final List<VoidCallback> _stopHooks = [];
+
+  /// [hook] runs whenever the gate is [stop]ped (an extra with a timer of its own puts it away: stopping sends no
+  /// notification, since the verdicts then are worked out afresh on every asking).
+  void onStop(VoidCallback hook) => _stopHooks.add(hook);
+
   /// Stops watching (the verdicts are worked out on asking again).
   void stop() {
+    for (final hook in List.of(_stopHooks)) {
+      hook();
+    }
     _timer?.cancel();
     _timer = null;
     if (_started) {

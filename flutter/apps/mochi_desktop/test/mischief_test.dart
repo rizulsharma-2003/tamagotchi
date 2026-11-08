@@ -37,6 +37,8 @@ void main() {
         'titleBars': true,
         'peekaboo': true,
         'landmarks': true,
+        'holidayTakeover': true,
+        'moods': true,
       });
       expect(document.json!['v'], 8);
       final again = DesktopSettings(MemorySettingsDocument(document.json));

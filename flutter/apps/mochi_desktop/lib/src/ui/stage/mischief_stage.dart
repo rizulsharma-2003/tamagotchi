@@ -13,6 +13,8 @@
 // - W19 desktop adventures (adventure.dart): the Mac's explore-the-desktop, on the same stage and the same StagePet. It's
 //   a Mac feature, so it isn't behind the Mischief switches (only the rules every extra keeps); of the roamer and the
 //   adventure only one has Mochi out at a time, and an adventure you asked for takes Mochi from the roamer.
+// - X11 holiday takeover (holiday_takeover.dart): on Diwali lights, at Christmas snow along the top of the window you're
+//   using; at Halloween pumpkins on the taskbar.
 // - W26 Mochi on the taskbar while Mochi's window is open (stage_stand.dart): the stroll goes on, drawn by the stage.
 //
 // Development: `MOCHI_DESKTOP_MISCHIEF_DEMO` ("confetti:20,fireworks:45") repeats a preview every so many seconds
@@ -33,10 +35,12 @@ import '../../desktop.dart';
 import '../../platform/displays.dart';
 import '../../platform/foreground_window.dart';
 import '../../platform/native_stage.dart';
+import '../../platform/taskbar.dart' show TaskbarStage;
 import '../../platform/window_frames.dart';
 import '../pet/taskbar_stroll.dart' show PetHome;
 import 'adventure.dart';
 import 'celebrations.dart';
+import 'holiday_takeover.dart';
 import 'screen_roamer.dart';
 import 'stage_behind.dart';
 import 'stage_cast.dart';
@@ -63,6 +67,8 @@ class MischiefStage extends ChangeNotifier {
     this.frames = const NoWindowFrames(),
     this.foreground = const NoForegroundWindow(),
     this.adventureDemo,
+    this.taskbar,
+    this.takeoverOccasion,
   }) : cast = StageCast(stage),
        _shown = shown ?? (() => true) {
     celebrations = StageCelebrations(stage: stage, cast: cast, gate: desktop.mischief, displays: displays, cursor: cursor, clock: clock);
@@ -76,6 +82,20 @@ class MischiefStage extends ChangeNotifier {
       store: notesStore ?? MemoryJsonStore(),
       onOpen: onOpen,
       clock: () => desktop.sessions.now,
+      seconds: clock,
+    );
+    takeover = HolidayTakeover(
+      stage: stage,
+      cast: cast,
+      gate: desktop.mischief,
+      rhythm: desktop.rhythm,
+      holidays: desktop.holidays,
+      displays: displays,
+      frames: frames,
+      foreground: foreground,
+      taskbar: taskbar,
+      force: takeoverOccasion,
+      dark: dark,
       seconds: clock,
     );
     final home = this.home;
@@ -160,6 +180,11 @@ class MischiefStage extends ChangeNotifier {
   final ForegroundWindows foreground;
   final Duration? adventureDemo;
 
+  /// The main taskbar as the stroll last measured it (X11's pumpkins stand in a free stretch of it), and the development
+  /// switch that forces a holiday's takeover (`MOCHI_DESKTOP_TAKEOVER`).
+  final TaskbarStage? Function()? taskbar;
+  final w.SeasonalEvent? takeoverOccasion;
+
   /// What every extra's actors last showed.
   final StageCast cast;
 
@@ -182,6 +207,9 @@ class MischiefStage extends ChangeNotifier {
 
   /// X9.
   late final StickyNotes notes;
+
+  /// X11.
+  late final HolidayTakeover takeover;
 
   /// Minutes in a row at the PC (for the stretch break), and whether this is gone.
   int _activeMinutes = 0;
@@ -209,6 +237,7 @@ class MischiefStage extends ChangeNotifier {
       ..add(desktop.streaks.reached.listen(_streak))
       ..add(desktop.cues.listen(_cue));
     notes.start();
+    takeover.start();
     desktop.world.everyMinute(_minute);
     roamer?.start();
     adventure?.start();
@@ -276,6 +305,9 @@ class MischiefStage extends ChangeNotifier {
   /// Settings' "Leave a note".
   StickyNote? previewNote() => notes.leave(NoteKind.hello, NoteWords.hello, preview: true);
 
+  /// Settings' "Try it" for the holiday takeover: [event]'s decoration for 20 seconds.
+  bool previewTakeover(w.SeasonalEvent event) => takeover.preview(event);
+
   /// Settings' "Try it": a preview of [kind] now.
   bool preview(CelebrationKind kind) => celebrations.celebrate(kind, preview: true);
 
@@ -289,7 +321,7 @@ class MischiefStage extends ChangeNotifier {
   /// What's on the stage, for the perf meter (null: nothing).
   String? perfState() {
     if (celebrations.running) return 'celebration (${celebrations.playing!.name})';
-    return adventure?.perfState() ?? roamer?.perfState() ?? (notes.notes.isEmpty || notes.hidden ? null : 'notes up (${notes.notes.length})');
+    return takeover.perfState() ?? adventure?.perfState() ?? roamer?.perfState() ?? (notes.notes.isEmpty || notes.hidden ? null : 'notes up (${notes.notes.length})');
   }
 
   /// A development switch: `MOCHI_DESKTOP_MISCHIEF_DEMO=confetti:20,fireworks:45`.
@@ -303,6 +335,12 @@ class MischiefStage extends ChangeNotifier {
       if (kind != null && seconds != null && seconds >= 5) demo[kind] = Duration(seconds: seconds);
     }
     return demo;
+  }
+
+  /// A development switch: `MOCHI_DESKTOP_TAKEOVER=diwali|christmas|halloween` forces that occasion's takeover.
+  static w.SeasonalEvent? takeoverFrom(String? value) {
+    final name = (value ?? '').trim().toLowerCase();
+    return [w.SeasonalEvent.diwali, w.SeasonalEvent.christmas, w.SeasonalEvent.halloween].where((event) => event.name == name).firstOrNull;
   }
 
   /// A development switch: `MOCHI_DESKTOP_ADVENTURE_DEMO=60` (seconds, at least 5).
@@ -326,6 +364,7 @@ class MischiefStage extends ChangeNotifier {
     stand?.dispose();
     pet?.dispose();
     pet?.sprites.dispose();
+    takeover.dispose();
     celebrations.dispose();
     stage.dispose();
     super.dispose();

@@ -381,6 +381,9 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
   /// The taskbar as Mochi's stage, while it's on it.
   TaskbarStage? get stage => onTaskbar ? _stage : null;
 
+  /// The taskbar as last measured, whether Mochi is on it or not (X11's pumpkins stand in its free stretches).
+  TaskbarStage? get taskbarStage => _stage;
+
   /// Mochi's box on the taskbar (logical pixels): its window without a bubble.
   Size get box => _stage?.box ?? const Size(64, 40);
 

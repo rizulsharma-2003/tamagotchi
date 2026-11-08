@@ -3,6 +3,7 @@
 // the rules every extra keeps.
 
 import 'package:flutter/material.dart';
+import 'package:mochi_world/mochi_world.dart' as w;
 
 import '../../core/mischief.dart';
 import '../stage/celebrations.dart' show CelebrationKind;
@@ -72,6 +73,25 @@ class MischiefPane extends StatelessWidget {
                         onPressed: mischief.enabled ? stage.previewNote : null,
                         child: const Text('Leave a note'),
                       ),
+                    ],
+                  ),
+                  NoteRow(
+                    text:
+                        'These show for 20 seconds, whatever today is. The lights and the snow go on the window you’re using, '
+                        'the pumpkins on your taskbar.',
+                    icon: Icons.celebration_outlined,
+                  ),
+                  ActionsRow(
+                    children: [
+                      for (final (label, event) in const [
+                        ('Diwali lights', w.SeasonalEvent.diwali),
+                        ('Christmas snow', w.SeasonalEvent.christmas),
+                        ('Halloween pumpkins', w.SeasonalEvent.halloween),
+                      ])
+                        OutlinedButton(
+                          onPressed: mischief.enabled && mischief.on(MischiefExtra.holidayTakeover) ? () => stage.previewTakeover(event) : null,
+                          child: Text(label),
+                        ),
                     ],
                   ),
                 ],
