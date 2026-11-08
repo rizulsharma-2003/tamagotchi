@@ -10,6 +10,7 @@ import 'package:mochi_ui/mochi_ui.dart';
 import '../../desktop.dart';
 import '../pet/companion_director.dart';
 import '../pet/taskbar_stroll.dart';
+import '../stage/mischief_stage.dart';
 import 'settings_tabs.dart';
 
 /// What every pane gets: the app, where you are in Settings, and the ways out (pairing, Mochi's window).
@@ -28,6 +29,7 @@ class SettingsHost {
     this.onGames,
     this.onRecap,
     this.onDecorate,
+    this.mischief,
   });
 
   final MochiDesktop desktop;
@@ -40,6 +42,9 @@ class SettingsHost {
 
   /// Decorates the room in Mochi's window (Settings › Fun › Room › Decorate…).
   final VoidCallback? onDecorate;
+
+  /// The Windows extras on the native stage, for Settings › Mischief's "Try it".
+  final MischiefStage? mischief;
 
   /// "Install Mochi": the app copies itself into place and hands over to the installed copy.
   final VoidCallback? onInstall;

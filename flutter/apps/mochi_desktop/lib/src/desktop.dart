@@ -26,6 +26,7 @@ import 'core/reactions.dart';
 import 'core/session_store.dart';
 import 'core/sessions.dart';
 import 'core/sounds.dart';
+import 'core/streaks.dart';
 import 'core/toasts.dart';
 import 'core/turn_summaries.dart';
 import 'demo.dart';
@@ -122,6 +123,8 @@ class MochiDesktop {
     holidays = DesktopHolidays(settings: settings, world: world, store: store('seasons.json'), clock: clock, decorating: () => room.isEditing);
     purr = PurrSession(settings: settings, sounds: sounds, rhythm: rhythm, pet: () => interact('pet'), time: world.now, clock: clock);
     recap = DesktopRecap(settings: settings, world: world, focus: focus, toasts: this.toasts, store: store('journal.json'), clock: clock);
+    streaks = StreakWatch(store: store('streaks.json'), recapStreak: () => recap.recap().streak, clock: clock);
+    recap.afterRecord = streaks.observe;
     this.hotkeys = Hotkeys(
       registrar: hotkeys ?? const UnsupportedHotkeys(),
       chosen: settings.shortcut,
@@ -293,6 +296,9 @@ class MochiDesktop {
 
   /// The daily recap (W16): the week of real events it counts, and the evening announcement.
   late final DesktopRecap recap;
+
+  /// Days in a row with Claude Code on this PC: milestones get fireworks (X10).
+  late final StreakWatch streaks;
 
   /// Press and hold Mochi to keep it purring (W21).
   late final PurrSession purr;
@@ -515,6 +521,7 @@ class MochiDesktop {
     room.dispose();
     mischief.dispose();
     recap.dispose();
+    streaks.dispose();
     focus.dispose();
     world.dispose();
     rhythm.dispose();

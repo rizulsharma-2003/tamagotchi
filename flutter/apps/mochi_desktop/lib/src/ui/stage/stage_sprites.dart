@@ -144,17 +144,20 @@ class StageSprites {
     };
     final data = <String, StageSpriteData>{};
     final sprites = <String, StageSprite>{};
+    // Every picture is read back at once (one wait, not one after another).
+    final read = await Future.wait([
+      for (final (image, _) in images.values) image.toByteData(format: ui.ImageByteFormat.rawRgba).catchError((Object _) => null),
+    ]);
+    var index = 0;
     for (final MapEntry(:key, value: (image, recipe)) in images.entries) {
-      try {
-        final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-        if (bytes == null || _disposed || generation != _generation) continue;
-        final (ox, oy) = PoseSprites.origin(recipe.bounds, recipe.ratio);
-        final id = stage.newSprite();
-        data[key] = StageSpriteData(id: id, width: image.width, height: image.height, rgba: bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes));
-        sprites[key] = StageSprite(id: id, width: image.width, height: image.height, originX: ox.round(), originY: oy.round());
-      } finally {
-        image.dispose();
-      }
+      final bytes = read[index++];
+      final width = image.width, height = image.height;
+      image.dispose();
+      if (bytes == null || _disposed || generation != _generation) continue;
+      final (ox, oy) = PoseSprites.origin(recipe.bounds, recipe.ratio);
+      final id = stage.newSprite();
+      data[key] = StageSpriteData(id: id, width: width, height: height, rgba: bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes));
+      sprites[key] = StageSprite(id: id, width: width, height: height, originX: ox.round(), originY: oy.round());
     }
     if (_disposed || generation != _generation || sprites.isEmpty) return const {};
     stage.defineSprites(data.values.toList());
@@ -182,13 +185,13 @@ class StageSprites {
       _bytes -= sprite.bytes;
       dropped.add(sprite.id);
     }
-    stage.dropSprites(dropped);
+    if (dropped.isNotEmpty) stage.dropSprites(dropped);
   }
 
   /// Every picture goes (here and in the runner); pictures being drawn are thrown away when they're done.
   void clear() {
     _generation++;
-    stage.dropSprites([for (final sprite in _ready.values) sprite.id]);
+    if (_ready.isNotEmpty) stage.dropSprites([for (final sprite in _ready.values) sprite.id]);
     _ready.clear();
     _pending.clear();
     _bytes = 0;

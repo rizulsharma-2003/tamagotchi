@@ -18,6 +18,7 @@ import '../platform/displays.dart';
 import '../platform/process_cpu.dart';
 import '../platform/taskbar.dart';
 import '../platform/image_export.dart';
+import '../platform/native_stage.dart';
 import '../platform/win32_taskbar.dart' show Win32PetWindow, Win32TaskbarInfo;
 import 'perf_meter.dart';
 import 'pet/companion_director.dart';
@@ -25,6 +26,7 @@ import 'pet/pet_director.dart' show PetMood;
 import '../update/updater.dart';
 import 'pet/pet_surface.dart';
 import 'pet/taskbar_stroll.dart';
+import 'stage/mischief_stage.dart';
 import 'games/games_screen.dart';
 import 'recap/recap_screen.dart';
 import '../core/games.dart' show GameTab;
@@ -69,6 +71,7 @@ class DesktopApp extends StatefulWidget {
     this.strollClock,
     this.strollRandom,
     this.images,
+    this.stage,
   });
 
   final MochiDesktop desktop;
@@ -76,6 +79,9 @@ class DesktopApp extends StatefulWidget {
 
   /// Where saved and copied pictures go (the recap card); the system's when not given.
   final ImageExport? images;
+
+  /// Mochi's native stage (N1: the Windows runner's; none on the macOS build; a fake in tests).
+  final NativeStage? stage;
 
   /// Where the taskbar is (Win32 on Windows, none elsewhere, a fake in tests).
   final TaskbarInfo? taskbar;
@@ -129,6 +135,18 @@ class DesktopAppState extends State<DesktopApp> {
   );
   late DesktopStyle _trayStyle = desktop.settings.petStyle;
 
+  /// Mischief out on the native stage: the Windows extras (Settings › Mischief).
+  late final MischiefStage _mischief = MischiefStage(
+    desktop: desktop,
+    stage: widget.stage ?? systemStage(),
+    displays: _stroll.displays,
+    cursor: _stroll.taskbar.cursor,
+    demo: MischiefStage.demoFrom(Platform.environment['MOCHI_DESKTOP_MISCHIEF_DEMO']),
+  );
+
+  /// The Windows extras on the native stage (tests).
+  MischiefStage get mischief => _mischief;
+
   /// The clipboard and Downloads, for the recap's picture (Mochi's window owns what it puts on the clipboard).
   late final ImageExport _images =
       widget.images ??
@@ -174,7 +192,7 @@ class DesktopAppState extends State<DesktopApp> {
 
   /// What Mochi is doing, for the perf meter.
   String perfState() {
-    final state = _perfState();
+    final state = _mischief.perfState() ?? _perfState();
     return desktop.rhythm.unseen ? 'screen off: $state' : state;
   }
 
@@ -260,6 +278,7 @@ class DesktopAppState extends State<DesktopApp> {
       };
     }
     unawaited(_loadLibrary());
+    _mischief.start();
     _startPerf();
     _subscriptions.add(widget.shell.actions.listen(handle));
     _subscriptions.add(desktop.cues.listen(_noteActivity));
@@ -669,6 +688,7 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.focus.removeListener(_focusChanged);
     _rhythmLog?.cancel();
     _stroll.dispose();
+    _mischief.dispose();
     _companion.dispose();
     _meter?.dispose();
     _perf?.dispose();
@@ -864,6 +884,7 @@ class _MainSurface extends StatelessWidget {
                   onGames: state.openGames,
                   onRecap: state.openRecap,
                   onDecorate: state.openDecorate,
+                  mischief: state._mischief,
                 ),
               ),
               MainPage.games => GamesScreen(desktop: desktop),

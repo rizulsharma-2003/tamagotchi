@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/mischief.dart';
+import '../stage/celebrations.dart' show CelebrationKind;
 import 'settings_kit.dart';
 
 class MischiefPane extends StatelessWidget {
@@ -24,6 +25,7 @@ class MischiefPane extends StatelessWidget {
         final pet = host.pet;
         final supported = gate.supported;
         final all = gate.whyAll;
+        final stage = host.mischief;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -51,6 +53,25 @@ class MischiefPane extends StatelessWidget {
                 for (final extra in MischiefExtra.values) _ExtraRow(extra: extra, host: host, everything: all),
               ],
             ),
+            if (stage != null && supported)
+              SettingsGroup(
+                title: 'Try it',
+                footer: 'Plays once now, on the display you’re on, even during quiet hours (you asked).',
+                children: [
+                  ActionsRow(
+                    children: [
+                      OutlinedButton(
+                        onPressed: mischief.enabled ? () => stage.preview(CelebrationKind.confetti) : null,
+                        child: const Text('Confetti'),
+                      ),
+                      OutlinedButton(
+                        onPressed: mischief.enabled ? () => stage.preview(CelebrationKind.fireworks) : null,
+                        child: const Text('Fireworks'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
           ],
         );
       },
