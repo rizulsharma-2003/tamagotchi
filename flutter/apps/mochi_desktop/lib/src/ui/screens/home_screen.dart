@@ -254,7 +254,7 @@ class _Header extends StatelessWidget {
         ),
         const SizedBox(height: Space.s),
         Text(
-          companion.present ? 'Click $pet to pet, or $patch for a wave' : 'Click $pet to pet',
+          companion.present ? 'Click $pet to pet (hold to purr), or $patch for a wave' : 'Click $pet to pet, hold to purr',
           textAlign: TextAlign.center,
           style: context.type.footnote.copyWith(fontWeight: FontWeight.w500),
         ),

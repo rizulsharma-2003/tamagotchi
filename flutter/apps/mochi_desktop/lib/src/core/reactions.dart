@@ -36,6 +36,9 @@ class Reactions extends ChangeNotifier {
   /// Mochi's window or popover is open: no badge or banner (you're looking already). Set by the app.
   bool Function() lookingAtMochi = () => false;
 
+  /// A focus block is running (W15): only the sounds for what needs you play.
+  bool Function() focusing = () => false;
+
   AttentionBadge? _badge;
 
   /// The dot on Mochi while something waits for you.
@@ -65,7 +68,7 @@ class Reactions extends ChangeNotifier {
     final decision = NotificationPolicy.decide(
       reaction.category,
       settings,
-      NotificationContext(now: now, lookingAtMochi: lookingAtMochi(), isLate: transition.delivery != Delivery.live),
+      NotificationContext(now: now, lookingAtMochi: lookingAtMochi(), isLate: transition.delivery != Delivery.live, focusing: focusing()),
     );
     if (decision.animate && reaction.cue != null) {
       caption = reaction.caption;

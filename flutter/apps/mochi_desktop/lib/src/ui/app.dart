@@ -17,13 +17,17 @@ import '../desktop.dart';
 import '../platform/displays.dart';
 import '../platform/process_cpu.dart';
 import '../platform/taskbar.dart';
-import '../platform/win32_taskbar.dart' show Win32TaskbarInfo;
+import '../platform/image_export.dart';
+import '../platform/win32_taskbar.dart' show Win32PetWindow, Win32TaskbarInfo;
 import 'perf_meter.dart';
 import 'pet/companion_director.dart';
 import 'pet/pet_director.dart' show PetMood;
 import '../update/updater.dart';
 import 'pet/pet_surface.dart';
 import 'pet/taskbar_stroll.dart';
+import 'games/games_screen.dart';
+import 'recap/recap_screen.dart';
+import '../core/games.dart' show GameTab;
 import 'popover/frame_meter.dart';
 import 'popover/popover_stage.dart';
 import 'popover/popover_view.dart';
@@ -37,7 +41,17 @@ import 'widgets/title_bar.dart';
 
 export 'screens/settings_screen.dart' show SettingsNavigation, SettingsTab;
 
-enum MainPage { home, pairing, settings }
+/// The main window's pages: Mochi's own (home, pairing), Settings, and the fun features' windows on the Mac (Games).
+enum MainPage {
+  home('Mochi'),
+  pairing('Pair a Phone'),
+  settings('Settings'),
+  games('Games'),
+  recap('Today’s Recap');
+
+  const MainPage(this.title);
+  final String title;
+}
 
 /// Mochi for Windows: the desktop pet and the main window (one native window in two forms, see shell.dart), in Mochi's
 /// clay look, light, dark or following the system.
@@ -54,10 +68,14 @@ class DesktopApp extends StatefulWidget {
     this.displays,
     this.strollClock,
     this.strollRandom,
+    this.images,
   });
 
   final MochiDesktop desktop;
   final DesktopShell shell;
+
+  /// Where saved and copied pictures go (the recap card); the system's when not given.
+  final ImageExport? images;
 
   /// Where the taskbar is (Win32 on Windows, none elsewhere, a fake in tests).
   final TaskbarInfo? taskbar;
@@ -110,6 +128,16 @@ class DesktopAppState extends State<DesktopApp> {
     log: _strollLog(),
   );
   late DesktopStyle _trayStyle = desktop.settings.petStyle;
+
+  /// The clipboard and Downloads, for the recap's picture (Mochi's window owns what it puts on the clipboard).
+  late final ImageExport _images =
+      widget.images ??
+      ImageExport.system(
+        owner: () => switch (widget.shell.petWindow) {
+          final Win32PetWindow window => window.hwnd,
+          _ => 0,
+        },
+      );
 
   /// The classic tray icon (while Mochi lives there).
   late final TrayGlyphController _tray = TrayGlyphController(
@@ -244,6 +272,7 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.reactions.addListener(_tray.refresh);
     desktop.settings.addListener(_settingsChanged);
     desktop.updater.addListener(_updatesChanged);
+    desktop.focus.addListener(_focusChanged);
     unawaited(widget.shell.setStyle(_trayStyle));
     _updatesChanged();
     if (_page == MainPage.settings) widget.shell.mainSize = settingsSize();
@@ -267,6 +296,15 @@ class DesktopAppState extends State<DesktopApp> {
   }
 
   bool _trayUpdate = false;
+  bool _trayFocus = false;
+
+  /// "Start Focus" or "Stop Focus" in the tray as a session starts or ends.
+  void _focusChanged() {
+    final running = desktop.focus.running;
+    if (running == _trayFocus) return;
+    _trayFocus = running;
+    unawaited(widget.shell.setFocusing(running));
+  }
 
   /// "Restart to Update" in the tray while a verified update waits.
   void _updatesChanged() {
@@ -315,6 +353,14 @@ class DesktopAppState extends State<DesktopApp> {
         open(MainPage.pairing);
       case ShellAction.settings:
         open(MainPage.settings);
+      case ShellAction.focus:
+        desktop.focus.toggle();
+      case ShellAction.games:
+        openGames();
+      case ShellAction.recap:
+        openRecap();
+      case ShellAction.decorate:
+        openDecorate();
       // On the taskbar (roaming it, or playing in its spot) is where you'll see Mochi: the pet shows too.
       case ShellAction.roamTaskbar:
         desktop.settings
@@ -351,21 +397,46 @@ class DesktopAppState extends State<DesktopApp> {
   /// Which Settings pane is open (kept while Settings is closed, so it opens where you left it).
   late final SettingsNavigation settingsNavigation = SettingsNavigation(widget.initialPane ?? SettingsTab.general);
 
-  /// Settings was opened from Mochi's window (Escape goes back to it), not from the tray or the pet.
+  /// Settings (or a fun feature's page) was opened from Mochi's window (Escape goes back to it), not from the tray, the
+  /// popover or the pet.
   bool _settingsFromWindow = false;
 
-  /// Shows [page] in the main window; Settings at its own, larger size, at [pane] if given.
+  /// Shows [page] in the main window; Settings and the games at their own sizes, Settings at [pane] if given.
   void open(MainPage page, {SettingsTab? pane}) {
     if (pane != null) settingsNavigation.tab = pane;
-    if (page == MainPage.settings && (_page != MainPage.settings || _surface != Surface.main)) {
-      _settingsFromWindow = _surface == Surface.main;
+    if (page != MainPage.home && page != MainPage.pairing && (_page != page || _surface != Surface.main)) {
+      _settingsFromWindow = _surface == Surface.main && _page == MainPage.home;
     }
-    widget.shell.mainSize = page == MainPage.settings ? settingsSize() : mainWindowSize();
+    // Decorating happens in the room: leaving it for another page puts the tray away.
+    if (page != MainPage.home) desktop.room.end();
+    widget.shell.mainSize = switch (page) {
+      MainPage.settings => settingsSize(),
+      MainPage.games => _fit(SurfaceSizes.games),
+      MainPage.recap => _fit(SurfaceSizes.recap),
+      MainPage.home || MainPage.pairing => mainWindowSize(),
+    };
     setState(() => _page = page);
     _show(Surface.main);
   }
 
-  /// Escape in Settings: back to Mochi's window if Settings was opened from it, else back to the desktop.
+  /// The Mac's "Games…": the Games window, at [tab] if given.
+  void openGames([GameTab? tab]) {
+    desktop.games.show(tab);
+    open(MainPage.games);
+  }
+
+  /// The Mac's "Today's Recap…": the card for today.
+  void openRecap() => open(MainPage.recap);
+
+  /// The Mac's "Decorate the Room…" (W18): Mochi's window, with the room's tray out (the popover's Decorate decorates
+  /// the popover's room instead, as on the Mac).
+  void openDecorate() {
+    open(MainPage.home);
+    desktop.room.begin();
+  }
+
+  /// Escape in Settings (or a fun feature's page): back to Mochi's window if it was opened from there, else back to
+  /// the desktop.
   void closeSettings() => _settingsFromWindow ? open(MainPage.home) : closeMain();
 
   /// Settings › Phones › Pair a Phone…: the pairing page, with a fresh code.
@@ -400,6 +471,7 @@ class DesktopAppState extends State<DesktopApp> {
     final size = await widget.shell.size();
     if (size == null || size.width < SurfaceSizes.mainMinimum.width - 1 || size.height < SurfaceSizes.mainMinimum.height - 1) return;
     widget.shell.mainSize = size;
+    if (_page == MainPage.games || _page == MainPage.recap) return;
     if (_page == MainPage.settings) {
       if (desktop.settings.settingsWindowSize != size) desktop.settings.settingsWindowSize = size;
     } else if (desktop.settings.mainWindowSize != size) {
@@ -476,6 +548,8 @@ class DesktopAppState extends State<DesktopApp> {
         open(MainPage.home);
       case ToastTargetKind.agent:
         open(MainPage.settings, pane: SettingsTab.agent);
+      case ToastTargetKind.recap:
+        openRecap();
     }
   }
 
@@ -504,6 +578,7 @@ class DesktopAppState extends State<DesktopApp> {
     } else {
       _focusSession = null;
     }
+    if (surface != Surface.main && surface != Surface.popover) desktop.room.end();
     // You're looking at Mochi: no badges from the world, and Mochi can say good morning.
     desktop.world.setWindowVisible(surface == Surface.main || surface == Surface.popover);
     setState(() => _surface = surface);
@@ -526,6 +601,8 @@ class DesktopAppState extends State<DesktopApp> {
     onAsk: openAsk,
     onSettings: () => open(MainPage.settings),
     onSetUpClaude: () => open(MainPage.settings, pane: SettingsTab.claude),
+    onGames: openGames,
+    onRecap: openRecap,
   );
 
   /// The popover is drawn once out of sight soon after launch, on Windows (see [_PopoverWarmUp]).
@@ -589,6 +666,7 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.settings.removeListener(_settingsChanged);
     _warmUpTimer?.cancel();
     desktop.updater.removeListener(_updatesChanged);
+    desktop.focus.removeListener(_focusChanged);
     _rhythmLog?.cancel();
     _stroll.dispose();
     _companion.dispose();
@@ -733,11 +811,7 @@ class _MainSurface extends StatelessWidget {
     final desktop = state.desktop;
     final settingsPage = page == MainPage.settings;
     void back() => state.open(MainPage.home);
-    final title = switch (page) {
-      MainPage.home => 'Mochi',
-      MainPage.pairing => 'Pair a Phone',
-      MainPage.settings => 'Settings',
-    };
+    final title = page.title;
     final column = Material(
       type: MaterialType.transparency,
       child: Column(
@@ -747,7 +821,7 @@ class _MainSurface extends StatelessWidget {
             onDragStart: () => unawaited(state.widget.shell.startDragging()),
             onClose: state.closeMain,
             onBack: page == MainPage.home ? null : back,
-            onPair: page == MainPage.pairing || settingsPage ? null : () => state.open(MainPage.pairing),
+            onPair: page == MainPage.home ? () => state.open(MainPage.pairing) : null,
             onSettings: settingsPage ? null : () => state.open(MainPage.settings),
             trailing: settingsPage
                 ? _ClaudeStatusPill(desktop: desktop, onTap: () => state.settingsNavigation.tab = SettingsTab.claude)
@@ -781,8 +855,13 @@ class _MainSurface extends StatelessWidget {
                   library: state._library,
                   onInstall: () => unawaited(state.installMochi()),
                   onRestartToUpdate: () => unawaited(state.restartToUpdate()),
+                  onGames: state.openGames,
+                  onRecap: state.openRecap,
+                  onDecorate: state.openDecorate,
                 ),
               ),
+              MainPage.games => GamesScreen(desktop: desktop),
+              MainPage.recap => RecapScreen(desktop: desktop, images: state._images),
             },
           ),
         ],
@@ -792,7 +871,7 @@ class _MainSurface extends StatelessWidget {
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): switch (page) {
           MainPage.home => state.closeMain,
-          MainPage.settings => state.closeSettings,
+          MainPage.settings || MainPage.games || MainPage.recap => state.closeSettings,
           MainPage.pairing => back,
         },
         const SingleActivator(LogicalKeyboardKey.comma, control: true): () => state.open(MainPage.settings),

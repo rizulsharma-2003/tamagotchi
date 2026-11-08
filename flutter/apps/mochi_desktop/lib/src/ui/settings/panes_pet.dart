@@ -4,7 +4,8 @@
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_ui/mochi_ui.dart';
-import 'package:mochi_world/mochi_world.dart' show AchievementID, Chattiness, ProgressState;
+import 'package:mochi_world/mochi_world.dart' show AchievementID, Chattiness, FocusSettings, ProgressState, RecapSettings;
+import 'package:mochi_world/mochi_world.dart' as w show SeasonCalendar;
 
 import '../../core/desktop_settings.dart';
 import '../../core/hotkeys.dart';
@@ -13,6 +14,7 @@ import '../../core/pc_rhythm.dart';
 import '../../core/seasons.dart';
 import '../../platform/startup.dart';
 import '../../platform/taskbar.dart';
+import '../pet/room_editor.dart' show FurnitureIcon;
 import 'previews.dart';
 import 'settings_kit.dart';
 import 'settings_tabs.dart';
@@ -656,8 +658,8 @@ class DesktopPetPane extends StatelessWidget {
           title: 'Using $pet',
           children: [
             TextRow(
-              'Click $pet to pet it, double-click (or press Enter) to open Mochi, and right-click (or Shift+F10) for the '
-              'menu. On the taskbar a click opens Mochi’s popover, and clicks go through to the taskbar everywhere but on '
+              'Click $pet to pet it (press and hold to keep it purring), double-click (or press Enter) to open Mochi, and '
+              'right-click (or Shift+F10) for the menu. On the taskbar a click opens Mochi’s popover, and clicks go through to the taskbar everywhere but on '
               '$pet.',
               secondary: true,
             ),
@@ -681,22 +683,17 @@ class FunPane extends StatelessWidget {
 
   final SettingsHost host;
 
+  /// What's on now and what's next (the Mac's status line): "Diwali until 10 November. Next: Halloween from 24 October.
+  /// Mochi's birthday is 8 November, the day you met."
   String _status(DateTime now) {
     final settings = host.desktop.settings;
-    if (!settings.holidays) return 'Decorations are off.';
-    final pet = host.pet;
-    final seasonal = settings.seasonal;
-    final parts = <String>[];
-    final event = SeasonCalendar.event(now, seasonal, mochiBirthday: settings.adoptedAt);
-    if (event != null) {
-      final until = SeasonCalendar.lastDay(event, now, seasonal, mochiBirthday: settings.adoptedAt);
-      final name = SeasonCalendar.title(event, petName: pet);
-      final today = until == null || (until.year == now.year && until.month == now.month && until.day == now.day);
-      parts.add(today ? '$name today.' : '$name until ${dayAndMonth(until)}.');
-    }
-    final next = SeasonCalendar.nextEvent(now, seasonal, mochiBirthday: settings.adoptedAt);
-    if (next != null) parts.add('Next: ${SeasonCalendar.title(next.event, petName: pet)} from ${dayAndMonth(next.starts)}.');
-    return parts.isEmpty ? 'No holidays coming up.' : parts.join(' ');
+    return w.SeasonCalendar.statusLine(
+      now,
+      settings: settings.worldSeasonal,
+      adopted: settings.adoptedAt,
+      petName: host.pet,
+      formatDay: dayAndMonth,
+    );
   }
 
   @override
@@ -709,18 +706,32 @@ class FunPane extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _TalkingGroup(host: host),
+        _TouchGroup(host: host),
         _GrowingUpGroup(host: host),
+        _FocusGroup(host: host),
+        _RecapGroup(host: host),
+        _GamesGroup(host: host),
+        _RoomGroup(host: host),
         SettingsGroup(
           title: 'Holidays',
           footer:
               'Halloween, Diwali, Christmas, New Year, Valentine’s Day, your birthday and $pet’s (the day $pet came to '
-              'this PC, ${dayAndMonth(settings.adoptedAt)}). Mochi’s window greets the day, and $pet wears a costume '
-              'when you haven’t chosen something to wear.',
+              'this PC, ${dayAndMonth(settings.adoptedAt)}). $pet and ${host.companion} greet each occasion once and '
+              'wear a costume when you haven’t chosen something to wear, and treats are seasonal: candy, laddoos, '
+              'gingerbread, cake and heart cookies.',
           children: [
             ToggleRow(
-              title: 'Celebrate holidays with decorations and costumes',
+              title: 'Celebrate holidays with decorations, costumes and treats',
               value: enabled,
               onChanged: (value) => settings.holidays = value,
+            ),
+            ToggleRow(
+              title: 'A little decoration beside ${host.companion}’s desk on the taskbar',
+              subtitle: settings.companionVisibility == CompanionVisibility.never || !settings.companionOnTaskbar
+                  ? 'It stands by ${host.companion}’s desk, so it shows while ${host.companion} keeps $pet company on the taskbar.'
+                  : null,
+              value: settings.decorateTaskbar && enabled,
+              onChanged: enabled ? (value) => settings.decorateTaskbar = value : null,
             ),
             MenuRow<int>(
               label: 'Your birthday',
@@ -748,11 +759,249 @@ class FunPane extends StatelessWidget {
         SettingsGroup(
           title: 'From the Mac',
           children: [
-            SoonRow(title: 'Games', detail: 'Catch and rock-paper-scissors with $pet.'),
             SoonRow(title: 'Adventures', detail: '$pet heads out to explore your desktop and comes back with stories.'),
-            SoonRow(title: 'Focus sessions', detail: 'A focus timer $pet keeps you company through.'),
-            SoonRow(title: 'Daily recap', detail: 'A card of what you and Claude did today.'),
-            SoonRow(title: 'Room furniture', detail: 'Arrange furniture in $pet’s room.'),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Settings › Fun › Touch (the Mac's): press and hold Mochi to keep it purring; the Mac's trackpad purr is a soft purr
+/// sound here.
+class _TouchGroup extends StatelessWidget {
+  const _TouchGroup({required this.host});
+
+  final SettingsHost host;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = host.desktop.settings;
+    final pet = host.pet;
+    final sounds = settings.soundEnabled;
+    return SettingsGroup(
+      title: 'Touch',
+      footer: 'Press and hold $pet on the taskbar, on the desktop or in its room: it keeps purring, with little purr lines at '
+          'its sides, for as long as you hold on.',
+      children: [
+        ToggleRow(
+          title: 'Purr sound while you hold $pet',
+          subtitle: sounds ? null : 'Turn on Play sounds (Notifications › Sound) to hear it.',
+          value: settings.purrSound && sounds,
+          onChanged: sounds ? (value) => settings.purrSound = value : null,
+        ),
+      ],
+    );
+  }
+}
+
+/// Settings › Fun › Focus buddy (the Mac's FocusSettingsSection): the lengths, naps, the chime and the notification at
+/// a break, and Start or Stop Focus.
+class _FocusGroup extends StatelessWidget {
+  const _FocusGroup({required this.host});
+
+  final SettingsHost host;
+
+  static List<(int, String)> _minutes(int from, int to, int step) => [for (var m = from; m <= to; m += step) (m, '$m min')];
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = host.desktop.settings;
+    final focus = settings.focus;
+    final buddy = host.desktop.focus;
+    void set(FocusSettings value) => settings.focus = value;
+    return ListenableBuilder(
+      listenable: buddy,
+      builder: (context, _) => SettingsGroup(
+        title: 'Focus buddy',
+        footer: settings.soundEnabled
+            ? 'Changes apply to the next focus session. While you focus only the sounds for what needs you play.'
+            : 'Turn on Play sounds (Notifications › Sound) to hear the chime. Changes apply to the next session.',
+        children: [
+          MenuRow<int>(
+            label: 'Focus block',
+            value: focus.workMinutes.clamp(5, 120),
+            items: _minutes(5, 120, 5),
+            onChanged: (value) => set(focus.copyWith(workMinutes: value)),
+          ),
+          MenuRow<int>(
+            label: 'Short break',
+            value: focus.breakMinutes.clamp(1, 30),
+            items: _minutes(1, 30, 1),
+            onChanged: (value) => set(focus.copyWith(breakMinutes: value)),
+          ),
+          MenuRow<int>(
+            label: 'Long break',
+            value: focus.longBreakMinutes.clamp(5, 60),
+            items: _minutes(5, 60, 5),
+            onChanged: (value) => set(focus.copyWith(longBreakMinutes: value)),
+          ),
+          MenuRow<int>(
+            label: 'Long break after',
+            value: focus.cyclesBeforeLongBreak.clamp(2, 8),
+            items: [for (var n = 2; n <= 8; n++) (n, '$n blocks')],
+            onChanged: (value) => set(focus.copyWith(cyclesBeforeLongBreak: value)),
+          ),
+          ToggleRow(
+            title: '${host.pet} naps while you focus',
+            value: focus.napsDuringFocus,
+            onChanged: (value) => set(focus.copyWith(napsDuringFocus: value)),
+          ),
+          ToggleRow(
+            title: 'Chime when a break starts',
+            value: focus.chimeAtBreak && settings.soundEnabled,
+            onChanged: settings.soundEnabled ? (value) => set(focus.copyWith(chimeAtBreak: value)) : null,
+          ),
+          ToggleRow(
+            title: 'Show a notification when a break starts',
+            value: focus.bannerAtBreak,
+            onChanged: (value) => set(focus.copyWith(bannerAtBreak: value)),
+          ),
+          ActionsRow(
+            children: [
+              FilledButton(onPressed: buddy.toggle, child: Text(buddy.running ? 'Stop Focus' : 'Start Focus')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Settings › Fun › Daily recap (the Mac's RecapSettingsSection): the evening announcement, from which hour, a Windows
+/// notification too, and Open Recap….
+class _RecapGroup extends StatelessWidget {
+  const _RecapGroup({required this.host});
+
+  final SettingsHost host;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = host.desktop.settings;
+    final recap = settings.recap;
+    final localizations = MaterialLocalizations.of(context);
+    final twentyFour = MediaQuery.alwaysUse24HourFormatOf(context);
+    String hour(int h) => localizations.formatTimeOfDay(TimeOfDay(hour: h, minute: 0), alwaysUse24HourFormat: twentyFour);
+    void set(void Function(RecapSettings recap) change) {
+      final next = settings.recap;
+      change(next);
+      settings.recap = next;
+    }
+
+    final open = host.onRecap;
+    return SettingsGroup(
+      title: 'Daily recap',
+      footer: 'Once a day, only after real Claude Code activity. Cards use your history on this PC only.',
+      children: [
+        ToggleRow(
+          title: 'Tell me when my day’s recap is ready',
+          value: recap.announce,
+          onChanged: (value) => set((r) => r.announce = value),
+        ),
+        MenuRow<int>(
+          label: 'From',
+          value: recap.hour.clamp(12, 23),
+          items: [for (var h = 12; h < 24; h++) (h, hour(h))],
+          onChanged: recap.announce ? (value) => set((r) => r.hour = value) : null,
+        ),
+        ToggleRow(
+          title: 'Also show a notification',
+          value: recap.banner,
+          onChanged: recap.announce ? (value) => set((r) => r.banner = value) : null,
+        ),
+        if (open != null) ActionsRow(children: [FilledButton(onPressed: open, child: const Text('Open Recap…'))]),
+      ],
+    );
+  }
+}
+
+/// Settings › Fun › Room (the Mac's RoomSettingsSection): what's placed (each can be put away), how much is unlocked,
+/// Decorate… and Clear Room.
+class _RoomGroup extends StatelessWidget {
+  const _RoomGroup({required this.host});
+
+  final SettingsHost host;
+
+  @override
+  Widget build(BuildContext context) {
+    final desktop = host.desktop;
+    return ListenableBuilder(
+      listenable: Listenable.merge([desktop.room, desktop.world]),
+      builder: (context, _) {
+        final room = desktop.settings.room;
+        final progress = desktop.world.world.progress;
+        final decorate = host.onDecorate;
+        return SettingsGroup(
+          title: 'Room',
+          footer: room.summary(progress),
+          children: [
+            if (room.items.isEmpty)
+              NoteRow(text: 'Nothing placed yet. Click Decorate in the popover or below, and drag furniture into the room.'),
+            for (final item in room.items)
+              if (FurnitureCatalog.kind(item.kind) case final kind?)
+                MergeSemantics(
+                  child: Padding(
+                    padding: rowPadding,
+                    child: Row(
+                      children: [
+                        ExcludeSemantics(child: FurnitureIcon(kind: kind)),
+                        const SizedBox(width: Space.s),
+                        Expanded(child: Text(kind.title, style: context.type.subheadline)),
+                        IconButton(
+                          tooltip: 'Remove ${kind.title}',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => desktop.room.remove(item.id),
+                          icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ActionsRow(
+              children: [
+                if (decorate != null) FilledButton(onPressed: decorate, child: const Text('Decorate…')),
+                OutlinedButton(onPressed: room.items.isEmpty ? null : desktop.room.clear, child: const Text('Clear Room')),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Settings › Fun › Games (the Mac's GamesSettingsSection): the records, Play… and Reset Records….
+class _GamesGroup extends StatelessWidget {
+  const _GamesGroup({required this.host});
+
+  final SettingsHost host;
+
+  Future<void> _reset(BuildContext context) async {
+    final confirmed = await confirmAction(
+      context,
+      title: 'Reset all game records?',
+      message: 'High scores and win counts start over. This can’t be undone.',
+      confirm: 'Reset Records',
+      destructive: true,
+    );
+    if (confirmed) host.desktop.games.resetRecords();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final records = host.desktop.settings.games;
+    final play = host.onGames;
+    return SettingsGroup(
+      title: 'Games',
+      footer: 'Catch the Treats and rock-paper-scissors with ${host.pet}${host.desktop.games.companionPlays ? ' and ${host.companion}' : ''}. '
+          'Records stay on this PC.',
+      children: [
+        InfoRow(label: 'Catch the Treats', value: records.catchSummary),
+        InfoRow(label: 'Rock, paper, scissors', value: records.rpsSummary),
+        ActionsRow(
+          children: [
+            if (play != null) FilledButton(onPressed: play, child: const Text('Play…')),
+            OutlinedButton(onPressed: records.isEmpty ? null : () => _reset(context), child: const Text('Reset Records…')),
           ],
         ),
       ],

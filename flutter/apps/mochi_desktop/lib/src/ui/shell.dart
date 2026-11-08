@@ -30,6 +30,12 @@ enum ShellAction {
   pair,
   settings,
 
+  /// The fun features (the Mac's status menu): start or stop a focus session, the Games window.
+  focus,
+  games,
+  recap,
+  decorate,
+
   /// Where Mochi lives (the Mac's menu-bar styles): roaming the taskbar, playing in its spot there, or as the classic
   /// tray icon.
   roamTaskbar,
@@ -74,6 +80,9 @@ abstract interface class DesktopShell {
 
   /// Shows (or hides) "Restart to Update" at the top of the tray menu.
   Future<void> setUpdateReady(bool ready);
+
+  /// "Start Focus" or "Stop Focus" in the tray menu, as a focus session runs or not.
+  Future<void> setFocusing(bool focusing);
 
   /// Shows the tray's menu at the pointer (right-clicking Mochi in the taskbar, whose window is too small for its own).
   Future<void> popUpMenu();
@@ -135,6 +144,12 @@ abstract final class SurfaceSizes {
 
   /// The popover: the Mac popover's width, a little taller (it holds the toggles the Mac keeps in its menu too).
   static const Size popover = Size(360, 540);
+
+  /// The Games page: the Mac's Games window (572 × 512 points) with the title bar.
+  static const Size games = Size(600, 600);
+
+  /// Today's Recap: the Mac's recap window (470 × 660 points) with the title bar.
+  static const Size recap = Size(480, 740);
 }
 
 /// window_manager and tray_manager (Windows; the macOS development build).
@@ -146,6 +161,7 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   PetWindow? _petWindow;
   DesktopStyle _style = DesktopStyle.roam;
   bool _updateReady = false;
+  bool _focusing = false;
 
   @override
   Size mainSize = SurfaceSizes.main;
@@ -194,8 +210,10 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
     trayManager.addListener(this);
     await trayManager.setIcon(Platform.isWindows ? 'assets/tray/tray_icon.ico' : 'assets/tray/tray_icon.png');
     if (!Platform.isLinux) await trayManager.setToolTip('Mochi');
-    await trayManager.setContextMenu(Menu(items: trayItems(style: _style, updateReady: _updateReady)));
+    await _menu();
   }
+
+  Future<void> _menu() => trayManager.setContextMenu(Menu(items: trayItems(style: _style, updateReady: _updateReady, focusing: _focusing)));
 
   static const String _appIcon = 'assets/tray/tray_icon.ico';
   String? _trayIcon;
@@ -216,11 +234,16 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   }
 
   /// The tray menu.
-  static List<MenuItem> trayItems({required DesktopStyle style, bool updateReady = false}) => [
+  static List<MenuItem> trayItems({required DesktopStyle style, bool updateReady = false, bool focusing = false}) => [
     if (updateReady) ...[MenuItem(key: ShellAction.restartToUpdate.name, label: 'Restart to Update'), MenuItem.separator()],
     MenuItem(key: ShellAction.showMain.name, label: 'Show Mochi'),
     MenuItem(key: ShellAction.pair.name, label: 'Pair a Phone…'),
     MenuItem(key: ShellAction.settings.name, label: 'Settings'),
+    MenuItem.separator(),
+    MenuItem(key: ShellAction.focus.name, label: focusing ? 'Stop Focus' : 'Start Focus'),
+    MenuItem(key: ShellAction.games.name, label: 'Games…'),
+    MenuItem(key: ShellAction.recap.name, label: 'Today’s Recap…'),
+    MenuItem(key: ShellAction.decorate.name, label: 'Decorate the Room…'),
     MenuItem.separator(),
     // Where Mochi lives, as the Mac's status menu lists its styles.
     MenuItem.checkbox(key: ShellAction.roamTaskbar.name, label: DesktopStyle.roam.title, checked: style == DesktopStyle.roam),
@@ -234,14 +257,21 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   Future<void> setStyle(DesktopStyle style) async {
     if (style == _style) return;
     _style = style;
-    await trayManager.setContextMenu(Menu(items: trayItems(style: style, updateReady: _updateReady)));
+    await _menu();
+  }
+
+  @override
+  Future<void> setFocusing(bool focusing) async {
+    if (focusing == _focusing) return;
+    _focusing = focusing;
+    await _menu();
   }
 
   @override
   Future<void> setUpdateReady(bool ready) async {
     if (ready == _updateReady) return;
     _updateReady = ready;
-    await trayManager.setContextMenu(Menu(items: trayItems(style: _style, updateReady: ready)));
+    await _menu();
     if (!Platform.isLinux) await trayManager.setToolTip(ready ? 'Mochi: an update is ready' : 'Mochi');
   }
 

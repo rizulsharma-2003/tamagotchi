@@ -169,6 +169,8 @@ Two rules decide a long turn and a real result:
 
 How it's done (Sprint 2 G1): `DesktopWorld` (`lib/src/core/desktop_world.dart`) owns the one `MochiWorld`, ticks it at 4 Hz while the screen can be seen (no timer at all while it can't), and keeps `world.json` in Mochi's folder. Claude's moments keep their Windows notifications, sounds and badge in `Reactions` (W1, the same Mac rules): the world gets the user's per-category "Animate" and "Badge" but no sound or banner for those categories, so nothing is said twice; its own moments (achievements, petting, growing up, feature moments) go to the same toasts and sounds. The taskbar pet draws the world's poses through the W30 pictures (`ui/pet/world_poses.dart`): loops are played on a seamless 5-second ring, so their poses repeat and are drawn once; the world's moments carry on from the ring and are drawn from the art. The room in Mochi's window and the popover draws `frame()` as it is.
 
+Mochi's life, part 2 (W14–W21) runs on the same world: `core/games.dart`, `focus.dart`, `recap.dart`, `holidays.dart`, `room.dart` and `purr.dart` hold each feature's state and apply its `FeatureMoment`s through `DesktopWorld.apply`; their files sit beside `world.json` (`focus-log.json`, `journal.json`, `seasons.json`) and their settings in the settings file under the Mac's keys (`games`, `focus`, `recap`, `room`, `seasonal`, `hapticPurr`). The recap's journal is fed by the world's `onRecord`, the evening check and the holidays' hourly refresh run on the world's minute (so only while the screen can be seen), and the focus timer wakes once at a phase's end while it can't.
+
 What the app feeds in:
 
 - **Claude's events.** Every `WireEvent` from the `BridgeServer` goes to `ingestWire(wire.toJson())`. Spooled events drained at launch are `delivery: EventDelivery.late`; after draining, call `noteSpoolDrained(delivered:, dropped:)`. Pings can go in too: they only update `lastPingAt`. Keep the bridge's own history if you want it (`onRecord` fires for every real event).
@@ -192,7 +194,7 @@ Per item:
 - **W16 Daily recap.** Keep an `EventJournal` (its retention is the history setting), fed from `MochiWorld(onRecord:)` and saved as JSON lines.
   - `DailyRecap.compute(...)` gives the card: `title`, `streakText`, `tiles` (each with `value`, `label` and `detail`; format `RecapActiveSpan`'s times yourself), `summary`, `quietMessage` and `footer`.
   - Run `RecapSchedule.check(...)` every minute and 8 s after launch. Save `RecapSettings` (the `recap` key) when it announces.
-  - Saving or copying the card as an image is drawing, still to do.
+  - Saving or copying the card as an image: Windows draws the card itself (`ui/recap/recap_card.dart`) and puts it on the clipboard or in Downloads.
 - **W17 Share a clip.** Render `world.frame(t)` for t over 5 s with `mochi_art`'s painters. It's deterministic, so it needs no screen capture.
 - **W18 Room makeover.** `RoomLayout` (the Mac's `room` key) holds the placed pieces.
   - The Decorate tray lists `FurnitureCatalog.all`, with `isUnlocked(world.progress)` and `unlockHint`.

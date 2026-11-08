@@ -74,7 +74,7 @@ void main() {
         expect(frame.companionVisible, isTrue);
         expect(find.bySemanticsLabel("Mochi's room. Mochi is watching Claude work. Byte is typing at his desk."), findsOneWidget);
         expect(find.text('and Byte · Mochi is watching Claude work'), findsOneWidget);
-        expect(find.text('Click Mochi to pet, or Byte for a wave'), findsOneWidget);
+        expect(find.text('Click Mochi to pet (hold to purr), or Byte for a wave'), findsOneWidget);
         // A click on Patch: a wave.
         final state = tester.state<DesktopAppState>(find.byType(DesktopApp));
         await tester.tap(find.bySemanticsLabel('Byte. Click for a wave.'));
@@ -95,8 +95,8 @@ void main() {
     // ignore: avoid_print
     expect(find.bySemanticsLabel("Mochi's room. Mochi is relaxing. Patch is away."), findsOneWidget);
     expect(find.bySemanticsLabel('Patch. Click for a wave.'), findsNothing);
-    expect(find.bySemanticsLabel('Mochi. Click to pet.'), findsOneWidget);
-    expect(find.text('Click Mochi to pet'), findsOneWidget);
+    expect(find.bySemanticsLabel('Mochi. Click to pet, press and hold to keep it purring.'), findsOneWidget);
+    expect(find.text('Click Mochi to pet, hold to purr'), findsOneWidget);
   });
 
   testWidgets("the room wears today's look: the theme, the coat, what they wear, the desk thing, the holiday", (tester) async {

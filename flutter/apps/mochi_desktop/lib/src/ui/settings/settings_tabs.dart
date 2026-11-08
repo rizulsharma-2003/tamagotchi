@@ -127,6 +127,7 @@ enum SettingsTab {
         'moments',
     fun => 'games adventure seasons seasonal holidays halloween diwali christmas new year valentine birthday treats '
         'focus recap room furniture talking speech bubbles chattiness chatty quiet fresh lines haiku growing grows up kitten '
+        'touch purr hold pomodoro timer break catch treats rock paper scissors decorate '
         'young grown-up life stages',
     privacy => 'privacy data history relay encryption summaries share keep folder clear',
     developer => 'debug diagnostics logs bridge port spool relay device id room simulator',

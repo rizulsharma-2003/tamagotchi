@@ -221,7 +221,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pump(const Duration(milliseconds: 300));
       expect(state.settingsNavigation.tab, SettingsTab.fun);
-      expect(find.text('Celebrate holidays with decorations and costumes'), findsOneWidget);
+      expect(find.text('Celebrate holidays with decorations, costumes and treats'), findsOneWidget);
 
       // Opened from Mochi's window: Escape goes back to it, at its own size.
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -307,7 +307,7 @@ void main() {
       state.settingsNavigation.tab = SettingsTab.fun;
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Diwali until 10 November.'), findsOneWidget);
-      await flip('Celebrate holidays with decorations and costumes');
+      await flip('Celebrate holidays with decorations, costumes and treats');
       expect((t.document.json!['seasonal'] as Map)['enabled'], false);
       expect(find.text('Decorations are off.'), findsOneWidget);
     });

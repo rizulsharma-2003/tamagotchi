@@ -257,7 +257,20 @@ class BannerCoalescer {
 }
 
 /// Mochi's little sounds (the Mac's SoundCue).
-enum SoundCue { greeting, keyboard, success, celebration, sleep, attention, investigate, pop, achievement }
+enum SoundCue {
+  greeting,
+  keyboard,
+  success,
+  celebration,
+  sleep,
+  attention,
+  investigate,
+  pop,
+  achievement,
+
+  /// A soft purr while you hold Mochi (W21): Windows' stand-in for the Mac's purring trackpad.
+  purr,
+}
 
 enum AttentionLevel {
   info,

@@ -10,6 +10,7 @@ import 'package:mochi_wire/mochi_wire.dart';
 
 import '../../core/hotkeys.dart';
 import '../../core/notifications.dart' show NotificationPolicy;
+import '../../core/json_store.dart';
 import '../../desktop.dart';
 import '../../platform/win32_alerts.dart' show processAppUserModelId;
 import '../../update/updater.dart';
@@ -105,6 +106,22 @@ class PrivacyPane extends StatelessWidget {
                   '$pet’s world keeps your friendship and achievements, and Claude Code’s events of the last three hours (event '
                   'names, session ids, project folder names, tool names) so $pet picks up where it was after a restart. Never '
                   'paths, prompts or notification text; older events are dropped.',
+            ),
+            for (final (label, store) in [
+              ('Daily recap history', desktop.recap.store),
+              ('Focus blocks', desktop.focus.store),
+              ('Holidays greeted', desktop.holidays.store),
+            ])
+              InfoRow(
+                label: label,
+                value: store is FileJsonStore ? store.path : 'In memory only',
+                selectable: store is FileJsonStore,
+              ),
+            NoteRow(
+              text:
+                  'The daily recap counts a week of the same kinds of events (real ones only, never paths, prompts or '
+                  'notification text) and your completed focus blocks; the holidays already greeted are remembered so each is '
+                  'greeted once. Game records and the room’s furniture are in the settings.',
             ),
             ActionsRow(
               children: [

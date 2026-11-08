@@ -376,6 +376,12 @@ void main() {
       expect((look.deskAccessory, look.theme), (null, 'cyberpunk'));
       expect(look.toJson().containsKey('deskAccessory'), isFalse, reason: 'missing means none on the phones');
       expect(look.seasonal, {'enabled': true, 'birthdayMonth': 7, 'birthdayDay': 4, 'decorateMenuBar': true});
+      expect(look.room, {'items': <Object?>[]}, reason: 'nothing placed yet');
+      t.desktop.room.add(FurnitureCatalog.kind('rug')!);
+      t.desktop.settings.decorateTaskbar = false;
+      final furnished = petLook(t.desktop.settings, friendshipLevel: 2);
+      expect(((furnished.room['items']! as List).single as Map)['kind'], 'rug', reason: 'the phones’ rooms get the furniture (W18)');
+      expect((furnished.seasonal['decorateMenuBar'], furnished.friendshipLevel), (false, 2));
       expect(t.desktop.ask.petName, 'Biscuit');
     });
   });

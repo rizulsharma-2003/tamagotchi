@@ -14,6 +14,7 @@ import 'package:mochi_desktop/src/core/desktop_settings.dart';
 import 'package:mochi_desktop/src/core/desktop_world.dart';
 import 'package:mochi_desktop/src/core/hook_setup.dart';
 import 'package:mochi_desktop/src/core/hotkeys.dart';
+import 'package:mochi_desktop/src/core/json_store.dart';
 import 'package:mochi_desktop/src/core/pc_rhythm.dart';
 import 'package:mochi_desktop/src/core/session_store.dart';
 import 'package:mochi_desktop/src/core/sounds.dart';
@@ -260,6 +261,12 @@ class FakeShell implements DesktopShell {
 
   @override
   Future<void> setUpdateReady(bool ready) async => trayUpdate.add(ready);
+
+  /// "Start Focus" or "Stop Focus" in the tray, each time it changed.
+  final List<bool> trayFocus = [];
+
+  @override
+  Future<void> setFocusing(bool focusing) async => trayFocus.add(focusing);
 
   @override
   Future<void> popUpMenu() async => menus++;
@@ -632,10 +639,14 @@ class TestDesktop {
     this.usage,
     this.hotkeys,
     this.worldStore,
+    this.stores,
   );
 
   /// Where Mochi's world is kept (memory).
   final MemoryWorldStore worldStore;
+
+  /// The features' own files (memory), by name: `focus-log.json`, `journal.json`, `seasons.json`.
+  final Map<String, MemoryJsonStore> stores;
 
   final FakeToasts toasts;
   final FakeSound sound;
@@ -671,7 +682,9 @@ class TestDesktop {
     double Function()? uptime,
     int? worldSeed = 0x5EED5,
     MemoryWorldStore? worldStore,
+    Map<String, Object?> files = const {},
   }) {
+    final stores = {for (final entry in files.entries) entry.key: MemoryJsonStore(entry.value)};
     final temp = Directory.systemTemp.createTempSync('mochi_desktop_test');
     final toastService = toasts ?? FakeToasts();
     final sound = FakeSound();
@@ -724,10 +737,11 @@ class TestDesktop {
       usage: usage,
       hotkeys: hotkeys,
       worldStore: store,
+      stores: (file) => stores.putIfAbsent(file, MemoryJsonStore.new),
       uptime: uptime ?? testSeconds,
       worldSeed: worldSeed,
     );
-    return TestDesktop._(temp, desktop, sockets, api, claude, vault, document, start, toastService, sound, usage, hotkeys, store);
+    return TestDesktop._(temp, desktop, sockets, api, claude, vault, document, start, toastService, sound, usage, hotkeys, store, stores);
   }
 
   Future<void> dispose() async {

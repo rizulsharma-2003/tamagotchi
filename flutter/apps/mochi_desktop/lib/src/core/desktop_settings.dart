@@ -3,7 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart' show Accessory, AccessorySlot, OfficeTheme, PetColor, SeasonDecor, SeasonalEvent, Wearer;
-import 'package:mochi_world/mochi_world.dart' show Chattiness;
+import 'package:mochi_world/mochi_world.dart' show Chattiness, FocusSettings, GameRecords, RecapSettings, RoomLayout;
+import 'package:mochi_world/mochi_world.dart' as w show SeasonalSettings;
 
 import 'hotkeys.dart';
 import 'notifications.dart';
@@ -164,9 +165,11 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   /// its spot and room, the size, always on top, clicks passing through, a place on each display, the tray icon's
   /// animation, and Patch only for interesting moments); 6 Mochi's world (Sprint 2: talking in speech bubbles, how
   /// chatty, fresh lines from Claude Haiku, growing up and the last stage announced, under the Mac's keys `speech`,
-  /// `lifeStages` and `lifeStageSeen`). `roamTaskbar` is still written (whether Mochi is on the taskbar) for an older
-  /// Mochi reading the file.
-  static const int version = 6;
+  /// `lifeStages` and `lifeStageSeen`); 7 Mochi's life, part 2 (the mini-games' records, the focus buddy's settings and the evening recap's under the Mac's
+  /// keys `games`, `focus` and `recap`, the purr's sound under `hapticPurr`, the decoration on the taskbar under
+  /// `seasonal.decorateMenuBar`, and the room's furniture under `room`).
+  /// `roamTaskbar` is still written (whether Mochi is on the taskbar) for an older Mochi reading the file.
+  static const int version = 7;
 
   /// The Mac's stepper for "Rests after … min without typing or clicking".
   static const int maxRestAfterMinutes = 60;
@@ -201,6 +204,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   Accessory? _deskAccessory = Accessory.plant;
   OfficeTheme _officeTheme = OfficeTheme.cozyDesk;
   bool _holidays = true;
+  bool _decorateTaskbar = true;
   int? _birthdayMonth;
   int? _birthdayDay;
   bool _pauseReactions = false;
@@ -237,6 +241,11 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   bool _speechFreshLines = false;
   bool _lifeStages = true;
   int _lifeStageSeen = -1;
+  GameRecords _games = GameRecords();
+  FocusSettings _focus = const FocusSettings();
+  RecapSettings _recap = RecapSettings();
+  bool _purrSound = true;
+  RoomLayout _room = RoomLayout();
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -292,6 +301,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _officeTheme = named(OfficeTheme.values, json['officeTheme']) ?? OfficeTheme.cozyDesk;
     final seasonal = json['seasonal'] is Map ? (json['seasonal']! as Map).cast<String, Object?>() : const <String, Object?>{};
     _holidays = seasonal['enabled'] is bool ? seasonal['enabled']! as bool : true;
+    _decorateTaskbar = seasonal['decorateMenuBar'] is bool ? seasonal['decorateMenuBar']! as bool : true;
     final month = seasonal['birthdayMonth'], day = seasonal['birthdayDay'];
     final valid = month is int && day is int && month >= 1 && month <= 12 && day >= 1 && day <= daysIn(month);
     _birthdayMonth = valid ? month : null;
@@ -337,6 +347,11 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _lifeStages = flag('lifeStages', true);
     final seen = json['lifeStageSeen'];
     _lifeStageSeen = seen is int && seen >= -1 && seen <= 2 ? seen : -1;
+    _games = GameRecords.fromJson(json['games']);
+    _focus = FocusSettings.fromJson(json['focus']);
+    _recap = RecapSettings.fromJson(json['recap']);
+    _purrSound = flag('hapticPurr', true);
+    _room = RoomLayout.fromJson(json['room']).sanitized();
   }
 
   static int _minutes(Object? value, int fallback, int min, int max) => value is int ? value.clamp(min, max) : fallback;
@@ -514,6 +529,15 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   /// The day Mochi came to this PC (its first launch): its birthday comes round every year.
   DateTime get adoptedAt => _adoptedAt;
 
+  /// A little holiday decoration beside Patch's desk on the taskbar (the Mac's "beside the bed in the menu bar",
+  /// `seasonal.decorateMenuBar`).
+  bool get decorateTaskbar => _decorateTaskbar;
+  set decorateTaskbar(bool value) => _set(() => _decorateTaskbar = value);
+
+  /// The holiday settings as Mochi's world has them (the Mac's `seasonal`).
+  w.SeasonalSettings get worldSeasonal =>
+      w.SeasonalSettings(enabled: _holidays, birthdayMonth: _birthdayMonth, birthdayDay: _birthdayDay, decorateMenuBar: _decorateTaskbar);
+
   /// The holiday settings, for the calendar.
   SeasonalSettings get seasonal => SeasonalSettings(enabled: _holidays, birthdayMonth: _birthdayMonth, birthdayDay: _birthdayDay);
 
@@ -661,6 +685,45 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   int get lifeStageSeen => _lifeStageSeen;
   set lifeStageSeen(int value) => _set(() => _lifeStageSeen = value.clamp(-1, 2));
 
+  /// The mini-games' records (the Mac's `games`): high scores, best combo and win counts. A copy: change it, then set
+  /// it back to save it.
+  GameRecords get games => _games.copy();
+  set games(GameRecords value) {
+    if (value == _games) return;
+    _set(() => _games = value.copy());
+  }
+
+  /// The focus buddy (the Mac's `focus`): the block and break lengths, naps, the chime and the notification at a break.
+  FocusSettings get focus => _focus;
+  set focus(FocusSettings value) {
+    if (value == _focus) return;
+    _set(() => _focus = value);
+  }
+
+  /// The evening recap (the Mac's `recap`): announced from the hour, a notification too, and the last day announced. A
+  /// copy: change it, then set it back to save it.
+  RecapSettings get recap => _recap.copy();
+  set recap(RecapSettings value) {
+    final same = value.announce == _recap.announce &&
+        value.hour == _recap.hour &&
+        value.banner == _recap.banner &&
+        value.lastAnnouncedDay == _recap.lastAnnouncedDay;
+    if (same) return;
+    _set(() => _recap = value.copy());
+  }
+
+  /// A soft purr plays while you press and hold Mochi (with Mochi's sounds on; the Mac's `hapticPurr`, which purrs on
+  /// its Force Touch trackpad).
+  bool get purrSound => _purrSound;
+  set purrSound(bool value) => _set(() => _purrSound = value);
+
+  /// The furniture in Mochi's room (the Mac's `room`). A copy: change it, then set it back to save it.
+  RoomLayout get room => _room.copy();
+  set room(RoomLayout value) {
+    if (jsonEncode(value.toJson()) == jsonEncode(_room.toJson())) return;
+    _set(() => _room = value.copy());
+  }
+
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
 
@@ -719,7 +782,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'companionAccessory': _companionAccessory?.name,
     'deskAccessory': _deskAccessory?.name,
     'officeTheme': _officeTheme.name,
-    'seasonal': {'enabled': _holidays, 'birthdayMonth': ?_birthdayMonth, 'birthdayDay': ?_birthdayDay},
+    'seasonal': {'enabled': _holidays, 'birthdayMonth': ?_birthdayMonth, 'birthdayDay': ?_birthdayDay, 'decorateMenuBar': _decorateTaskbar},
     'pauseReactions': _pauseReactions,
     // Kept for an older Mochi reading this file: the animations of their categories.
     'celebrateFinished': celebrateFinished,
@@ -744,6 +807,11 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'speech': {'enabled': _speechEnabled, 'useAppleIntelligence': _speechFreshLines, 'chattiness': _chattiness.name},
     'lifeStages': _lifeStages,
     'lifeStageSeen': _lifeStageSeen,
+    'games': _games.toJson(),
+    'focus': _focus.toJson(),
+    'recap': _recap.toJson(),
+    'hapticPurr': _purrSound,
+    'room': _room.toJson(),
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
 

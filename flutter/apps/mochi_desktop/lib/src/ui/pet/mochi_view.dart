@@ -8,11 +8,13 @@ import 'package:mochi_art/mochi_art.dart';
 import '../../core/desktop_world.dart';
 import '../../core/notifications.dart' show AttentionLevel;
 import '../../core/pc_rhythm.dart';
+import '../../core/purr.dart';
 import '../../core/session_store.dart';
 import 'companion_director.dart';
 import 'pet_director.dart';
 import 'pose_sprites.dart';
 import 'stroller.dart';
+import '../../platform/taskbar.dart' show HomeStage;
 import 'taskbar_stroll.dart' show DuoLayout;
 
 /// Mochi, alive: drawn by mochi_art's renderer from Mochi's world ([world]: what it does, its moments and its poses,
@@ -50,6 +52,8 @@ class MochiView extends StatefulWidget {
     this.badge,
     this.sprites = true,
     this.time,
+    this.purr,
+    this.season,
   });
 
   /// Mochi's world: what Mochi (and Patch) do, and their poses.
@@ -106,6 +110,13 @@ class MochiView extends StatefulWidget {
 
   /// The animations' clock (seconds; tests): the world's otherwise.
   final double Function()? time;
+
+  /// Press and hold Mochi (W21): while it purrs, little purr lines tremble at its sides.
+  final PurrSession? purr;
+
+  /// Today's holiday (W20): on the taskbar with Patch, a little decoration stands beside his desk (the Mac's beside the
+  /// bed in the menu bar), as Settings › Fun › Holidays says.
+  final SeasonalEvent? Function()? season;
 
   /// Loops are played on a grid (seconds) when [sprites] are on, so their poses repeat exactly as a loop comes round:
   /// 15 a second when Mochi is drawn at most that often, and 30 when it walks or plays a moment (24–25 frames a
@@ -169,6 +180,7 @@ class MochiViewState extends State<MochiView> {
     // The mood also changes with time alone (a finish fades, a nap begins).
     _watchMood();
     widget.companion?.addListener(_frame);
+    widget.purr?.addListener(_frame);
     _follow();
   }
 
@@ -191,6 +203,10 @@ class MochiViewState extends State<MochiView> {
     if (old.companion != widget.companion) {
       old.companion?.removeListener(_frame);
       widget.companion?.addListener(_frame);
+    }
+    if (old.purr != widget.purr) {
+      old.purr?.removeListener(_frame);
+      widget.purr?.addListener(_frame);
     }
   }
 
@@ -237,7 +253,7 @@ class MochiViewState extends State<MochiView> {
     final fps = MochiView.frameRate(
       mood: _director.mood,
       roam: widget.stroll?.call(),
-      oneShot: _director.playing,
+      oneShot: _director.playing || (widget.purr?.active ?? false),
       calm: _calm,
       companion: _companionRate(),
       small: widget.detail == RenderDetail.tiny,
@@ -277,6 +293,7 @@ class MochiViewState extends State<MochiView> {
     widget.sessions.removeListener(_follow);
     widget.rhythm?.removeListener(_rhythmChanged);
     widget.companion?.removeListener(_frame);
+    widget.purr?.removeListener(_frame);
     widget.world.removeListener(_worldChanged);
     _moodTimer?.cancel();
     _frames?.cancel();
@@ -322,6 +339,8 @@ class MochiViewState extends State<MochiView> {
             ratio: MediaQuery.devicePixelRatioOf(context),
             window: MediaQuery.sizeOf(context),
             quantum: () => MochiView.quantum(_fps),
+            purr: widget.purr,
+            season: widget.season,
           ),
           size: Size.infinite,
         ),
@@ -364,7 +383,17 @@ class _MochiPainter extends CustomPainter {
     this.ratio = 1,
     this.window,
     this.quantum,
+    this.purr,
+    this.season,
   }) : super(repaint: clock);
+
+  /// Today's holiday, for the decoration beside Patch's desk.
+  final SeasonalEvent? Function()? season;
+
+  /// While Mochi purrs, its purr lines are drawn with it (and it isn't a picture).
+  final PurrSession? purr;
+
+  bool get _purring => purr?.active ?? false;
 
   final AttentionLevel? badge;
 
@@ -380,8 +409,6 @@ class _MochiPainter extends CustomPainter {
 
   /// The animations' grid right now (seconds), with [sprites].
   final double Function()? quantum;
-
-
 
   /// The Mac's badge colours: grey for a note, orange when Claude needs you, red for an API error.
   static Color badgeColor(AttentionLevel level) => switch (level) {
@@ -439,10 +466,10 @@ class _MochiPainter extends CustomPainter {
       bounds: _bounds(ArtReach.pet, scale, size, at, across: across),
       ratio: ratio,
       moving: !across,
-      paint: (c) => PetRenderer.draw(pose, GContext(c), Offset.zero, scale, PetPalette(color), accessory: accessory, dark: dark, detail: detail),
+      paint: (c) =>
+          PetRenderer.draw(pose, GContext(c), Offset.zero, scale, PetPalette(color), accessory: accessory, dark: dark, detail: detail),
     );
   }
-
 
   /// [reach] (art units) at [scale] around [at], cut to what can be seen of the window: above the view, as much as the
   /// window shows; at the sides, the view's own edges when [across] (otherwise all of the reach, as the origin moves).
@@ -464,7 +491,9 @@ class _MochiPainter extends CustomPainter {
     if (layout != null && patch != null) return _paintDuo(canvas, size, baseline, layout, patch);
     final roam = stroll?.call();
     final frame = director.pose(clock.value, roam: roam, quantum: sprites == null ? null : quantum?.call());
-    _pet(canvas, size, frame.pose, Offset(size.width / 2, baseline), scale, across: true, repeats: frame.repeats);
+    final purring = _purring;
+    final pose = purring ? PurrSession.decorate(frame.pose, clock.value, calm: calm) : frame.pose;
+    _pet(canvas, size, pose, Offset(size.width / 2, baseline), scale, across: true, repeats: frame.repeats && !purring);
     final g = GContext(canvas);
     _paintBadge(canvas, Offset(size.width / 2, baseline), PetRenderer.bodyHeight * scale);
     final elapsed = burst ? patch?.burstAt(clock.value) : null;
@@ -528,6 +557,11 @@ class _MochiPainter extends CustomPainter {
         );
       }
     }
+    // The holiday's little decoration on the floor, just left of Patch's desk.
+    final occasion = season?.call();
+    if (occasion != null && SeasonRenderContext.decorateMenuBar) {
+      SeasonArt.menuBarAccent(occasion, g, Offset(layout.local(home.deskX - (HomeStage.deskHalf + 2) * k), baseline), k * 2.4, dark: dark);
+    }
     final PetPose pet;
     final double x;
     var repeats = false;
@@ -543,7 +577,16 @@ class _MochiPainter extends CustomPainter {
       repeats = frame.repeats;
       x = from;
     }
-    _pet(canvas, size, pet, Offset(layout.local(x), baseline), k, across: false, repeats: repeats);
+    final purring = _purring;
+    _pet(
+      canvas,
+      size,
+      purring ? PurrSession.decorate(pet, now, calm: calm) : pet,
+      Offset(layout.local(x), baseline),
+      k,
+      across: false,
+      repeats: repeats && !purring,
+    );
     _paintBadge(canvas, Offset(layout.local(x), baseline), PetRenderer.bodyHeight * k);
     for (final prop in scene?.props ?? const <SceneProp>[]) {
       final point = Offset(layout.local(from + prop.x * span), baseline - prop.y * PetRenderer.bodyHeight * k);
@@ -584,5 +627,7 @@ class _MochiPainter extends CustomPainter {
       old.badge != badge ||
       old.sprites != sprites ||
       old.ratio != ratio ||
-      old.window != window;
+      old.window != window ||
+      old.purr != purr ||
+      old.season != season;
 }

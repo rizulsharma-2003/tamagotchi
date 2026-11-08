@@ -14,14 +14,18 @@ class ToastTarget {
   /// The Agent's card (Settings › Agent, until the agent runs on Windows).
   static const ToastTarget agent = ToastTarget._(ToastTargetKind.agent);
 
+  /// Today's recap card (W16).
+  static const ToastTarget recap = ToastTarget._(ToastTargetKind.recap);
+
   final ToastTargetKind kind;
   final String? sessionId;
 
-  /// What the toast carries (its `launch` argument): "mochi:session=<id>", "mochi:main", "mochi:agent".
+  /// What the toast carries (its `launch` argument): "mochi:session=<id>", "mochi:main", "mochi:agent", "mochi:recap".
   String encode() => switch (kind) {
     ToastTargetKind.session => 'mochi:session=${Uri.encodeComponent(sessionId!)}',
     ToastTargetKind.main => 'mochi:main',
     ToastTargetKind.agent => 'mochi:agent',
+    ToastTargetKind.recap => 'mochi:recap',
   };
 
   /// Back from a toast's argument (anything unknown: Mochi's window).
@@ -32,7 +36,11 @@ class ToastTarget {
       final id = Uri.decodeComponent(rest.substring(8));
       return id.isEmpty ? main : ToastTarget.session(id);
     }
-    return rest == 'agent' ? agent : main;
+    return switch (rest) {
+      'agent' => agent,
+      'recap' => recap,
+      _ => main,
+    };
   }
 
   @override
@@ -45,7 +53,7 @@ class ToastTarget {
   String toString() => encode();
 }
 
-enum ToastTargetKind { session, main, agent }
+enum ToastTargetKind { session, main, agent, recap }
 
 /// One toast: its words, where a click goes, and its group (a newer toast of the same group replaces the older one in
 /// the notification centre, so a batch of the same moment shows once).

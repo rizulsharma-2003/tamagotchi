@@ -38,10 +38,10 @@ const PetLook defaultLook = PetLook(
   friendshipLevel: 0,
 );
 
-/// The look this PC shares (`look`), from Settings › General and Characters, so the phones' rooms match: names, the
-/// coat, what Mochi and the companion wear, the desk and the room's theme, and the holiday settings. Windows keeps no
-/// friendship or furniture yet: level 0 and an empty room.
-PetLook petLook(DesktopSettings settings) => PetLook(
+/// The look this PC shares (`look`), from Settings › General, Characters and Fun, so the phones' rooms match: names, the
+/// coat, what Mochi and the companion wear, the desk and the room's theme, its furniture (W18), the holiday settings
+/// and the friendship's level ([friendshipLevel], Mochi's world's).
+PetLook petLook(DesktopSettings settings, {int friendshipLevel = 0}) => PetLook(
   petName: settings.petName,
   companionName: settings.companionName,
   petColor: settings.petColor.name,
@@ -49,13 +49,14 @@ PetLook petLook(DesktopSettings settings) => PetLook(
   companionAccessory: settings.companionAccessory?.name,
   deskAccessory: settings.deskAccessory?.name,
   theme: settings.officeTheme.name,
+  room: settings.room.toJson(),
   seasonal: {
     'enabled': settings.holidays,
     'birthdayMonth': ?settings.birthdayMonth,
     'birthdayDay': ?settings.birthdayDay,
-    'decorateMenuBar': true,
+    'decorateMenuBar': settings.decorateTaskbar,
   },
-  friendshipLevel: 0,
+  friendshipLevel: friendshipLevel,
 );
 
 class PhoneSync {
@@ -72,7 +73,9 @@ class PhoneSync {
     this.tickInterval = const Duration(seconds: 2),
     bool? Function()? away,
     bool Function()? resting,
-  }) : _cue = cue,
+    int Function()? friendship,
+  }) : _friendship = friendship,
+       _cue = cue,
        _summarize = summarize,
        _clock = clock ?? DateTime.now,
        _away = away,
@@ -83,6 +86,9 @@ class PhoneSync {
 
   /// The PC is resting: Mochi sleeps on the phones too (the room's `claude.resting`).
   final bool Function()? _resting;
+
+  /// The friendship's level (the phones' header shows the computer's).
+  final int Function()? _friendship;
 
   final LinkHost host;
   final SessionStore sessions;
@@ -165,7 +171,7 @@ class PhoneSync {
   }
 
   void _publishLook() {
-    final value = (look ?? petLook(settings)).toValue();
+    final value = (look ?? petLook(settings, friendshipLevel: _friendship?.call() ?? 0)).toValue();
     if (value == _publishedLook) return;
     _publishedLook = value;
     host.set(value, LinkKey.look);
