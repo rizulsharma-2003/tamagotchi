@@ -144,8 +144,8 @@ class ReactsDirector extends ChangeNotifier {
   /// How often the three are read (W30).
   final Duration every;
 
-  /// The stroll's debug log: a state word, nothing else.
-  final void Function(String message)? log;
+  /// The stroll's debug log: a state word, nothing else (set by the app when `stroll-debug` is on).
+  void Function(String message)? log;
 
   /// Mochi comes back to normal this long after the microphone was last seen in use.
   static const Duration calmAfter = Duration(seconds: 10);

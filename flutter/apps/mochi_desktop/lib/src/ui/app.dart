@@ -319,6 +319,8 @@ class DesktopAppState extends State<DesktopApp> {
     _mischief.start();
     // Mochi stays on the taskbar, drawn by the native stage, while Mochi's window is open (W26).
     if (_mischief.supported) _stroll.stand = _mischief.stand;
+    // X7's state word goes to the same stroll-debug log.
+    desktop.reacts.log ??= _strollLog();
     // Adventures (W19): dropped off the taskbar, Mochi sets off from there; the tray's and the menu's Explore item follows.
     _stroll.onDropOff = (x, y) => desktop.settings.adventure.enabled && (_mischief.adventure?.dropped(x, y) ?? false);
     desktop.ask
