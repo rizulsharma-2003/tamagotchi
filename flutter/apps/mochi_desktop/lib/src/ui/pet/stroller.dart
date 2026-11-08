@@ -549,6 +549,11 @@ class Stroller {
   // Peekaboo: the plan is Mochi hiding (walking to its spot, sunk down, looking around).
   bool _hiding = false;
 
+  // Whether the pet's own view draws Mochi. It draws what a plain picture of a pose can't show: a toy's props, the lift of a
+  // landmark visit, Peekaboo's sink. Drawn by the native stage while Mochi's window is open (`useView(false)`), Mochi keeps
+  // to what a plain picture shows.
+  bool _view = true;
+
   // Landmarks (X6): the ones that are known and allowed now, the visit in the plan (until when), and the room the window
   // makes for the visits in the plan.
   List<StrollLandmark> _landmarks = const [];
@@ -576,6 +581,22 @@ class Stroller {
 
   /// The plan is Mochi hiding in the taskbar (Peekaboo), sunk down or on its way there.
   bool get hiding => _hiding;
+
+  /// The pet's own view draws Mochi (the taskbar window), rather than the native stage.
+  bool get view => _view;
+
+  /// Whether the pet's own view draws Mochi from now on. Without it (Mochi's window is open and the native stage draws Mochi on
+  /// the taskbar) the toys, the landmark visits and Peekaboo aren't chosen, since their props, lifts and sink are drawn by the
+  /// view alone: one already under way ends now (Mochi stands back up where it is), and the rest of the plan carries on.
+  void useView(bool view, double now) {
+    if (view == _view) return;
+    _view = view;
+    if (view || !isPlaced) return;
+    if (_hiding || _props.any((track) => track.end > now) || visiting(now)) {
+      _restart(now);
+      _extend(now);
+    }
+  }
   List<StrollSegment> get segments => List.unmodifiable(_segments);
 
   /// Starts the stroll in [zones] at [x] (or carries on from where Mochi is), in [mode]. Carrying on from a spot
@@ -782,7 +803,7 @@ class Stroller {
   /// now and then, until [popUp] or anything else cuts the plan. False when it can't (it isn't free, is beside Patch, is
   /// keeping the pointer company or holds still for a moment, or is hiding already).
   bool hide(double now) {
-    if (!isPlaced || _mode != StrollMode.free || _home != null || _buddy || _hiding || now < _holdUntil) return false;
+    if (!isPlaced || !_view || _mode != StrollMode.free || _home != null || _buddy || _hiding || now < _holdUntil) return false;
     _cut(now);
     _hiding = true;
     _activity = StrollActivity.hide;
@@ -836,10 +857,19 @@ class Stroller {
 
   bool travellingAt(double t) => sample(t).travelling;
 
+  /// A one-shot (a sniff, a stretch, a yawn…) is playing at [t] while Mochi stands where it is.
+  bool playingAt(double t) {
+    final segment = _segmentAt(t);
+    return segment != null && segment.oneShot && !segment.travels && t >= segment.start && t < segment.end;
+  }
+
   /// When the caller should look again after [now] while Mochi isn't travelling: when it next sets off, when the plan
-  /// needs extending, or when a hold that a mode change waits for ends. Null: nothing will happen on its own.
-  double? nextChange(double now) {
+  /// needs extending, or when a hold that a mode change waits for ends; with [pictures], also when the next piece of the plan
+  /// begins (a picture drawn by the native stage is drawn again then; the pet's own view follows the plan by itself). Null:
+  /// nothing will happen on its own.
+  double? nextChange(double now, {bool pictures = false}) {
     var next = double.infinity;
+
     for (final segment in _segments) {
       if (segment.end <= now) continue;
       if (segment.travels) {
@@ -868,9 +898,16 @@ class Stroller {
         if (edge > now) next = math.min(next, edge);
       }
     }
+    if (pictures) {
+      for (final segment in _segments) {
+        if (segment.start > now) {
+          next = math.min(next, segment.start);
+          break;
+        }
+      }
+    }
     return next.isFinite ? next : null;
   }
-
 
   // MARK: The cursor buddy
 
@@ -1372,10 +1409,11 @@ class Stroller {
       (StrollActivity.trot, 0.5),
       if (_zones.length > 1) (StrollActivity.hop, 0.6),
       if (_playFits(StrollActivity.zoomies)) (StrollActivity.zoomies, 1.0),
-      if (_playFits(StrollActivity.butterfly)) (StrollActivity.butterfly, 1.2),
-      if (_playFits(StrollActivity.ball)) (StrollActivity.ball, 1.0),
-      if (_playFits(StrollActivity.yarn)) (StrollActivity.yarn, 0.5),
-      if (_playFits(StrollActivity.leaf)) (StrollActivity.leaf, 0.6),
+      // The toys are drawn by the pet's view.
+      if (_view && _playFits(StrollActivity.butterfly)) (StrollActivity.butterfly, 1.2),
+      if (_view && _playFits(StrollActivity.ball)) (StrollActivity.ball, 1.0),
+      if (_view && _playFits(StrollActivity.yarn)) (StrollActivity.yarn, 0.5),
+      if (_view && _playFits(StrollActivity.leaf)) (StrollActivity.leaf, 0.6),
       // The taskbar's landmarks (X6), when they're known and allowed and there's a free spot beside them.
       for (final visit in StrollVisit.values)
         if (_visitSpot(visit) != null) (visit.activity, 0.6),
@@ -1437,7 +1475,7 @@ class Stroller {
   /// visit).
   double? _visitSpot(StrollVisit kind) {
     final mark = _landmark(kind);
-    if (mark == null || _zones.isEmpty || _line == null) return null;
+    if (!_view || mark == null || _zones.isEmpty || _line == null) return null;
     final spot = nearest(mark.x);
     return (spot - mark.x).abs() <= mark.reach ? spot : null;
   }
