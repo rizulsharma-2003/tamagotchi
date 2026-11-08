@@ -62,6 +62,17 @@
 //   new timer), and while it sits hidden there are no frames: the view draws one picture and the stroll only wakes it
 //   (`beat`) for each look around. Anything else brings it up first (every cut of the plan does).
 //
+// - Landmarks (Mischief's X6): the same UI Automation call that measures the buttons says where the clock, the Start button
+//   and the widgets tile are (TaskbarInfo.landmarks: by AutomationId and ClassName, never by name; any may be missing).
+//   With the extra allowed by `MischiefGate` and Mochi free to wander alone, the stroll now and then visits one (the
+//   stroller's `swing`, `batStart` and `perch`): hangs from the clock's top edge, bats at Start from the free spot beside
+//   it, perches on the taskbar's top edge above the widgets tile. Mochi is lifted off the taskbar's floor for the clock
+//   and the tile, so the window grows upwards for those visits (`_makeRoom`, as for a toy), and the click-through body
+//   is lifted with Mochi: the landmark stays clickable everywhere but under Mochi. The landmarks known and allowed are
+//   handed to the stroller each pointer check (the same list while nothing changes), so switching the extra off ends a
+//   visit at once; anything that cuts the plan drops Mochi back first. In "Plays in its spot" only landmarks within reach
+//   of its room are visited. No new timer: the leaps are walking-rate frames, the holds have none.
+//
 // - Mochi out on the desktop (Mischief: roaming the screens; ui/stage/): the native stage draws it
 //   ([out]), so here it's away: Patch stays at his desk if he's on the taskbar (the window shows only him), otherwise
 //   the window hides until Mochi comes back, where the stage left it ([comeBack]).
@@ -75,6 +86,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals, visibleForTesting;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:mochi_art/mochi_art.dart' show PetRenderer;
@@ -268,6 +280,11 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
   TaskbarStage? _stage;
   PixelRect? _frame;
   List<PixelRect>? _buttons;
+  TaskbarLandmarks _found = TaskbarLandmarks.none;
+
+  /// The landmarks UI Automation found, as the stroll needs them on [_stage] (X6), and none (the same list while nothing
+  /// changes).
+  List<StrollLandmark> _marks = const [];
   bool _measured = false;
   bool _measuring = false;
   PetMood _mood = PetMood.relaxed;
@@ -1016,6 +1033,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
       stroller.rezone(_zones(stage), now: now);
     }
     _stage = stage;
+    _updateMarks();
     final frame = _frameFor(stage, stroller.sample(now).x, windowSize);
     if (arriving) {
       if (_standingThrough) {
@@ -1102,6 +1120,8 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
       log?.call('measure: ${buttons?.length} elements in ${((_clock() - started) * 1000).round()} ms');
       _measured = true;
       _measuredAt = _clock();
+      _found = buttons == null ? TaskbarLandmarks.none : taskbar.landmarks;
+      _updateMarks();
       if (!_sameRects(buttons, _buttons)) {
         _buttons = buttons;
         if (_surface == Surface.pet) unawaited(_enqueue(_place));
@@ -1109,6 +1129,44 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     } finally {
       _measuring = false;
     }
+  }
+
+  /// The landmarks on the stage now, in the stroller's terms (logical pixels): the clock to hang from, Start to bat at from
+  /// the free spot beside it, the widgets tile to perch on. Only those on this taskbar.
+  void _updateMarks() {
+    final stage = _stage;
+    final next = stage == null ? const <StrollLandmark>[] : _landmarkMarks(stage, _found);
+    if (listEquals(next, _marks)) return;
+    _marks = next.isEmpty ? const [] : next;
+  }
+
+  /// [found] on [stage] as the stroller's landmarks. A raised Mochi's feet are [lift] above the taskbar's floor: for a
+  /// hang, so its raised paws reach the top edge; for a perch, so its feet stand on it.
+  static List<StrollLandmark> _landmarkMarks(TaskbarStage stage, TaskbarLandmarks found) {
+    final scale = stage.scale;
+    final box = stage.box;
+    final bodyHeight = PetRenderer.bodyHeight * box.height * SurfaceSizes.taskbarFill / 66;
+    // From the taskbar's top edge down to Mochi's feet standing in its box.
+    final feet = (stage.boxBottom - stage.bar.top) / scale - box.height * SurfaceSizes.taskbarFeet;
+    final perch = math.max(0.0, feet);
+    final hang = (feet - 1.1 * bodyHeight).clamp(2.0, 14.0);
+    double room(double lift) => lift + Stroller.leapArc + bodyHeight * 1.2;
+    final marks = <StrollLandmark>[];
+    final clock = found.clock;
+    if (clock != null && clock.overlaps(stage.bar)) {
+      // Hanging by the button's top-left corner, so it covers as little of the time as it can.
+      marks.add(StrollLandmark(StrollVisit.clock, x: clock.left / scale + 14, lift: hang, up: room(hang), reach: 420));
+    }
+    final start = found.start;
+    if (start != null && start.overlaps(stage.bar)) {
+      final reach = start.width / 2 / scale + 8 + box.width / 2 + 24;
+      marks.add(StrollLandmark(StrollVisit.start, x: (start.left + start.right) / 2 / scale, reach: reach));
+    }
+    final widgets = found.widgets;
+    if (widgets != null && widgets.overlaps(stage.bar)) {
+      marks.add(StrollLandmark(StrollVisit.widgets, x: (widgets.left + widgets.right) / 2 / scale, lift: perch, up: room(perch), reach: 260));
+    }
+    return marks;
   }
 
   static bool _sameRects(List<PixelRect>? a, List<PixelRect>? b) {
@@ -1205,6 +1263,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     final cursor = taskbar.cursor();
     _follow(stage, cursor);
     _peek(cursor);
+    _visitLandmarks();
     _setClickThrough(!(_dragging || (cursor != null && _overBody(stage, frame, cursor.$1, cursor.$2))));
     // Faster while the pointer is near them, the usual pace otherwise.
     final margin = (nearMargin * stage.scale).round();
@@ -1242,6 +1301,21 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
       allowed: mischief?.may(MischiefExtra.cursorBuddy) ?? false,
     );
     if (changed) _tick();
+  }
+
+  /// Sends Mochi to [kind]'s landmark now (tests).
+  @visibleForTesting
+  bool visitNow(StrollVisit kind) {
+    final started = stroller.visitNow(kind, _clock());
+    if (started) _tick();
+    return started;
+  }
+
+  /// Landmarks (X6): which ones Mochi may visit now (Mischief allows the extra), handed to the stroll; one it is visiting
+  /// that Mischief now says no to ends at once.
+  void _visitLandmarks() {
+    final allowed = mischief?.may(MischiefExtra.landmarks) ?? false;
+    if (stroller.setLandmarks(allowed ? _marks : const [], _clock())) _tick();
   }
 
   /// Peekaboo: hides Mochi in the taskbar once you've been away for [hideAfter] (at most once per away stretch), and
@@ -1299,7 +1373,8 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
       if (_out) return const [];
       // Hidden in the taskbar (Peekaboo), only what still shows takes clicks.
       final sink = stroller.sinkAt(_clock());
-      return [stage.body(frame, sink: sink, shows: sink > 0 ? Stroller.peekShows * PetRenderer.bodyHeight * unit : null)];
+      final lift = stroller.liftAt(_clock());
+      return [stage.body(frame, sink: sink, shows: sink > 0 ? Stroller.peekShows * PetRenderer.bodyHeight * unit : null, lift: lift)];
     }
     return [if (!_out) stage.bodyAt(stroller.sample(_clock()).x), if (companion?.visible ?? false) stage.companionBody(home)];
   }

@@ -36,6 +36,7 @@ void main() {
         'roamScreens': true,
         'titleBars': true,
         'peekaboo': true,
+        'landmarks': true,
       });
       expect(document.json!['v'], 8);
       final again = DesktopSettings(MemorySettingsDocument(document.json));
@@ -246,6 +247,7 @@ void main() {
       expect(find.text(MischiefExtra.roamScreens.title), findsOneWidget);
       expect(find.text('Title-bar walker'), findsOneWidget, reason: 'X1');
       expect(find.text('Peekaboo'), findsOneWidget, reason: 'X3');
+      expect(find.text('Landmarks'), findsOneWidget, reason: 'X6');
       expect(find.text('Mochi rides your windows’ title bars: it holds on when you drag a window and hops off when you snap or minimise it.'), findsOneWidget);
       for (final extra in MischiefExtra.available) {
         expect(find.text(extra.title), findsOneWidget);

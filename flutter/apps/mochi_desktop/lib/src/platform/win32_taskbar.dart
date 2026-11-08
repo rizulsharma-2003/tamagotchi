@@ -3,7 +3,9 @@
 //
 // - Where the taskbar is: SHAppBarMessage(ABM_GETTASKBARPOS) for its edge and rect, ABM_GETSTATE for auto-hide.
 // - What's on it: UI Automation on `Shell_TrayWnd` (every element's bounding rectangle: the widgets tile, Start,
-//   search, the app buttons, the tray, fetched in one cross-process call with a cache request), on a worker thread;
+//   search, the app buttons, the tray, fetched in one cross-process call with a cache request), on a worker thread. The
+//   request also caches each element's AutomationId and ClassName (never its Name) to find the landmarks (X6: the widgets
+//   tile, Start, the clock), read like the rectangle, from the cache, with the strings freed (SysFreeString);
 //   for the estimate when that fails, the tray's `TrayNotifyWnd` child window and Explorer's `TaskbarAl` (alignment)
 //   and `TaskbarDa` (widgets) settings. Whether it's worth measuring again: the top-level app windows (EnumWindows:
 //   the ones with a taskbar button, and their titles' lengths, never the titles) and the tray's rectangle.
@@ -129,13 +131,21 @@ class Win32TaskbarInfo implements TaskbarInfo {
     }
   }
 
+  TaskbarLandmarks _landmarks = TaskbarLandmarks.none;
+
+  @override
+  TaskbarLandmarks get landmarks => _landmarks;
+
   @override
   Future<List<PixelRect>?> buttons() async {
     final tray = _tray != 0 ? _tray : _findWindow('Shell_TrayWnd', 0);
     if (tray == 0) return null;
     try {
-      return await Isolate.run(() => _automationRects(tray));
+      final elements = await Isolate.run(() => _automationElements(tray));
+      _landmarks = elements == null ? TaskbarLandmarks.none : TaskbarLandmarks.of(elements);
+      return elements == null ? null : [for (final element in elements) element.rect];
     } on Object {
+      _landmarks = TaskbarLandmarks.none;
       return null;
     }
   }
@@ -248,11 +258,12 @@ class Win32TaskbarInfo implements TaskbarInfo {
   }
 }
 
-/// Every UI Automation element under the taskbar window [tray], as screen rectangles (runs in a worker isolate). One
-/// cross-process call fetches every element with its rectangle (FindAllBuildCache with a cache request for the
-/// bounding rectangle, elements not kept live), instead of a call into Explorer for each. COM objects are released
-/// here, not left to finalizers.
-List<PixelRect>? _automationRects(int tray) {
+/// Every UI Automation element under the taskbar window [tray], with its screen rectangle, AutomationId and ClassName
+/// (runs in a worker isolate). One cross-process call fetches every element with those three properties
+/// (FindAllBuildCache with a cache request, elements not kept live), instead of a call into Explorer for each; the
+/// getters read the cache in this process. The Name is never asked for. COM objects and the strings are released here,
+/// not left to finalizers.
+List<TaskbarElement>? _automationElements(int tray) {
   final initialized = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   final held = <Pointer<COMObject>>[];
   Pointer<COMObject> out() {
@@ -281,6 +292,10 @@ List<PixelRect>? _automationRects(int tray) {
     if (FAILED(automation.createCacheRequest(request.cast())) || request.ref.isNull) return null;
     final cache = IUIAutomationCacheRequest(request)..detach();
     if (FAILED(cache.addProperty(UIA_BoundingRectanglePropertyId))) return null;
+    // The landmarks' identity (X6): a failure here only means no landmarks, the rectangles still come.
+    cache
+      ..addProperty(UIA_AutomationIdPropertyId)
+      ..addProperty(UIA_ClassNamePropertyId);
     // IUIAutomationCacheRequest::put_AutomationElementMode (vtable slot 11): AutomationElementMode_None, only the cache.
     (request.ref.vtable + 11).cast<Pointer<NativeFunction<Int32 Function(Pointer, Int32)>>>().value.asFunction<int Function(Pointer, int)>()(
       request.ref.lpVtbl,
@@ -291,7 +306,7 @@ List<PixelRect>? _automationRects(int tray) {
       return null;
     }
     final array = IUIAutomationElementArray(found)..detach();
-    final rects = <PixelRect>[];
+    final result = <TaskbarElement>[];
     final rect = calloc<RECT>();
     try {
       for (var i = 0; i < array.length; i++) {
@@ -303,7 +318,16 @@ List<PixelRect>? _automationRects(int tray) {
               .cast<Pointer<NativeFunction<Int32 Function(Pointer, Pointer<RECT>)>>>()
               .value
               .asFunction<int Function(Pointer, Pointer<RECT>)>()(item.ref.lpVtbl, rect);
-          if (SUCCEEDED(hr)) rects.add(PixelRect(rect.ref.left, rect.ref.top, rect.ref.right, rect.ref.bottom));
+          if (SUCCEEDED(hr)) {
+            final owner = IUIAutomationElement(item)..detach();
+            result.add(
+              TaskbarElement(
+                PixelRect(rect.ref.left, rect.ref.top, rect.ref.right, rect.ref.bottom),
+                automationId: _cachedString(() => owner.cachedAutomationId),
+                className: _cachedString(() => owner.cachedClassName),
+              ),
+            );
+          }
         } finally {
           release(item);
           calloc.free(item);
@@ -312,7 +336,7 @@ List<PixelRect>? _automationRects(int tray) {
     } finally {
       calloc.free(rect);
     }
-    return rects;
+    return result;
   } on Object {
     return null;
   } finally {
@@ -321,6 +345,22 @@ List<PixelRect>? _automationRects(int tray) {
       calloc.free(pointer);
     }
     if (initialized == S_OK || initialized == S_FALSE) CoUninitialize();
+  }
+}
+
+/// A cached string property (IUIAutomationElement::get_CachedAutomationId, vtable slot 61; get_CachedClassName, slot 62):
+/// a BSTR, copied out and freed (SysFreeString). Empty when the element has none or the read fails.
+String _cachedString(Pointer<Utf16> Function() read) {
+  try {
+    final bstr = read();
+    if (bstr == nullptr) return '';
+    try {
+      return bstr.toDartString();
+    } finally {
+      SysFreeString(bstr);
+    }
+  } on Object {
+    return '';
   }
 }
 

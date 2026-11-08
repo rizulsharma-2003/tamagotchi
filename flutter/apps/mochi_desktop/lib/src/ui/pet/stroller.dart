@@ -20,6 +20,16 @@
 //   you're back it pops up with a happy bounce (`popUp`), at most once per away stretch (the caller counts those);
 //   anything else (Claude needing you, a reaction, a nap, a drag, the switch going off) brings it up normally first
 //   (every cut of the plan rises before it carries on).
+// - Landmarks (Mischief's X6, only while Mochi is free to wander alone and the caller says which landmarks are known and
+//   allowed, `setLandmarks`): about as often as a toy, Mochi visits a landmark of the taskbar. The clock: it walks to the
+//   free spot nearest it, leaps up and hangs from the clock button's top edge for 6–10 seconds (PetAnimation.idle with the
+//   `StrollStyle.hang` accent: both arms up holding on, a gentle swing, drawn lifted `StrollSample.lift`), then drops back
+//   down. Start: it goes to the free spot right beside the button, faces it, bats at it three or four times with a pounce
+//   (PetAnimation.bat, .pounce) and wanders off. The widgets tile: it leaps onto the taskbar's top edge above the tile and
+//   sits there looking out (PetAnimation.sit, a look around) for a few seconds, then hops down. The clock and the
+//   tile aren't in a free stretch, so the leaps are the only moments Mochi is off one; the window makes room above for
+//   them (`playRoom`, as for a toy). Anything that cuts the plan (the pointer's company, Claude's news, a reaction, a
+//   hide, a mode change) first drops Mochi back to the free spot, so it never stays on a landmark.
 // - Reactions paused (Settings › General): it sits where it is, as the Mac's paused Mochi rests, and never plays.
 // - Claude working: it mostly sits and watches, with a short potter now and then.
 // - Claude needs you: it stops where it is and faces you, waves, then sits watching you with a reminder wave a minute
@@ -80,7 +90,7 @@ enum StrollMode {
 }
 
 /// What Mochi is up to.
-enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react, company, follow, zoomies, butterfly, ball, yarn, leaf, hide }
+enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react, company, follow, zoomies, butterfly, ball, yarn, leaf, hide, swing, batStart, perch }
 
 /// Small accents the pose gets on top of its animation.
 enum StrollStyle {
@@ -91,6 +101,59 @@ enum StrollStyle {
 
   /// Facing you, eyes open, ears up: Claude needs you, or a turn just finished.
   attentive,
+
+  /// Hanging by both paws from the clock's edge (X6): arms up, a gentle swing.
+  hang,
+}
+
+/// The taskbar's landmarks Mochi may visit (X6).
+enum StrollVisit {
+  clock(StrollActivity.swing),
+  start(StrollActivity.batStart),
+  widgets(StrollActivity.perch);
+
+  const StrollVisit(this.activity);
+
+  final StrollActivity activity;
+}
+
+/// A landmark as the stroll needs it (logical pixels along the taskbar and up from Mochi's feet), worked out by the caller
+/// from where UI Automation put it.
+class StrollLandmark {
+  const StrollLandmark(this.kind, {required this.x, this.lift = 0, this.up = 0, this.reach = 300});
+
+  final StrollVisit kind;
+
+  /// Where Mochi goes for the visit: its centre while it hangs or perches there; the button's own centre for Start (Mochi
+  /// stands in the free spot beside it).
+  final double x;
+
+  /// How far Mochi's feet are raised while it's there (a hang: so its paws reach the top edge; a perch: its feet on the
+  /// edge).
+  final double lift;
+
+  /// How high above its feet the window must reach for the visit (the leap's arc, the raised body), with a margin.
+  final double up;
+
+  /// The farthest the free spot nearest the landmark may be from [x]: a landmark with no free stretch near it isn't
+  /// visited.
+  final double reach;
+
+  @override
+  bool operator ==(Object other) =>
+      other is StrollLandmark && other.kind == kind && other.x == x && other.lift == lift && other.up == up && other.reach == reach;
+
+  @override
+  int get hashCode => Object.hash(kind, x, lift, up, reach);
+}
+
+/// The window's extra room for a stretch of the plan that has none of a toy's props (a landmark visit).
+class _Room {
+  const _Room(this.start, this.end, this.up);
+
+  final double start;
+  final double end;
+  final double up;
 }
 
 /// Where Mochi's centre may go.
@@ -184,6 +247,9 @@ class StrollSegment {
     this.hop = false,
     this.sinkFrom = 0,
     this.sinkTo = 0,
+    this.liftFrom = 0,
+    this.liftTo = 0,
+    this.arc = 0,
   });
 
   final double start;
@@ -214,7 +280,22 @@ class StrollSegment {
   final double sinkFrom;
   final double sinkTo;
 
+  /// How far Mochi is raised off the taskbar's floor at the start and the end (logical pixels: perched or hanging on a
+  /// landmark, X6), and how much higher a leap's arc takes it in between.
+  final double liftFrom;
+  final double liftTo;
+  final double arc;
+
   bool get travels => toX != fromX;
+
+  /// How high Mochi is at [t]: eases from [liftFrom] to [liftTo], with the arc of a leap on top.
+  double liftAt(double t) {
+    if (liftFrom == liftTo && arc == 0) return liftFrom;
+    if (t <= start) return liftFrom;
+    if (t >= end) return liftTo;
+    final p = (t - start) / (end - start);
+    return liftFrom + (liftTo - liftFrom) * Ease.smooth(p) + arc * Ease.hop(p);
+  }
 
   /// How far down Mochi is at [t]: eases from [sinkFrom] to [sinkTo] over the segment.
   double sinkAt(double t) {
@@ -265,6 +346,7 @@ class StrollSample {
     this.opacity = 1,
     this.props = const [],
     this.sink = 0,
+    this.lift = 0,
   });
 
   final double x;
@@ -287,6 +369,9 @@ class StrollSample {
 
   /// How far Mochi has sunk down into the taskbar: 0 standing, 1 with only its ears and eyes showing (Peekaboo).
   final double sink;
+
+  /// How far Mochi is raised off the taskbar's floor (logical pixels): on a landmark, or leaping to one (X6).
+  final double lift;
 }
 
 /// Where a toy is at one moment (x along the taskbar and y up from Mochi's feet, logical pixels).
@@ -464,9 +549,20 @@ class Stroller {
   // Peekaboo: the plan is Mochi hiding (walking to its spot, sunk down, looking around).
   bool _hiding = false;
 
+  // Landmarks (X6): the ones that are known and allowed now, the visit in the plan (until when), and the room the window
+  // makes for the visits in the plan.
+  List<StrollLandmark> _landmarks = const [];
+  StrollVisit? _visitKind;
+  double _visitUntil = double.negativeInfinity;
+  final List<_Room> _rooms = [];
+
+  /// How high a leap onto a landmark (or back) arcs (logical pixels).
+  static const double leapArc = 16;
+
   // The planner's pen: where the plan being written has got to.
   double _t = 0;
   double _sink = 0;
+  double _lift = 0;
   double _x = 0;
   double _facing = 1;
   double _odometer = 0;
@@ -502,6 +598,8 @@ class Stroller {
     _idle = idleSeconds;
     _segments.clear();
     _props.clear();
+    _rooms.clear();
+    _visitUntil = double.negativeInfinity;
     _buddy = false;
     _hiding = false;
     _holdUntil = double.negativeInfinity;
@@ -554,6 +652,8 @@ class Stroller {
     _hiding = false;
     _segments.clear();
     _props.clear();
+    _rooms.clear();
+    _visitUntil = double.negativeInfinity;
   }
 
   /// Follows [mode] (re-planning from where Mochi is when it changes) and keeps the plan reaching ahead.
@@ -631,7 +731,34 @@ class Stroller {
       opacity: segment.opacityAt(t),
       props: _propsAt(t),
       sink: segment.sinkAt(local),
+      lift: segment.liftAt(local),
     );
+  }
+
+  /// How far Mochi is raised off the taskbar's floor at [t] (0 standing): what the window's clicks go by.
+  double liftAt(double t) {
+    final segment = _segmentAt(t);
+    return segment == null ? 0 : segment.liftAt(math.min(math.max(t, segment.start), segment.end));
+  }
+
+  /// Mochi is on a landmark, or leaping to or from one, at [now].
+  bool visiting(double now) => now < _visitUntil || liftAt(now) > 0;
+
+  /// The landmark visit in the plan (tests), if any.
+  StrollVisit? get visit => _visitKind;
+
+  /// The landmarks that are known and allowed now (X6; the caller gives the same list while nothing changes, so asking
+  /// each time the pointer is read costs nothing). Mochi visits only these, only while it's free to wander alone. One it's
+  /// visiting that isn't among them any more (the switch went off, a rule says to keep still) ends the visit now: back
+  /// down and on with the stroll. Returns whether the plan changed.
+  bool setLandmarks(List<StrollLandmark> landmarks, double now) {
+    if (identical(landmarks, _landmarks)) return false;
+    _landmarks = landmarks;
+    final kind = _visitKind;
+    if (!isPlaced || kind == null || now >= _visitUntil || landmarks.any((mark) => mark.kind == kind)) return false;
+    _restart(now);
+    _extend(now);
+    return true;
   }
 
   /// How far down Mochi is at [t] (0 standing; 1 hidden): what the window's clicks go by.
@@ -691,6 +818,12 @@ class Stroller {
       x = math.max(x ?? 0, track.reachX);
       up = math.max(up, track.reachUp);
     }
+    // Hanging from the clock, perched on the widgets tile: no toy, but room above Mochi's feet for it raised.
+    for (final room in _rooms) {
+      if (now < room.start - StrollPropTrack.lead || now > room.end + StrollPropTrack.lead) continue;
+      x ??= 0;
+      up = math.max(up, room.up);
+    }
     return x == null ? null : (x: x, up: up);
   }
 
@@ -716,9 +849,15 @@ class Stroller {
         next = math.min(next, segment.start);
       }
     }
-    // The window makes room for a toy a moment before it shows, and gives it back a moment after it has gone.
+    // The window makes room for a toy a moment before it shows, and gives it back a moment after it has gone (and for a
+    // landmark visit).
     for (final track in _props) {
       for (final edge in [track.start - StrollPropTrack.lead, track.end + StrollPropTrack.lead]) {
+        if (edge > now) next = math.min(next, edge);
+      }
+    }
+    for (final room in _rooms) {
+      for (final edge in [room.start - StrollPropTrack.lead, room.end + StrollPropTrack.lead]) {
         if (edge > now) next = math.min(next, edge);
       }
     }
@@ -849,9 +988,10 @@ class Stroller {
 
   // MARK: The plan
 
-  void _pen(double t, double x, double facing, double odometer, {double sink = 0}) {
+  void _pen(double t, double x, double facing, double odometer, {double sink = 0, double lift = 0}) {
     _t = t;
     _sink = sink;
+    _lift = lift;
     _x = x;
     _facing = facing;
     _odometer = odometer;
@@ -880,12 +1020,18 @@ class Stroller {
     return _segments.last;
   }
 
-  ({double x, double facing, double odometer, double sink}) _state(double t) {
+  ({double x, double facing, double odometer, double sink, double lift}) _state(double t) {
     final segment = _segmentAt(t);
-    if (segment == null) return (x: _line?.minX ?? 0, facing: 1, odometer: 0, sink: 0);
+    if (segment == null) return (x: _line?.minX ?? 0, facing: 1, odometer: 0, sink: 0, lift: 0);
     final at = math.min(math.max(t, segment.start), segment.end);
     final x = segment.xAt(at);
-    return (x: x, facing: segment.facing, odometer: segment.odometer + (x - segment.fromX).abs(), sink: segment.sinkAt(at));
+    return (
+      x: x,
+      facing: segment.facing,
+      odometer: segment.odometer + (x - segment.fromX).abs(),
+      sink: segment.sinkAt(at),
+      lift: segment.liftAt(at),
+    );
   }
 
   /// Drops the plan from [now] on; the pen starts where Mochi is. A Mochi that is sunk down (hiding) comes up first, so
@@ -896,9 +1042,27 @@ class Stroller {
     _hiding = false;
     // A toy still in play goes with the plan.
     _props.removeWhere((track) => track.end > now);
-    _pen(now, state.x, state.facing, state.odometer, sink: state.sink);
+    _rooms.removeWhere((room) => room.end > now);
+    _visitUntil = double.negativeInfinity;
+    _pen(now, state.x, state.facing, state.odometer, sink: state.sink, lift: state.lift);
     if (state.sink > 0) _add(PetAnimation.sit, 0.3 + 0.5 * state.sink, sinkTo: 0);
+    // On a landmark (or leaping to one): drops back to the free spot nearest it first, so whatever cut the plan finds
+    // Mochi in free room.
+    final spot = nearest(state.x);
+    if (state.lift > 0 || (spot - state.x).abs() > 0.5) {
+      final from = _t;
+      _leap(spot, lift: 0);
+      if (state.lift > 0) _rooms.add(_Room(from, _t, _dropRoom(state.lift)));
+    }
   }
+
+  /// The room above Mochi's feet the window keeps while it drops back from [lift]: the visit's own (what the caller said
+  /// it needs), else the lift, the arc and a body's height.
+  double _dropRoom(double lift) {
+    final mark = _visitKind == null ? null : _landmark(_visitKind!);
+    return mark?.up ?? lift + leapArc + 40;
+  }
+
 
   void _restart(double now) {
     _cut(now);
@@ -907,6 +1071,7 @@ class Stroller {
 
   void _prune(double now) {
     _props.removeWhere((track) => track.end + StrollPropTrack.lead < now - 1);
+    _rooms.removeWhere((room) => room.end + StrollPropTrack.lead < now - 1);
     while (_segments.length > 1 && _segments.first.end <= now) {
       _segments.removeAt(0);
     }
@@ -916,7 +1081,7 @@ class Stroller {
     for (var guard = 0; guard < 16 && _segments.isNotEmpty; guard++) {
       final last = _segments.last;
       if (!last.end.isFinite || last.end >= now + lookahead) break;
-      _pen(last.end, last.toX, last.facing, last.odometerAtEnd, sink: last.sinkTo);
+      _pen(last.end, last.toX, last.facing, last.odometerAtEnd, sink: last.sinkTo, lift: last.liftTo);
       _chunk();
     }
   }
@@ -931,10 +1096,13 @@ class Stroller {
     bool oneShot = false,
     bool hop = false,
     double? sinkTo,
+    double? liftTo,
+    double arc = 0,
   }) {
     final to = toX ?? _x;
     final end = _t + duration;
     final sunk = sinkTo ?? _sink;
+    final raised = liftTo ?? _lift;
     _segments.add(
       StrollSegment(
         start: _t,
@@ -952,12 +1120,16 @@ class Stroller {
         hop: hop,
         sinkFrom: _sink,
         sinkTo: sunk,
+        liftFrom: _lift,
+        liftTo: raised,
+        arc: arc,
       ),
     );
     if (!hop) _odometer += (to - _x).abs();
     _x = to;
     _t = end;
     _sink = sunk;
+    _lift = raised;
   }
 
   void _hold(PetAnimation animation, double duration, {StrollStyle style = StrollStyle.plain}) {
@@ -1197,6 +1369,9 @@ class Stroller {
       if (_playFits(StrollActivity.ball)) (StrollActivity.ball, 1.0),
       if (_playFits(StrollActivity.yarn)) (StrollActivity.yarn, 0.5),
       if (_playFits(StrollActivity.leaf)) (StrollActivity.leaf, 0.6),
+      // The taskbar's landmarks (X6), when they're known and allowed and there's a free spot beside them.
+      for (final visit in StrollVisit.values)
+        if (_visitSpot(visit) != null) (visit.activity, 0.6),
     ];
     if (_recent.isNotEmpty) options.removeWhere((option) => option.$1 == _recent.last);
     if (_recent.length > 1) {
@@ -1231,9 +1406,138 @@ class Stroller {
         _ballPlay(yarn: true);
       case StrollActivity.leaf:
         _leafPlay();
+      case StrollActivity.swing:
+        _swingOnClock();
+      case StrollActivity.batStart:
+        _batAtStart();
+      case StrollActivity.perch:
+        _perchOnWidgets();
       default:
         _hold(PetAnimation.idle, _uniform(2, 4));
     }
+  }
+
+  // MARK: Landmarks (X6)
+
+  StrollLandmark? _landmark(StrollVisit kind) {
+    for (final mark in _landmarks) {
+      if (mark.kind == kind) return mark;
+    }
+    return null;
+  }
+
+  /// The free spot nearest [kind]'s landmark, if it's known and allowed and that spot is within its reach (null: no
+  /// visit).
+  double? _visitSpot(StrollVisit kind) {
+    final mark = _landmark(kind);
+    if (mark == null || _zones.isEmpty || _line == null) return null;
+    final spot = nearest(mark.x);
+    return (spot - mark.x).abs() <= mark.reach ? spot : null;
+  }
+
+  /// To [spot]: walking if it's in the stretch Mochi is in, else a hop to its stretch.
+  void _goTo(double spot) {
+    if (_zoneAt(spot) != _line) {
+      _hopTo(spot);
+    } else {
+      _walk(spot);
+    }
+  }
+
+  /// A leap (with an arc) from where Mochi is to [target], ending [lift] above the taskbar's floor: onto a landmark, or
+  /// back down from one.
+  void _leap(double target, {required double lift}) {
+    final distance = (target - _x).abs();
+    if (distance < 0.5 && lift == _lift) return;
+    if (distance >= 0.5) _facing = target >= _x ? 1.0 : -1.0;
+    // A leap is the recorded one-shot's length (a longer one holds its landing pose).
+    _add(PetAnimation.leapCatch, math.max(_length(PetAnimation.leapCatch), distance / 260), toX: target, oneShot: true, liftTo: lift, arc: leapArc);
+  }
+
+  /// Starts a visit: the room the window makes for it (the lift, the arc and Mochi's body above its feet) runs from the
+  /// leap's start to Mochi's landing back down.
+  void _visiting(StrollVisit kind, double from) {
+    final mark = _landmark(kind)!;
+    _visitKind = kind;
+    _visitUntil = _t;
+    if (mark.up > 0) _rooms.add(_Room(from, _t, mark.up));
+  }
+
+  /// Starts [kind]'s visit now, from where Mochi is (tests): false when it can't (not placed, not free to wander alone,
+  /// or the landmark isn't known or has no free spot beside it).
+  bool visitNow(StrollVisit kind, double now) {
+    if (!isPlaced || _mode != StrollMode.free || _home != null || _buddy || _hiding || now < _holdUntil || _visitSpot(kind) == null) {
+      return false;
+    }
+    _cut(now);
+    _perform(kind.activity);
+    _activity = StrollActivity.rest;
+    _rest(PetAnimation.idle, _uniform(10, 20));
+    _extend(now);
+    return true;
+  }
+
+  /// The clock: walks to the free spot nearest it, leaps up, hangs from the button's top edge swinging for 6–10 seconds,
+  /// and drops back.
+  void _swingOnClock() {
+    final spot = _visitSpot(StrollVisit.clock);
+    if (spot == null) return _hold(PetAnimation.idle, _uniform(2, 4));
+    final mark = _landmark(StrollVisit.clock)!;
+    _activity = StrollActivity.swing;
+    _goTo(spot);
+    _visitKind = StrollVisit.clock;
+    final from = _t;
+    _leap(mark.x, lift: mark.lift);
+    _activity = StrollActivity.swing;
+    _add(PetAnimation.idle, _uniform(6, 10), style: StrollStyle.hang);
+    _leap(spot, lift: 0);
+    _visiting(StrollVisit.clock, from);
+  }
+
+  /// Start: goes to the free spot right beside the button, faces it and bats at it three or four times, with a pounce
+  /// in the middle, then steps back.
+  void _batAtStart() {
+    final spot = _visitSpot(StrollVisit.start);
+    if (spot == null) return _hold(PetAnimation.idle, _uniform(2, 4));
+    final mark = _landmark(StrollVisit.start)!;
+    _activity = StrollActivity.batStart;
+    _goTo(spot);
+    _visitKind = StrollVisit.start;
+    final from = _t;
+    final direction = mark.x >= _x ? 1.0 : -1.0;
+    if (direction != _facing) _turn(direction);
+    _hold(PetAnimation.watch, 0.4);
+    final swipes = 3 + _random.nextInt(2);
+    for (var i = 0; i < swipes; i++) {
+      _act(PetAnimation.bat);
+      if (i == 1 || (i == swipes - 1 && _chance(0.4))) {
+        _act(PetAnimation.pounce, travel: 3 * _k);
+        _hold(PetAnimation.idle, 0.2);
+      } else if (_chance(0.4)) {
+        _hold(PetAnimation.idle, 0.25);
+      }
+    }
+    _act(_chance(0.5) ? PetAnimation.happyBounce : PetAnimation.blep);
+    _visiting(StrollVisit.start, from);
+  }
+
+  /// The widgets tile: walks to the free spot nearest it, hops up onto the taskbar's top edge above the tile, sits there
+  /// looking out for a few seconds (with a look around), and hops down.
+  void _perchOnWidgets() {
+    final spot = _visitSpot(StrollVisit.widgets);
+    if (spot == null) return _hold(PetAnimation.idle, _uniform(2, 4));
+    final mark = _landmark(StrollVisit.widgets)!;
+    _activity = StrollActivity.perch;
+    _goTo(spot);
+    _visitKind = StrollVisit.widgets;
+    final from = _t;
+    _leap(mark.x, lift: mark.lift);
+    _activity = StrollActivity.perch;
+    _add(PetAnimation.sit, _uniform(1.2, 2.2));
+    _act(PetAnimation.lookAround);
+    _add(PetAnimation.sit, _uniform(1, 2));
+    _leap(spot, lift: 0);
+    _visiting(StrollVisit.widgets, from);
   }
 
   // MARK: Play (the Mac's RoamBuilder: zoomies, ballPlay, chaseButterfly, leafPlay)
