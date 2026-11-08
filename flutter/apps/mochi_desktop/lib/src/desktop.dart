@@ -14,6 +14,7 @@ import 'core/focus.dart';
 import 'core/games.dart';
 import 'core/holidays.dart';
 import 'core/json_store.dart';
+import 'core/mischief.dart';
 import 'core/hook_setup.dart';
 import 'core/hotkeys.dart';
 import 'core/pc_rhythm.dart';
@@ -78,6 +79,8 @@ class MochiDesktop {
     JsonStore Function(String file)? stores,
     double Function()? uptime,
     int? worldSeed,
+    bool stage = false,
+    bool Function()? fullScreen,
   }) : _claude = claude,
        _locateClaude = locateClaude,
        startup = startup ?? const UnsupportedStartup(),
@@ -107,6 +110,15 @@ class MochiDesktop {
     focus = DesktopFocus(settings: settings, world: world, rhythm: rhythm, store: store('focus-log.json'));
     reactions.focusing = () => focus.focusing;
     room = RoomEditor(settings: settings, world: world);
+    mischief = MischiefGate(
+      settings: settings,
+      rhythm: rhythm,
+      motion: motion,
+      supported: stage,
+      fullScreen: fullScreen,
+      focusing: () => focus.focusing,
+      clock: clock,
+    );
     holidays = DesktopHolidays(settings: settings, world: world, store: store('seasons.json'), clock: clock, decorating: () => room.isEditing);
     purr = PurrSession(settings: settings, sounds: sounds, rhythm: rhythm, pet: () => interact('pet'), time: world.now, clock: clock);
     recap = DesktopRecap(settings: settings, world: world, focus: focus, toasts: this.toasts, store: store('journal.json'), clock: clock);
@@ -242,6 +254,9 @@ class MochiDesktop {
       hotkeys: system,
       worldStore: demoMode ? null : FileWorldStore(paths.join(paths.home, 'world.json')),
       stores: demoMode ? null : (file) => FileJsonStore(paths.join(paths.home, file)),
+      // Mischief's native stage is the Windows runner's.
+      stage: Platform.isWindows,
+      fullScreen: Platform.isWindows ? Win32Usage.fullScreenBusy : null,
     );
   }
 
@@ -287,6 +302,9 @@ class MochiDesktop {
 
   /// Decorating Mochi's room (W18): the furniture's tray, dragging, and what's selected.
   late final RoomEditor room;
+
+  /// Mischief, the Windows extras (Settings › Mischief): whether each may run right now.
+  late final MischiefGate mischief;
 
   /// The global shortcuts (Settings › Desktop Pet and Assistant).
   late final Hotkeys hotkeys;
@@ -370,6 +388,7 @@ class MochiDesktop {
     _startUpdates();
     rhythm.start();
     world.start();
+    mischief.start();
     recap.start();
     holidays.start();
     await toasts.start((target) {
@@ -494,6 +513,7 @@ class MochiDesktop {
     purr.dispose();
     holidays.dispose();
     room.dispose();
+    mischief.dispose();
     recap.dispose();
     focus.dispose();
     world.dispose();

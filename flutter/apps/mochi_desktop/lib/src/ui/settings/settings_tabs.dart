@@ -13,13 +13,16 @@ enum SettingsTab {
   notifications,
   desktop,
   fun,
+
+  /// Windows only, beyond the Mac: the extras out on the desktop (docs/SPRINT_2.md, "crazier than the Mac").
+  mischief,
   privacy,
   developer,
   about;
 
   /// The sidebar's groups, as on the Mac.
   static const List<({String name, List<SettingsTab> tabs})> groups = [
-    (name: 'Your pet', tabs: [general, characters, desktop, fun]),
+    (name: 'Your pet', tabs: [general, characters, desktop, fun, mischief]),
     (name: 'Claude', tabs: [claude, assistant, agent]),
     (name: 'Phones & alerts', tabs: [phones, notifications]),
     (name: 'App', tabs: [privacy, developer, about]),
@@ -38,6 +41,7 @@ enum SettingsTab {
     notifications => 'Notifications',
     desktop => 'Desktop Pet',
     fun => 'Fun',
+    mischief => 'Mischief',
     privacy => 'Privacy',
     developer => 'Developer',
     about => 'About',
@@ -53,6 +57,7 @@ enum SettingsTab {
     notifications => Icons.notifications_active_rounded,
     desktop => Icons.desktop_windows_rounded,
     fun => Icons.auto_awesome_rounded,
+    mischief => Icons.bolt_rounded,
     privacy => Icons.back_hand_rounded,
     developer => Icons.construction_rounded,
     about => Icons.info_rounded,
@@ -65,6 +70,7 @@ enum SettingsTab {
     characters => 0xFFFF9500,
     desktop => 0xFF30B0C7,
     fun => 0xFFFF2D55,
+    mischief => 0xFFBF5AF2,
     claude => 0xFFD97757,
     assistant => 0xFFAF52DE,
     agent => 0xFF34C759,
@@ -81,6 +87,7 @@ enum SettingsTab {
     characters => (const Color(0xFFFF9500), const Color(0xFFFF6482)),
     desktop => (const Color(0xFF30B0C7), const Color(0xFF5AC8FA)),
     fun => (const Color(0xFFFF2D55), const Color(0xFFBF5AF2)),
+    mischief => (const Color(0xFFBF5AF2), const Color(0xFFFF9F0A)),
     claude => (const Color(0xFFD97757), const Color(0xFFF2C48D)),
     assistant => (const Color(0xFFAF52DE), const Color(0xFF5E5CE6)),
     agent => (const Color(0xFF34C759), const Color(0xFF30B0C7)),
@@ -102,6 +109,7 @@ enum SettingsTab {
     notifications => 'Which of Claude’s moments $pet reacts to, which get a Windows notification, and how they sound.',
     desktop => 'Let $pet sit on your desktop or stroll along the taskbar, with $companion at his desk.',
     fun => 'Talking, growing up, holidays, games, adventures and little surprises.',
+    mischief => 'Extras only Windows has: $pet out on your desktop, by your pointer, on every screen, with notes and confetti.',
     privacy => 'What leaves this PC, what Mochi keeps here, and where.',
     developer => 'Diagnostics: the hook bridge, the spool, logs and Mochi Link.',
     about => 'Version, links, licences and how to uninstall.',
@@ -129,6 +137,8 @@ enum SettingsTab {
         'focus recap room furniture talking speech bubbles chattiness chatty quiet fresh lines haiku growing grows up kitten '
         'touch purr hold pomodoro timer break catch treats rock paper scissors decorate '
         'young grown-up life stages',
+    mischief => 'mischief extras crazy windows only cursor pointer mouse buddy chase follow pounce screens displays monitors '
+        'multi monitor multiple roam roaming sticky notes note celebrations confetti fireworks full screen streak',
     privacy => 'privacy data history relay encryption summaries share keep folder clear',
     developer => 'debug diagnostics logs bridge port spool relay device id room simulator',
     about => 'version credits licence license licenses uninstall nunito open source links',

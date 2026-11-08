@@ -7,6 +7,7 @@ import 'package:mochi_world/mochi_world.dart' show Chattiness, FocusSettings, Ga
 import 'package:mochi_world/mochi_world.dart' as w show SeasonalSettings;
 
 import 'hotkeys.dart';
+import 'mischief.dart';
 import 'notifications.dart';
 import 'seasons.dart';
 
@@ -167,9 +168,10 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   /// chatty, fresh lines from Claude Haiku, growing up and the last stage announced, under the Mac's keys `speech`,
   /// `lifeStages` and `lifeStageSeen`); 7 Mochi's life, part 2 (the mini-games' records, the focus buddy's settings and the evening recap's under the Mac's
   /// keys `games`, `focus` and `recap`, the purr's sound under `hapticPurr`, the decoration on the taskbar under
-  /// `seasonal.decorateMenuBar`, and the room's furniture under `room`).
+  /// `seasonal.decorateMenuBar`, and the room's furniture under `room`); 8 Mischief, the Windows extras (the master
+  /// switch and each extra's, under `mischief`).
   /// `roamTaskbar` is still written (whether Mochi is on the taskbar) for an older Mochi reading the file.
-  static const int version = 7;
+  static const int version = 8;
 
   /// The Mac's stepper for "Rests after … min without typing or clicking".
   static const int maxRestAfterMinutes = 60;
@@ -246,6 +248,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   RecapSettings _recap = RecapSettings();
   bool _purrSound = true;
   RoomLayout _room = RoomLayout();
+  MischiefSettings _mischief = const MischiefSettings();
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -352,6 +355,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _recap = RecapSettings.fromJson(json['recap']);
     _purrSound = flag('hapticPurr', true);
     _room = RoomLayout.fromJson(json['room']).sanitized();
+    _mischief = MischiefSettings.fromJson(json['mischief']);
   }
 
   static int _minutes(Object? value, int fallback, int min, int max) => value is int ? value.clamp(min, max) : fallback;
@@ -724,6 +728,13 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _set(() => _room = value.copy());
   }
 
+  /// Mischief (Settings › Mischief): the Windows extras' master switch, off at first, and each extra's own switch.
+  MischiefSettings get mischief => _mischief;
+  set mischief(MischiefSettings value) {
+    if (value == _mischief) return;
+    _set(() => _mischief = value);
+  }
+
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
 
@@ -812,6 +823,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'recap': _recap.toJson(),
     'hapticPurr': _purrSound,
     'room': _room.toJson(),
+    'mischief': _mischief.toJson(),
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
 

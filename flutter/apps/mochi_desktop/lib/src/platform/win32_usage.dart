@@ -102,6 +102,11 @@ class Win32Usage implements UsageSampler {
     }
   }
 
+  /// A full-screen app, a game (Direct3D full screen) or a presentation has the screen (SHQueryUserNotificationState's
+  /// busy, Direct3D full-screen and presentation states, as the taskbar pet keeps out of the way for): Mischief keeps
+  /// still meanwhile.
+  static bool fullScreenBusy() => const {2, 3, 4}.contains(notificationState());
+
   /// SHQueryUserNotificationState's answer (0 if it can't be read).
   static int notificationState() {
     final state = calloc<Int32>();

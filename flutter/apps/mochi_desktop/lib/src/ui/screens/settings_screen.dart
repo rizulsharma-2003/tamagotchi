@@ -16,6 +16,7 @@ import 'package:mochi_ui/mochi_ui.dart';
 
 import '../settings/panes_app.dart';
 import '../settings/panes_claude.dart';
+import '../settings/panes_mischief.dart';
 import '../settings/panes_pet.dart';
 import '../settings/panes_phones.dart';
 import '../settings/previews.dart';
@@ -391,6 +392,7 @@ class SettingsScreenState extends State<SettingsScreen> {
     SettingsTab.notifications => NotificationsPane(host: host),
     SettingsTab.desktop => DesktopPetPane(host: host),
     SettingsTab.fun => FunPane(host: host),
+    SettingsTab.mischief => MischiefPane(host: host),
     SettingsTab.privacy => PrivacyPane(host: host),
     SettingsTab.developer => DeveloperPane(host: host),
     SettingsTab.about => AboutPane(host: host),
