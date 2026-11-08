@@ -1,7 +1,7 @@
 // Multi-monitor roaming (docs/SPRINT_2.md X8): with Mischief and Roams your screens on, Mochi now and then walks along
 // the bottom of the screen to its edge and on to the next display, stands there a while and comes home; and when you
 // have been working on another display for a couple of minutes it goes there and stays until you switch back. It's the
-// same Mochi, drawn on the native stage (N1), as it is for the cursor buddy.
+// same Mochi, drawn on the native stage (N1), as it is for adventures (W19).
 //
 // - Every display has its own scale: Mochi is drawn again at the scale of the display it's on (the same size in logical
 //   pixels), and a display with a taskbar along its bottom gets Mochi standing on that taskbar, else on its bottom edge.

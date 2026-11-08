@@ -12,7 +12,7 @@
 //   the popover), and the rules below.
 // It's a Mac feature, on by default, so it isn't behind the Mischief switches; but it keeps every extra's rules
 // (MischiefGate.whyAdventure): no full-screen app, quiet hours, paused reactions, a focus session, Windows' animation
-// effects off, or an unseen screen. An adventure you ask for takes Mochi from the cursor buddy or the screen roamer.
+// effects off, or an unseen screen. An adventure you ask for takes Mochi from the screen roamer.
 //
 // While it's out:
 // - Only the display it left from is its world: the floor is the top of that display's taskbar (the taskbar's stretch
@@ -21,7 +21,7 @@
 //   screen is unseen. Windows that move, close or are covered re-route it (AdventurePlanner.adapt).
 // - Pressing on it and dragging lifts it by the scruff (the Mac's carry, swinging from the pointer); let go and it falls to
 //   the surface below and carries on; let go on the taskbar and it's home. A click pets it (it stops for a happy
-//   bounce); a right-click opens the menu, as with the cursor buddy.
+//   bounce); a right-click opens the menu.
 // - A full-screen app, Mochi's window or the popover opening, a display going, the screen going unseen, or Windows'
 //   animation effects turning off send it home at once; Claude needing you, Patch arriving, or Adventures turned off
 //   hurry it home (one big leap); quiet hours, paused reactions or a focus session do the same.
@@ -252,8 +252,7 @@ class DesktopAdventure extends ChangeNotifier {
   /// Patch is around (he arriving sends Mochi home, as on the Mac).
   final bool Function() patchHere;
 
-  /// The cursor buddy or the screen roamer lets go of Mochi where it stands (it stays out) and says where; null when
-  /// neither had it.
+  /// The screen roamer lets go of Mochi where it stands (it stays out) and says where; null when it didn't have it.
   final (int, int)? Function() yielding;
 
   /// A right-click on Mochi, and a click that pets it.
@@ -278,7 +277,7 @@ class DesktopAdventure extends ChangeNotifier {
   static const Duration checkEvery = Duration(seconds: 2);
   static const Duration countEvery = Duration(seconds: 5);
 
-  /// How big Mochi is out here (logical pixels per art unit: about 50 tall at 100%, as the cursor buddy).
+  /// How big Mochi is out here (logical pixels per art unit: about 50 tall at 100%, as the screen roamer).
   static const double unit = 0.95;
 
   /// A press that moves this far (logical pixels) lifts Mochi.

@@ -113,7 +113,8 @@ void main() {
     expect(window.moves, isNotEmpty, reason: 'Mochi walked');
     final stage = stroll.stage!;
     for (final move in window.moves) {
-      expect(move.top, window.frames.first.top, reason: 'it stays at the same height');
+      // (The window grows upwards for a toy in play, so its feet stay where they are.)
+      expect(move.bottom, window.frames.first.bottom, reason: 'it stays at the same height');
       final centre = (move.left + move.width / 2) / stage.scale;
       expect(stage.zones.any((zone) => centre >= zone.minX - 1 && centre <= zone.maxX + 1), isTrue, reason: '$move');
     }

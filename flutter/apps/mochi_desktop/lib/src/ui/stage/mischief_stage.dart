@@ -4,13 +4,13 @@
 //
 // - X10 full-screen celebrations: confetti for G2's big wins (graduation, a milestone, green tests or build: real,
 //   live events only), fireworks for streak milestones (core/streaks.dart).
-// - X4 the cursor buddy: Mochi out with your pointer (cursor_buddy.dart), from the taskbar or the desktop ([home]).
+// - X4 the cursor buddy lives on the taskbar now (ui/pet/taskbar_stroll.dart), not here.
 // - X8 roaming screens (screen_roamer.dart): Mochi walks to the next display and follows you to the one you work on.
 // - X9 sticky notes (sticky_notes.dart): green tests; Claude finishing or needing you while you're away from the PC; a
 //   stretch break after the best part of an hour at it; a streak milestone.
 // - W19 desktop adventures (adventure.dart): the Mac's explore-the-desktop, on the same stage and the same StagePet. It's
-//   a Mac feature, so it isn't behind the Mischief switches (only the rules every extra keeps); of the cursor buddy, the
-//   roamer and the adventure only one has Mochi out at a time, and an adventure you asked for takes Mochi from the other two.
+//   a Mac feature, so it isn't behind the Mischief switches (only the rules every extra keeps); of the roamer and the
+//   adventure only one has Mochi out at a time, and an adventure you asked for takes Mochi from the roamer.
 //
 // Development: `MOCHI_DESKTOP_MISCHIEF_DEMO` ("confetti:20,fireworks:45") repeats a preview every so many seconds
 // while the screen can be seen, for checking and measuring on a PC (with the `perf-debug` meter);
@@ -33,7 +33,6 @@ import '../../platform/window_frames.dart';
 import '../pet/taskbar_stroll.dart' show PetHome;
 import 'adventure.dart';
 import 'celebrations.dart';
-import 'cursor_buddy.dart';
 import 'screen_roamer.dart';
 import 'stage_cast.dart';
 import 'stage_pet.dart';
@@ -75,20 +74,6 @@ class MischiefStage extends ChangeNotifier {
     final home = this.home;
     if (home != null) {
       pet = StagePet(stage: stage, cast: cast, sprites: StageSprites(stage), world: desktop.world, settings: desktop.settings, dark: dark ?? () => false);
-      buddy = CursorBuddy(
-        pet: pet!,
-        home: home,
-        gate: desktop.mischief,
-        rhythm: desktop.rhythm,
-        displays: displays,
-        cursor: cursor,
-        time: desktop.world.now,
-        shown: _shown,
-        reacting: () => desktop.world.reacting,
-        asleep: () => desktop.world.asleep,
-        onPet: () => desktop.interact('pet'),
-        onMenu: onMenu,
-      );
       roamer = ScreenRoamer(
         pet: pet!,
         home: home,
@@ -115,7 +100,7 @@ class MischiefStage extends ChangeNotifier {
         needsYou: _claudeWaits,
         asleep: () => desktop.world.asleep,
         patchHere: () => desktop.world.world.companionPresent,
-        yielding: () => buddy?.release() ?? roamer?.release(),
+        yielding: () => roamer?.release(),
         onPet: () => desktop.interact('pet'),
         onMenu: onMenu,
         demo: adventureDemo,
@@ -161,9 +146,6 @@ class MischiefStage extends ChangeNotifier {
   final PetHome? home;
   StagePet? pet;
 
-  /// X4.
-  CursorBuddy? buddy;
-
   /// X8.
   ScreenRoamer? roamer;
 
@@ -200,7 +182,6 @@ class MischiefStage extends ChangeNotifier {
       ..add(desktop.cues.listen(_cue));
     notes.start();
     desktop.world.everyMinute(_minute);
-    buddy?.start();
     roamer?.start();
     adventure?.start();
     for (final MapEntry(key: kind, value: every) in demo.entries) {
@@ -274,14 +255,13 @@ class MischiefStage extends ChangeNotifier {
   /// go out again.
   void surfaceChanged() {
     adventure?.consider();
-    buddy?.consider();
     roamer?.consider();
   }
 
   /// What's on the stage, for the perf meter (null: nothing).
   String? perfState() {
     if (celebrations.running) return 'celebration (${celebrations.playing!.name})';
-    return adventure?.perfState() ?? buddy?.perfState() ?? roamer?.perfState() ?? (notes.notes.isEmpty || notes.hidden ? null : 'notes up (${notes.notes.length})');
+    return adventure?.perfState() ?? roamer?.perfState() ?? (notes.notes.isEmpty || notes.hidden ? null : 'notes up (${notes.notes.length})');
   }
 
   /// A development switch: `MOCHI_DESKTOP_MISCHIEF_DEMO=confetti:20,fireworks:45`.
@@ -314,7 +294,6 @@ class MischiefStage extends ChangeNotifier {
       timer.cancel();
     }
     adventure?.stop();
-    buddy?.stop();
     roamer?.stop();
     pet?.dispose();
     pet?.sprites.dispose();

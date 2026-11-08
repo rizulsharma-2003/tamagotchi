@@ -140,7 +140,6 @@ void main() {
 
   Future<void> done(WidgetTester tester) async {
     mischief.adventure?.stop();
-    mischief.buddy?.stop();
     mischief.roamer?.stop();
     t.desktop.mischief.stop();
     await tester.pump();
@@ -586,27 +585,7 @@ void main() {
   });
 
   group('one owner at a time', () {
-    testWidgets('an adventure you ask for takes Mochi from the cursor buddy; it does not come back for it until it is home', (tester) async {
-      pointer = (900, 500);
-      begin(mischiefOn: true);
-      await run(tester, 0.3);
-      expect(mischief.buddy!.active, isTrue);
-      expect(home.out, isTrue);
-      expect(adventure().explore(), AdventureStart.started);
-      expect(mischief.buddy!.active, isFalse);
-      expect(adventure().active, isTrue);
-      expect(home.out, isTrue);
-      expect(home.returns, isEmpty, reason: 'Mochi never went home in between');
-      await run(tester, 2);
-      expect(mischief.buddy!.active, isFalse, reason: 'it stays off while the adventure has Mochi');
-      expect(adventure().explore(), AdventureStart.headingHome);
-      await run(tester, 4);
-      expect(adventure().active, isFalse);
-      expect(mischief.buddy!.active, isTrue, reason: 'the buddy has Mochi again');
-      await done(tester);
-    });
-
-    testWidgets('and from the screen roamer', (tester) async {
+    testWidgets('an adventure you ask for takes Mochi from the screen roamer', (tester) async {
       final dice = _Dice()..value = 0;
       mischief = MischiefStage(
         desktop: t.desktop,

@@ -6,13 +6,27 @@
 // fades out and back in there (a hop), as the Mac's Mochi does with Reduce Motion on.
 //
 // - Nothing going on (free): it wanders, sniffs about, fidgets, sits and rests (10–35 s between outings, with a glance
-//   or a scratch in the middle of long rests) and sometimes naps, more the longer Claude has been quiet.
+//   or a scratch in the middle of long rests) and sometimes naps, more the longer Claude has been quiet. And it plays
+//   on its own as the Mac's menu-bar Mochi does (`chooseFreeActivity`, `RoamBuilder.zoomies`, `ballPlay`,
+//   `chaseButterfly`, `leafPlay` with the Mac's weights, motions, poses and timings, scaled up to the taskbar): zoomies
+//   (sprints along its stretch, skids and doubles back), a ball or yarn to bat and chase, a butterfly to stalk and leap
+//   at, a leaf to watch land and bat away. The toys are props on the plan ([StrollPropTrack]; the view draws them with
+//   mochi_art's EffectRenderer.drawProp), and the window grows around Mochi for them ([StrollPropTrack.reachX]).
+//   Each play stays inside the free stretch Mochi is in (so never over a button, and in "Plays in its spot" inside its
+//   room) and is skipped when the stretch is too short for it.
+// - Reactions paused (Settings › General): it sits where it is, as the Mac's paused Mochi rests, and never plays.
 // - Claude working: it mostly sits and watches, with a short potter now and then.
 // - Claude needs you: it stops where it is and faces you, waves, then sits watching you with a reminder wave a minute
 //   (at most ten), as on the Mac.
 // - A long quiet stretch (Mochi's napping mood): a yawn, and it sleeps where it is.
 // - Animation effects off: it stays where it is, expressions only.
 // - A pet, a game, a finished turn: it holds still while that plays (facing you for news), then carries on.
+// - The cursor buddy (Mischief's X4, only with Mochi free to wander): while the pointer is on the taskbar Mochi turns
+//   to it, trots (or runs, if far) to the free spot nearest it and sits beside it, never under it (at least a body
+//   away, so whatever is under the pointer stays clickable), hopping between stretches as a stroll does. When the pointer
+//   stops, a pounce or a sit facing it. A pointer coming to Mochi (within a body and a half) stops it at once, facing
+//   you, holding still: it never moves away from one that's coming to it, so it can be clicked. The pointer leaving the
+//   taskbar, Mochi watches a moment and carries on strolling (`follow`).
 // - Patch around (a home: his desk is to the right of it, ui/pet/companion_director.dart): Mochi keeps him company as
 //   on the Mac (`RoamMode.companion`, `.working`): it sits with him, potters a little way off and comes back, watches
 //   him work, waves from beside him when Claude needs you and naps there. For a moment together (a high five, a coffee
@@ -24,7 +38,8 @@
 
 import 'dart:math' as math;
 
-import 'package:mochi_art/mochi_art.dart' show PetAnimation;
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:mochi_art/mochi_art.dart' show Ease, PetAnimation, ScenePropKind;
 
 import 'pet_director.dart' show PetMood;
 
@@ -42,12 +57,16 @@ enum StrollMode {
   /// A long quiet stretch: Mochi sleeps where it is.
   asleep,
 
+  /// Reactions are paused (Settings › General): Mochi sits where it is.
+  paused,
+
   /// Animation effects are off: Mochi stays where it is.
   still;
 
-  static StrollMode of(PetMood mood, {required bool reducedMotion}) => switch (mood) {
+  static StrollMode of(PetMood mood, {required bool reducedMotion, bool paused = false}) => switch (mood) {
     PetMood.needsYou => attending,
     PetMood.napping => asleep,
+    _ when paused => StrollMode.paused,
     _ when reducedMotion => still,
     PetMood.watching => working,
     _ => free,
@@ -55,7 +74,7 @@ enum StrollMode {
 }
 
 /// What Mochi is up to.
-enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react, company }
+enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react, company, follow, zoomies, butterfly, ball, yarn, leaf }
 
 /// Small accents the pose gets on top of its animation.
 enum StrollStyle {
@@ -96,6 +115,7 @@ class StrollTuning {
     this.runGait = 125,
     this.ease = 0.35,
     this.restScale = 1,
+    this.playScale = 2.1,
   });
 
   /// An amble: a 1920-pixel-wide screen in about 40 seconds.
@@ -111,6 +131,16 @@ class StrollTuning {
 
   /// Longer (> 1) or shorter rests between outings.
   final double restScale;
+
+  /// How much bigger the taskbar's Mochi plays than the Mac's menu-bar one (the Mac's points of distance, height and
+  /// speed times this: its 24 and 44 points a second walk and trot are about this much slower than 46 and 96 here).
+  final double playScale;
+}
+
+/// How the Mac's play moves (points a second; `MenuBarRoamer.Speed`), before [StrollTuning.playScale].
+abstract final class _MacSpeed {
+  static const double run = 84;
+  static const double zoom = 110;
 }
 
 /// The recorded one-shots' lengths (assets/pose_tracks.json.deflate; test/stroll_test.dart checks they match).
@@ -127,7 +157,7 @@ const Map<PetAnimation, double> strollOneShotLengths = {
   PetAnimation.happyBounce: 1.0,
 };
 
-double _length(PetAnimation animation) => strollOneShotLengths[animation] ?? 1.5;
+double _length(PetAnimation animation) => strollOneShotLengths[animation] ?? animation.defaultDuration;
 
 /// One piece of the plan: Mochi holding [animation] at [fromX], or travelling from [fromX] to [toX] (speeding up and
 /// slowing down over [ease] seconds at each end).
@@ -214,6 +244,7 @@ class StrollSample {
     this.style = StrollStyle.plain,
     this.travelling = false,
     this.opacity = 1,
+    this.props = const [],
   });
 
   final double x;
@@ -230,7 +261,144 @@ class StrollSample {
 
   /// 1, apart from the middle of a hop.
   final double opacity;
+
+  /// The toys in play right now (a ball, a butterfly…), where they are on the taskbar.
+  final List<StrollPropSample> props;
 }
+
+/// Where a toy is at one moment (x along the taskbar and y up from Mochi's feet, logical pixels).
+class StrollPropSample {
+  const StrollPropSample({
+    required this.kind,
+    required this.x,
+    required this.y,
+    required this.rotation,
+    required this.opacity,
+    required this.scale,
+    required this.variant,
+  });
+
+  final ScenePropKind kind;
+  final double x;
+  final double y;
+
+  /// A ball's or yarn's spin, a butterfly's wing-beat phase, a leaf's tilt (as the Mac's `RoamPropSample`).
+  final double rotation;
+  final double opacity;
+
+  /// The art's scale for this toy (times the art's own unit).
+  final double scale;
+  final int variant;
+}
+
+/// How a toy gets from one key to the next (`RoamPropKey.Path`).
+enum StrollPropPath { linear, easeOut, easeInOut, drop, arc, flutter, drift }
+
+/// Where a toy is at [t], and how it gets there from the key before.
+class StrollPropKey {
+  const StrollPropKey(this.t, this.x, this.y, {this.opacity = 1, this.path = StrollPropPath.linear, this.arc = 0});
+
+  final double t;
+  final double x;
+  final double y;
+  final double opacity;
+  final StrollPropPath path;
+  final double arc;
+}
+
+/// A toy's whole track in the plan (`RoamPropTrack`): where it is from its first key to its last. [reachX] and [reachUp]
+/// are how far it gets from Mochi sideways and how high above its feet over that time (with a margin), which is the room
+/// the window must make for it.
+class StrollPropTrack {
+  StrollPropTrack(this.kind, this.keys, {required this.scale, this.variant = 0, this.rollRadius = 6.7, this.pixel = 2.1, this.reachX = 0, this.reachUp = 0});
+
+  final ScenePropKind kind;
+  final List<StrollPropKey> keys;
+  final double scale;
+  final int variant;
+
+  /// A ball's rolling radius, and the pixels per Mac point the keys were scaled by (the wobbles scale with it).
+  final double rollRadius;
+  final double pixel;
+  double reachX;
+  double reachUp;
+
+  /// The window grows this long before the first key and stays this long after the last.
+  static const double lead = 0.3;
+
+  /// A butterfly's wing-beat phase a second.
+  static const double flapRate = 2.35;
+
+  double get start => keys.first.t;
+  double get end => keys.last.t;
+
+  /// The toy at [t], or null before its first key and after its last.
+  StrollPropSample? sample(double t) {
+    if (t < start || t > end) return null;
+    var index = 1;
+    while (index < keys.length - 1 && keys[index].t < t) {
+      index++;
+    }
+    final a = keys[math.max(0, index - 1)];
+    final b = keys[math.min(keys.length - 1, index)];
+    final p = b.t > a.t ? Ease.clamp((t - a.t) / (b.t - a.t)) : 1.0;
+    double x, y;
+    switch (b.path) {
+      case StrollPropPath.linear:
+        x = Ease.lerp(a.x, b.x, p);
+        y = Ease.lerp(a.y, b.y, p);
+      case StrollPropPath.easeOut:
+        final e = Ease.outCubic(p);
+        x = Ease.lerp(a.x, b.x, e);
+        y = Ease.lerp(a.y, b.y, e);
+      case StrollPropPath.easeInOut:
+        final e = Ease.smooth(p);
+        x = Ease.lerp(a.x, b.x, e);
+        y = Ease.lerp(a.y, b.y, e);
+      case StrollPropPath.drop:
+        x = Ease.lerp(a.x, b.x, p);
+        y = Ease.lerp(a.y, b.y, p * p);
+      case StrollPropPath.arc:
+        x = Ease.lerp(a.x, b.x, p);
+        y = Ease.lerp(a.y, b.y, p) + b.arc * Ease.hop(p);
+      case StrollPropPath.flutter:
+        // The wobble fades in and out with the leg, so every key is passed exactly.
+        final e = Ease.smooth(p);
+        final wobble = math.sin(math.pi * p);
+        x = Ease.lerp(a.x, b.x, e) + 1.6 * pixel * math.sin(t * 3.3) * wobble;
+        y = Ease.lerp(a.y, b.y, e) + 2.4 * pixel * math.sin(t * 6.1) * wobble;
+      case StrollPropPath.drift:
+        // Sways side to side on the way down, passing exactly through both keys.
+        x = Ease.lerp(a.x, b.x, p) + b.arc * math.sin((t - a.t) * 2.6) * math.sin(math.pi * p);
+        y = Ease.lerp(a.y, b.y, p);
+    }
+    final rotation = switch (kind) {
+      ScenePropKind.ball || ScenePropKind.yarn => x / rollRadius,
+      ScenePropKind.butterfly => (t - start) * flapRate,
+      ScenePropKind.leaf => 0.6 * math.sin(t * 2.6),
+      _ => 0.0,
+    };
+    return StrollPropSample(
+      kind: kind,
+      x: x,
+      y: y,
+      rotation: rotation,
+      opacity: Ease.lerp(a.opacity, b.opacity, p),
+      scale: scale,
+      variant: variant,
+    );
+  }
+}
+
+/// The Mac's toy sizes (`RoamToys`) and resting heights (points above the baseline).
+abstract final class _Toys {
+  static const double ballScale = 1.8, ballRest = 3.3;
+  static const double yarnScale = 1.75, yarnRest = 3.4;
+  static const double butterflyScale = 1.5;
+  static const double leafScale = 2.2, leafRest = 2.0;
+}
+
+enum _BuddyHold { none, attentive, sit }
 
 /// Plans and replays Mochi's stroll.
 class Stroller {
@@ -251,11 +419,24 @@ class Stroller {
   StrollMode _mode = StrollMode.free;
   final List<StrollSegment> _segments = [];
   final List<StrollActivity> _recent = [];
+
+  /// The toys in play, in the plan (pruned once they're long gone).
+  final List<StrollPropTrack> _props = [];
   double _idle = 0;
 
   /// A reaction (or a drag) holds Mochi still until then; a mode change waits for it.
   double _holdUntil = double.negativeInfinity;
   bool _replan = false;
+
+  // The cursor buddy: whether the plan is Mochi keeping the pointer company, where it's going (null: it's holding still
+  // there) and what it does there.
+  bool _buddy = false;
+  double? _buddyTarget;
+  _BuddyHold _buddyHold = _BuddyHold.none;
+  double? _lastPointer;
+  double _pointerMovedAt = 0;
+  double? _offSince;
+  double _lastRetarget = double.negativeInfinity;
 
   // The planner's pen: where the plan being written has got to.
   double _t = 0;
@@ -290,6 +471,8 @@ class Stroller {
     if (mode != null) _mode = mode;
     _idle = idleSeconds;
     _segments.clear();
+    _props.clear();
+    _buddy = false;
     _holdUntil = double.negativeInfinity;
     _replan = false;
     final from = x ?? state?.x ?? _zones.first.minX;
@@ -336,7 +519,9 @@ class Stroller {
     _zones = const [];
     _line = null;
     _home = null;
+    _buddy = false;
     _segments.clear();
+    _props.clear();
   }
 
   /// Follows [mode] (re-planning from where Mochi is when it changes) and keeps the plan reaching ahead.
@@ -346,6 +531,7 @@ class Stroller {
     if (mode != _mode) {
       _mode = mode;
       _replan = true;
+      _buddy = false;
     }
     if (_replan && now >= _holdUntil) {
       _replan = false;
@@ -359,6 +545,7 @@ class Stroller {
   /// if [attentive]; then it carries on.
   void react(double now, double duration, {bool attentive = false}) {
     if (!isPlaced) return;
+    _buddy = false;
     _cut(now);
     _activity = StrollActivity.react;
     _holdUntil = now + duration;
@@ -375,6 +562,7 @@ class Stroller {
   /// Ends a hold early (a drag that left Mochi where it was).
   void resume(double now) {
     if (!isPlaced) return;
+    _buddy = false;
     _holdUntil = double.negativeInfinity;
     _replan = false;
     _restart(now);
@@ -409,7 +597,32 @@ class Stroller {
       activity: segment.activity,
       travelling: segment.travels && t >= segment.start && t < segment.end,
       opacity: segment.opacityAt(t),
+      props: _propsAt(t),
     );
+  }
+
+  List<StrollPropSample> _propsAt(double t) {
+    if (_props.isEmpty) return const [];
+    final samples = <StrollPropSample>[];
+    for (final track in _props) {
+      final at = track.sample(t);
+      if (at != null) samples.add(at);
+    }
+    return samples.isEmpty ? const [] : samples;
+  }
+
+  /// The room the window must make around Mochi at [now] for the toy in play (how far it gets from Mochi sideways, and
+  /// how high above its feet; logical pixels, with a margin), or null when there's none. The window grows a moment
+  /// before the first toy shows and shrinks a moment after the last has gone ([StrollPropTrack.lead]).
+  ({double x, double up})? playRoom(double now) {
+    double? x;
+    var up = 0.0;
+    for (final track in _props) {
+      if (now < track.start - StrollPropTrack.lead || now > track.end + StrollPropTrack.lead) continue;
+      x = math.max(x ?? 0, track.reachX);
+      up = math.max(up, track.reachUp);
+    }
+    return x == null ? null : (x: x, up: up);
   }
 
   bool travellingAt(double t) => sample(t).travelling;
@@ -428,8 +641,135 @@ class Stroller {
     final last = _segments.isEmpty ? null : _segments.last;
     if (last != null && last.end.isFinite) next = math.min(next, math.max(now, last.end - lookahead / 2));
     if (_replan && _holdUntil.isFinite && _holdUntil > now) next = math.min(next, _holdUntil);
+    // The window makes room for a toy a moment before it shows, and gives it back a moment after it has gone.
+    for (final track in _props) {
+      for (final edge in [track.start - StrollPropTrack.lead, track.end + StrollPropTrack.lead]) {
+        if (edge > now) next = math.min(next, edge);
+      }
+    }
     return next.isFinite ? next : null;
   }
+
+
+  // MARK: The cursor buddy
+
+  /// The pointer is this close to Mochi (body widths) and it holds still, facing you.
+  static const double buddyNear = 1.5;
+
+  /// Where Mochi sits beside the pointer (body widths from it), and the least it ever stands from it.
+  static const double buddyBeside = 1.25;
+  static const double buddyLeast = 1.0;
+
+  /// The pointer is still after this long (seconds): a pounce or a sit; and Mochi watches this long after the pointer
+  /// left the taskbar before it carries on strolling.
+  static const double buddyStill = 0.6;
+  static const double buddyWatch = 1.5;
+
+  /// The pace of a run to the pointer when it's far (more than [buddyFar] body widths); a trot otherwise.
+  static const double buddyRun = 160;
+  static const double buddyFar = 8;
+
+  /// The pointer's company (called each time the pointer is read, about 10 times a second): [pointerX] is the pointer's
+  /// x on the taskbar in logical pixels (null: it isn't on the taskbar), [bodyWidth] Mochi's, [allowed] whether Mischief
+  /// lets the cursor buddy run now. Only while Mochi is free to wander alone (not reacting, attending, asleep, still,
+  /// working or beside Patch). Returns whether the plan changed (the caller then moves the window and times its frames).
+  bool follow(double now, {required double? pointerX, required double bodyWidth, required bool allowed}) {
+    if (!isPlaced) return false;
+    final free = _mode == StrollMode.free && _home == null && now >= _holdUntil;
+    if (!free || !allowed) {
+      final was = _buddy;
+      _buddy = false;
+      // Mischief said no while Mochi was keeping the pointer company: back to the stroll at once.
+      return was && free && _endBuddy(now);
+    }
+    if (pointerX == null) {
+      if (!_buddy) return false;
+      _offSince ??= now;
+      return now - _offSince! >= buddyWatch && _endBuddy(now);
+    }
+    _offSince = null;
+    final last = _lastPointer;
+    if (last == null || (pointerX - last).abs() > 1.5) {
+      _lastPointer = pointerX;
+      _pointerMovedAt = now;
+    }
+    final here = _state(now).x;
+    final still = now - _pointerMovedAt >= buddyStill;
+    // A pointer coming to Mochi: stop at once, never move away from it.
+    if ((pointerX - here).abs() <= buddyNear * bodyWidth) return _settle(now, pointerX, still);
+    final spot = _buddySpot(pointerX, bodyWidth, here);
+    if (spot == null) return false;
+    if ((spot - here).abs() < 2) return _settle(now, pointerX, still);
+    final target = _buddyTarget;
+    if (_buddy && target != null && ((spot - target).abs() < bodyWidth * 0.5 || now - _lastRetarget < 0.4)) return false;
+    // Off to the spot beside the pointer: turn to it, trot (run if far), and sit there.
+    _cut(now);
+    _buddy = true;
+    _buddyTarget = spot;
+    _buddyHold = _BuddyHold.none;
+    _lastRetarget = now;
+    _activity = StrollActivity.follow;
+    if (_zoneAt(spot) != _line) {
+      _hopTo(spot);
+    } else {
+      final far = (spot - _x).abs() > buddyFar * bodyWidth;
+      // A re-aim on the move doesn't start from a standstill again.
+      _walk(spot, speed: far ? buddyRun : tuning.trotSpeed, easeIn: target == null ? null : 0.12);
+    }
+    _facing = pointerX >= _x ? 1.0 : -1.0;
+    _holdForever(PetAnimation.sit);
+    _extend(now);
+    return true;
+  }
+
+  /// Holds still beside (or near) the pointer: facing you while it moves about close by, a pounce or a sit facing it
+  /// once it stops.
+  bool _settle(double now, double pointerX, bool still) {
+    final want = still ? _BuddyHold.sit : _BuddyHold.attentive;
+    if (_buddy && _buddyTarget == null && _buddyHold == want) return false;
+    _cut(now);
+    _buddy = true;
+    _buddyTarget = null;
+    _buddyHold = want;
+    _activity = StrollActivity.follow;
+    if (want == _BuddyHold.attentive) {
+      _holdForever(PetAnimation.idle, style: StrollStyle.attentive);
+    } else {
+      final direction = pointerX >= _x ? 1.0 : -1.0;
+      if (direction != _facing) _turn(direction);
+      if (_chance(0.5)) _act(PetAnimation.pounce);
+      _holdForever(PetAnimation.sit);
+    }
+    _extend(now);
+    return true;
+  }
+
+  /// The free spot nearest the pointer on the side Mochi is on, at least a body from it: never under the pointer, never
+  /// outside the free stretches. Null: no such spot (Mochi stays where it is).
+  double? _buddySpot(double pointerX, double bodyWidth, double here) {
+    final side = here <= pointerX ? -1.0 : 1.0;
+    for (final away in const [buddyBeside, 2.5, 5.0]) {
+      for (final direction in [side, -side]) {
+        final spot = nearest(pointerX + direction * away * bodyWidth);
+        if ((spot - pointerX).abs() >= buddyLeast * bodyWidth) return spot;
+      }
+    }
+    return null;
+  }
+
+  /// Back to the usual stroll from where Mochi is.
+  bool _endBuddy(double now) {
+    _buddy = false;
+    _buddyTarget = null;
+    _buddyHold = _BuddyHold.none;
+    _offSince = null;
+    _restart(now);
+    _extend(now);
+    return true;
+  }
+
+  /// Mochi is keeping the pointer company (tests).
+  bool get buddying => _buddy;
 
   // MARK: The plan
 
@@ -474,6 +814,8 @@ class Stroller {
   void _cut(double now) {
     final state = _state(now);
     _segments.clear();
+    // A toy still in play goes with the plan.
+    _props.removeWhere((track) => track.end > now);
     _pen(now, state.x, state.facing, state.odometer);
   }
 
@@ -483,6 +825,7 @@ class Stroller {
   }
 
   void _prune(double now) {
+    _props.removeWhere((track) => track.end + StrollPropTrack.lead < now - 1);
     while (_segments.length > 1 && _segments.first.end <= now) {
       _segments.removeAt(0);
     }
@@ -537,8 +880,11 @@ class Stroller {
 
   void _holdForever(PetAnimation animation, {StrollStyle style = StrollStyle.plain}) => _add(animation, double.infinity, style: style);
 
-  void _act(PetAnimation animation, {StrollStyle style = StrollStyle.plain}) =>
-      _add(animation, _length(animation), oneShot: true, style: style);
+  /// A one-shot, moving [travel] pixels the way Mochi faces while it plays (never out of the stretch).
+  void _act(PetAnimation animation, {double? duration, double travel = 0, StrollStyle style = StrollStyle.plain}) {
+    final goal = travel == 0 ? _x : _line!.clamp(_x + travel * _facing);
+    _add(animation, duration ?? _length(animation), toX: goal, oneShot: true, style: style);
+  }
 
   /// Turns to face [direction], with a beat to notice the way it's going.
   void _turn(double direction) {
@@ -547,14 +893,16 @@ class Stroller {
   }
 
   /// Walks (or trots) to [target], kept on the line; turns round first if it's behind.
-  void _walk(double target, {double? speed}) {
+  void _walk(double target, {double? speed, double? easeIn, double atLeast = 0}) {
     final goal = _line!.clamp(target);
     final distance = (goal - _x).abs();
     if (distance < 1) return;
     final direction = goal > _x ? 1.0 : -1.0;
     if (direction != _facing) _turn(direction);
-    final pace = speed ?? tuning.walkSpeed;
-    final ease = math.min(tuning.ease, distance / pace);
+    var pace = speed ?? tuning.walkSpeed;
+    final ease = math.min(easeIn ?? tuning.ease, distance / pace);
+    // Not before [atLeast] seconds: slower, to arrive as something else finishes.
+    if (distance / pace + ease < atLeast && atLeast > ease + 0.1) pace = distance / (atLeast - ease);
     _add(
       pace >= tuning.trotSpeed ? PetAnimation.run : PetAnimation.walk,
       distance / pace + ease,
@@ -617,6 +965,10 @@ class Stroller {
         _activity = StrollActivity.sleep;
         _act(PetAnimation.yawn);
         _holdForever(PetAnimation.sleep);
+      case StrollMode.paused:
+        // Reactions paused: it sits where it is (the Mac's paused Mochi rests at home).
+        _activity = StrollActivity.still;
+        _holdForever(PetAnimation.sit);
       case StrollMode.still:
         _activity = StrollActivity.still;
         _hold(_chance(0.5) ? PetAnimation.sit : PetAnimation.idle, _uniform(2, 4));
@@ -649,6 +1001,10 @@ class Stroller {
         _goHome();
         _act(PetAnimation.yawn);
         _holdForever(PetAnimation.sleep);
+      case StrollMode.paused:
+        _activity = StrollActivity.still;
+        _goHome();
+        _holdForever(PetAnimation.sit);
       case StrollMode.still:
         // Animation effects off: Mochi fades over to its place, then stays.
         _activity = StrollActivity.still;
@@ -719,12 +1075,19 @@ class Stroller {
             if (_idle > 120) (PetAnimation.yawn, 0.8),
           ]),
         );
-      case StrollMode.attending || StrollMode.asleep:
+      case StrollMode.attending || StrollMode.asleep || StrollMode.paused:
         // Their holds last for ever; if one ever ran out, start it again.
         _open();
     }
   }
 
+  /// What Mochi does next when it's free ([_chooseFree]; public for the tests of the weights).
+  @visibleForTesting
+  StrollActivity chooseFreeActivity() => _chooseFree();
+
+  /// The Mac's weights (`chooseFreeActivity`): wander 3, sniff 2, fidget 1.8, nap 0.45, and the play: zoomies 1,
+  /// butterfly 1.2, ball 1, yarn 0.5, leaf 0.6 (its normal intensity: there's no calm or lively setting here, and no
+  /// quiet-hours reshuffle). The play only when the stretch Mochi is in is long enough for it.
   StrollActivity _chooseFree() {
     // The longer Claude has been quiet, the sleepier Mochi gets.
     final naps = 0.45 * (_idle > 900 ? 3 : (_idle > 300 ? 2 : 1));
@@ -735,6 +1098,11 @@ class Stroller {
       (StrollActivity.nap, naps),
       (StrollActivity.trot, 0.5),
       if (_zones.length > 1) (StrollActivity.hop, 0.6),
+      if (_playFits(StrollActivity.zoomies)) (StrollActivity.zoomies, 1.0),
+      if (_playFits(StrollActivity.butterfly)) (StrollActivity.butterfly, 1.2),
+      if (_playFits(StrollActivity.ball)) (StrollActivity.ball, 1.0),
+      if (_playFits(StrollActivity.yarn)) (StrollActivity.yarn, 0.5),
+      if (_playFits(StrollActivity.leaf)) (StrollActivity.leaf, 0.6),
     ];
     if (_recent.isNotEmpty) options.removeWhere((option) => option.$1 == _recent.last);
     if (_recent.length > 1) {
@@ -759,9 +1127,264 @@ class Stroller {
         _trot();
       case StrollActivity.hop:
         _hopAcross();
+      case StrollActivity.zoomies:
+        _zoomies();
+      case StrollActivity.butterfly:
+        _chaseButterfly();
+      case StrollActivity.ball:
+        _ballPlay(yarn: false);
+      case StrollActivity.yarn:
+        _ballPlay(yarn: true);
+      case StrollActivity.leaf:
+        _leafPlay();
       default:
         _hold(PetAnimation.idle, _uniform(2, 4));
     }
+  }
+
+  // MARK: Play (the Mac's RoamBuilder: zoomies, ballPlay, chaseButterfly, leafPlay)
+
+  double get _k => tuning.playScale;
+
+  /// The room each play needs on one side of Mochi (logical pixels): the Mac's, times [StrollTuning.playScale].
+  double _playNeed(StrollActivity activity) => _k * switch (activity) {
+    StrollActivity.zoomies => 40 + 20 + _MacSpeed.zoom * 0.1 + 2,
+    StrollActivity.butterfly => 80,
+    StrollActivity.ball || StrollActivity.yarn => 70,
+    _ => 60,
+  };
+
+  /// The stretch Mochi is in is long enough for [activity]: room for it on each side of the middle.
+  bool _playFits(StrollActivity activity) {
+    final line = _line;
+    return line != null && line.maxX - line.minX >= 2 * _playNeed(activity);
+  }
+
+  double _roomFrom(double x, double direction) => direction > 0 ? _line!.maxX - x : x - _line!.minX;
+
+  /// Where Mochi stands to play: where it is if there's room for [activity] on one side, else the middle of the stretch.
+  double _toPlaySpot(StrollActivity activity) {
+    final need = _playNeed(activity);
+    if (math.max(_room(1), _room(-1)) < need) _walk((_line!.minX + _line!.maxX) / 2);
+    var direction = _roomyDirection();
+    if (_room(direction) < need) direction = -direction;
+    if (direction != _facing) _turn(direction);
+    return direction;
+  }
+
+  StrollPropKey _key(double t, double x, double y, {double opacity = 1, StrollPropPath path = StrollPropPath.linear, double arc = 0}) =>
+      StrollPropKey(t, x, y * _k, opacity: opacity, path: path, arc: arc * _k);
+
+  /// Mochi's centre in the plan at [t] (as far as it's been written).
+  double _planX(double t) {
+    for (final segment in _segments.reversed) {
+      if (t >= segment.start) return segment.xAt(math.min(t, segment.end));
+    }
+    return _x;
+  }
+
+  /// Puts a toy's track in the plan, with the room the window needs for it.
+  void _prop(ScenePropKind kind, List<StrollPropKey> keys, {required double scale, int variant = 0}) {
+    keys.sort((a, b) => a.t.compareTo(b.t));
+    if (keys.length < 2) return;
+    final track = StrollPropTrack(kind, keys, scale: scale, variant: variant, rollRadius: 3.2 * _k, pixel: _k);
+    var reachX = 0.0, reachUp = 0.0;
+    for (var t = track.start; t < track.end + 0.1; t += 0.1) {
+      final at = track.sample(math.min(t, track.end));
+      if (at == null) continue;
+      reachX = math.max(reachX, (at.x - _planX(t)).abs());
+      reachUp = math.max(reachUp, at.y);
+    }
+    track.reachX = reachX + propMargin;
+    track.reachUp = reachUp + propMargin;
+    _props.add(track);
+  }
+
+  /// Room around a toy beyond its centre (logical pixels): its own size, and the wobble.
+  static const double propMargin = 16;
+
+  /// Sprints along the stretch and skids back (`zoomies`): a bounce or a shake, three to five dashes, a tumble or a
+  /// bounce, a blep.
+  void _zoomies() {
+    _activity = StrollActivity.zoomies;
+    var direction = _toPlaySpot(StrollActivity.zoomies);
+    _act(_chance(0.5) ? PetAnimation.happyBounce : PetAnimation.shake);
+    final legs = 3 + _random.nextInt(3);
+    final zoom = _MacSpeed.zoom * _k;
+    final skidRoom = zoom * 0.1 + 2;
+    for (var leg = 0; leg < legs; leg++) {
+      if (_room(direction) < 40 * _k + skidRoom) direction = -direction;
+      final room = _room(direction);
+      if (leg < legs - 1) {
+        final distance = math.min(_uniform(70, 230) * _k, room - skidRoom);
+        if (distance <= 20 * _k) break;
+        // Sprint, skid to a stop, hop around, go again.
+        _walk(_x + direction * distance, speed: zoom, easeIn: 0.18);
+        direction = -direction;
+      } else {
+        // The last dash ends with room to spare, where the finale plays.
+        _walk(_x + direction * math.min(_uniform(50, math.max(50, math.min(230, room / _k))) * _k, room), speed: zoom, easeIn: 0.18);
+      }
+    }
+    if (_chance(0.5) && _room(_facing) > 15 * _k) {
+      _act(PetAnimation.tumble, travel: 14 * _k);
+    } else {
+      _act(PetAnimation.happyBounce);
+    }
+    _act(PetAnimation.blep);
+  }
+
+  /// A ball or yarn tossed in from above: Mochi bats it, chases it, pounces, bats again, then catches it (the ball) or
+  /// tumbles with it (the yarn) (`ballPlay`).
+  void _ballPlay({required bool yarn}) {
+    final activity = yarn ? StrollActivity.yarn : StrollActivity.ball;
+    _activity = activity;
+    final direction = _toPlaySpot(activity);
+    final resting = yarn ? _Toys.yarnRest : _Toys.ballRest;
+    final bx = _line!.clamp(_x + direction * 15 * _k);
+    final side = direction * 6 * _k;
+    final keys = [
+      _key(_t, bx + side, 21, opacity: 0),
+      _key(_t + 0.16, bx + direction * 5 * _k, 18),
+      _key(_t + 0.5, bx, resting, path: StrollPropPath.drop),
+      _key(_t + 0.8, bx, resting, path: StrollPropPath.arc, arc: 3.4),
+      _key(_t + 0.98, bx, resting, path: StrollPropPath.arc, arc: 0.9),
+    ];
+    _hold(PetAnimation.watch, 1.05);
+    _rally(keys, ball: bx, direction: direction, resting: resting, swipes: yarn ? 2 : 2 + _random.nextInt(2), yarn: yarn);
+    _prop(yarn ? ScenePropKind.yarn : ScenePropKind.ball, keys, scale: yarn ? _Toys.yarnScale : _Toys.ballScale);
+  }
+
+  /// A rally with a toy that's on the taskbar at [ball]: bat, chase, pounce, then the finish (`rally`).
+  void _rally(
+    List<StrollPropKey> keys, {
+    required double ball,
+    required double direction,
+    required double resting,
+    required int swipes,
+    required bool yarn,
+  }) {
+    var bx = ball;
+    var way = direction;
+    final swipe = PetAnimation.bat.defaultDuration;
+    for (var i = 0; i < swipes; i++) {
+      if (_roomFrom(bx, way) < 24 * _k) {
+        way = -way;
+        if (way != _facing) _turn(way);
+      }
+      final contact = _t + swipe * 0.5;
+      _act(PetAnimation.bat, duration: swipe);
+      keys.add(_key(contact, bx, resting));
+      final room = math.max(0.0, _roomFrom(bx, way) - 6 * _k);
+      final distance = math.min(room, (yarn ? _uniform(28, 55) : _uniform(45, 95)) * _k);
+      final roll = 0.5 + distance / ((yarn ? 42 : 58) * _k);
+      bx += way * distance;
+      keys.add(_key(contact + roll, bx, resting, path: StrollPropPath.easeOut));
+      // Chase, arriving just behind it as it settles (never overtaking a rolling ball).
+      _walk(bx - way * 14 * _k, speed: _MacSpeed.run * _k, atLeast: math.max(0, contact + roll - 0.05 - _t));
+      if (_t < contact + roll) _hold(PetAnimation.watch, contact + roll - _t);
+      if (i < swipes - 1) {
+        _act(PetAnimation.pounce, travel: 5 * _k);
+        keys.add(_key(_t, bx, resting));
+        // Back off a step to line up the next swipe.
+        _hold(PetAnimation.idle, 0.2);
+        if ((bx - _x).abs() < 13 * _k) _act(PetAnimation.idle, duration: 0.3, travel: -(13 * _k - (bx - _x).abs()));
+      }
+    }
+    if (yarn) {
+      _act(PetAnimation.pounce, travel: 6 * _k);
+      final tumbling = _t;
+      _act(PetAnimation.tumble, travel: math.min(18 * _k, math.max(0.0, _roomFrom(_x, _facing) - 2)));
+      keys.add(_key(tumbling, bx, resting));
+      bx = _line!.clamp(_x + way * 13 * _k);
+      keys.add(_key(_t, bx, resting, path: StrollPropPath.easeInOut));
+      _act(PetAnimation.happyBounce);
+      keys.add(_key(_t, bx, resting));
+      keys.add(_key(_t + 0.6, bx, resting, opacity: 0));
+    } else {
+      // Leap and catch it: it pops up into Mochi's paws, and it drops it to roll off a little and go.
+      final leap = PetAnimation.leapCatch.defaultDuration;
+      final leaping = _t;
+      _act(PetAnimation.leapCatch, duration: leap, travel: 10 * _k);
+      keys.add(_key(leaping + leap * 0.28, bx, resting));
+      keys.add(_key(leaping + leap * 0.5, _x - way * 2 * _k, 9, opacity: 0, path: StrollPropPath.arc, arc: 4));
+      _act(PetAnimation.happyBounce);
+      _hold(PetAnimation.idle, 0.35);
+      final out = _room(_facing) > 30 * _k ? _facing : -_facing;
+      keys.add(_key(_t, _x + out * 8 * _k, resting, opacity: 0));
+      keys.add(_key(_t + 0.05, _x + out * 8 * _k, resting));
+      keys.add(_key(_t + 1.2, _line!.clamp(_x + out * 26 * _k), resting, opacity: 0, path: StrollPropPath.easeOut));
+      _act(PetAnimation.blep);
+    }
+  }
+
+  /// A butterfly drifts in; Mochi spots it, stalks it and leaps for it a few times, and ends up puzzled or delighted as
+  /// it flutters off (`chaseButterfly`).
+  void _chaseButterfly() {
+    _activity = StrollActivity.butterfly;
+    var direction = _toPlaySpot(StrollActivity.butterfly);
+    var bx = _line!.clamp(_x + direction * _uniform(34, 52) * _k);
+    var by = _uniform(11, 15);
+    final keys = [
+      _key(_t, _line!.clamp(bx + direction * 18 * _k), 24, opacity: 0),
+      _key(_t + 1.3, bx, by, path: StrollPropPath.flutter),
+    ];
+    _act(PetAnimation.leanForward);
+    final rounds = 3 + _random.nextInt(2);
+    final leap = PetAnimation.leapCatch.defaultDuration;
+    for (var round = 0; round < rounds; round++) {
+      _walk(bx - direction * 7 * _k, speed: round == 0 ? tuning.trotSpeed : _MacSpeed.run * _k);
+      if (_t < keys.last.t) _hold(PetAnimation.watch, keys.last.t - _t + 0.1);
+      keys.add(_key(_t + 0.25, bx, by, path: StrollPropPath.flutter));
+      final leaping = _t;
+      _act(PetAnimation.leapCatch, duration: leap, travel: 8 * _k);
+      // It dodges up and flutters on ahead.
+      var next = bx + direction * _uniform(26, 52) * _k;
+      if (next > _line!.maxX - 4 * _k || next < _line!.minX + 4 * _k) {
+        direction = -direction;
+        next = bx + direction * _uniform(26, 52) * _k;
+      }
+      next = _line!.clamp(next);
+      by = _uniform(9, 16);
+      keys.add(_key(leaping + leap * 0.9, bx + (next - bx) * 0.3, by + 7, path: StrollPropPath.flutter));
+      keys.add(_key(leaping + _uniform(1.7, 2.2), next, by, path: StrollPropPath.flutter));
+      bx = next;
+      final way = bx > _x ? 1.0 : -1.0;
+      if (way != _facing) _turn(way);
+      direction = _facing;
+      if (_chance(0.3)) _hold(PetAnimation.watch, 0.5);
+    }
+    if (_t < keys.last.t) _hold(PetAnimation.watch, keys.last.t - _t);
+    keys.add(_key(_t + 0.4, bx, by, path: StrollPropPath.flutter));
+    keys.add(_key(_t + 2.0, _line!.clamp(bx + direction * 30 * _k), 27, opacity: 0, path: StrollPropPath.flutter));
+    _hold(PetAnimation.watch, 1.0);
+    _act(_chance(0.55) ? PetAnimation.confusedTilt : PetAnimation.happyBounce);
+    _prop(ScenePropKind.butterfly, keys, scale: _Toys.butterflyScale, variant: _random.nextInt(2));
+  }
+
+  /// A leaf drifts down; Mochi watches it land, sniffs it and bats it away (`leafPlay`).
+  void _leafPlay() {
+    _activity = StrollActivity.leaf;
+    final direction = _toPlaySpot(StrollActivity.leaf);
+    final lx = _line!.clamp(_x + direction * _uniform(24, 44) * _k);
+    final landing = _t + 2.8;
+    final keys = [
+      _key(_t, lx - direction * 8 * _k, 26, opacity: 0),
+      _key(_t + 0.4, lx - direction * 7 * _k, 22),
+      _key(landing, lx, _Toys.leafRest, path: StrollPropPath.drift, arc: 4),
+    ];
+    _hold(PetAnimation.watch, 1.6);
+    _walk(lx - direction * 12 * _k, atLeast: math.max(0, landing - _t));
+    if (_t < landing - 0.2) _hold(PetAnimation.watch, landing - _t);
+    _act(PetAnimation.sniff);
+    final contact = _t + PetAnimation.bat.defaultDuration * 0.5;
+    _act(PetAnimation.bat);
+    keys.add(_key(contact, lx, _Toys.leafRest));
+    final flyTo = _line!.clamp(lx + direction * 26 * _k);
+    keys.add(_key(contact + 0.8, lx + (flyTo - lx) * 0.6, 10, path: StrollPropPath.arc, arc: 5));
+    keys.add(_key(contact + 2.0, flyTo, _Toys.leafRest, opacity: 0, path: StrollPropPath.drift, arc: 3));
+    _act(_chance(0.5) ? PetAnimation.happyBounce : PetAnimation.blep);
+    _prop(ScenePropKind.leaf, keys, scale: _Toys.leafScale, variant: _random.nextInt(3));
   }
 
   void _wander() {

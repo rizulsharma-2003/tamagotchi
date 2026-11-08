@@ -136,6 +136,7 @@ class DesktopAppState extends State<DesktopApp> {
     cues: desktop.cues,
     companion: _companion,
     rhythm: desktop.rhythm,
+    mischief: desktop.mischief,
     displays: widget.displays ?? systemDisplays(),
     idle: () => desktop.sessions.now.difference(_lastActivity),
     clock: _clock,

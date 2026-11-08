@@ -57,11 +57,14 @@ void main() {
         final seen = run(stroller, 0, 1800, step: 0.5).toList()..sort((a, b) => a.start.compareTo(b.start));
         for (var i = 0; i < seen.length - 1; i++) {
           final walk = seen[i];
-          if (!walk.travels || walk.hop) continue;
+          // (A pounce or a leap that carries Mochi forward a step is the play's; test/stroll_play_test.dart.)
+          if (!walk.travels || walk.hop || walk.oneShot) continue;
           expect(walk.animation, anyOf(PetAnimation.walk, PetAnimation.run));
           expect(walk.facing, walk.toX > walk.fromX ? 1 : -1, reason: 'faces the way it walks');
           final speed = (walk.toX - walk.fromX).abs() / (walk.end - walk.start);
-          expect(speed, lessThanOrEqualTo(const StrollTuning().trotSpeed + 0.01));
+          // (The play sprints: zoomies and chasing a toy go faster, as the Mac's do; test/stroll_play_test.dart.)
+          const play = {StrollActivity.zoomies, StrollActivity.butterfly, StrollActivity.ball, StrollActivity.yarn, StrollActivity.leaf};
+          if (!play.contains(walk.activity)) expect(speed, lessThanOrEqualTo(const StrollTuning().trotSpeed + 0.01));
           final atEnd = zones.any((zone) => (walk.toX - zone.minX).abs() < 0.01 || (walk.toX - zone.maxX).abs() < 0.01);
           if (atEnd) {
             final next = seen[i + 1];

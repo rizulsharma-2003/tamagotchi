@@ -147,7 +147,8 @@ class MochiView extends StatefulWidget {
 
   static double _petRate({required PetMood mood, StrollSample? roam, bool oneShot = false, bool small = false}) {
     final double rate;
-    if (roam?.travelling ?? false) {
+    if ((roam?.travelling ?? false) || (roam?.props.isNotEmpty ?? false)) {
+      // Walking, or a toy in play (the ball rolls, the butterfly flutters): the walk's frame rate.
       rate = 25;
     } else if (oneShot || (roam?.oneShot ?? false)) {
       rate = 24;
@@ -513,6 +514,11 @@ class _MochiPainter extends CustomPainter {
     final pose = purring ? PurrSession.decorate(frame.pose, clock.value, calm: calm) : frame.pose;
     _pet(canvas, size, pose, Offset(size.width / 2, baseline), scale, across: true, repeats: frame.repeats && !purring);
     final g = GContext(canvas);
+    // The toys in play (a ball, a butterfly…), where they are on the taskbar relative to Mochi in the middle of the window.
+    for (final toy in roam?.props ?? const <StrollPropSample>[]) {
+      final prop = SceneProp(toy.kind, scale: toy.scale, opacity: toy.opacity, rotation: toy.rotation, variant: toy.variant);
+      EffectRenderer.drawProp(prop, g, Offset(size.width / 2 + toy.x - roam!.x, baseline - toy.y), scale, dark);
+    }
     _paintBadge(canvas, Offset(size.width / 2, baseline), PetRenderer.bodyHeight * scale);
     final elapsed = burst ? patch?.burstAt(clock.value) : null;
     if (elapsed != null) {

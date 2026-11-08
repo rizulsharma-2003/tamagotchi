@@ -73,7 +73,7 @@ void main() {
 
   DesktopAdventure adventure() => mischief.adventure!;
 
-  /// Mischief (the buddy and the roamer off, so they don't take Mochi) with the walker on, off, or Mischief itself off.
+  /// Mischief (the roamer off, so it doesn't take Mochi) with the walker on, off, or Mischief itself off.
   void begin({bool master = true, bool walker = true}) {
     mischief = MischiefStage(
       desktop: t.desktop,
@@ -100,7 +100,6 @@ void main() {
 
   Future<void> done(WidgetTester tester) async {
     mischief.adventure?.stop();
-    mischief.buddy?.stop();
     mischief.roamer?.stop();
     t.desktop.mischief.stop();
     await tester.pump();

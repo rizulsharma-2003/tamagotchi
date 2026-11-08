@@ -403,6 +403,7 @@ class FakeTaskbar implements TaskbarInfo {
   bool inFront = false;
   (int, int)? pointer;
   int reads = 0;
+  int cursorReads = 0;
   int measures = 0;
 
   /// A [width]×[height] screen at [scale] with a 48-logical-pixel taskbar along the bottom (and a 280-wide tray).
@@ -474,7 +475,10 @@ class FakeTaskbar implements TaskbarInfo {
   bool taskbarInFront() => inFront;
 
   @override
-  (int, int)? cursor() => pointer;
+  (int, int)? cursor() {
+    cursorReads++;
+    return pointer;
+  }
 }
 
 /// "Start Mochi with Windows", without the registry: on or off, or refusing with [problem].

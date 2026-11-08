@@ -121,7 +121,8 @@ void main() {
       }
       expect(window.moves, isNotEmpty);
       for (final move in window.moves.skip(1)) {
-        expect(move.width, minimum.$1);
+        // (Wider only while it plays: the window makes room for a toy.)
+        expect(move.width, greaterThanOrEqualTo(minimum.$1));
       }
       final now = stroll.frame!;
       expect((now.left + now.right) / 2, closeTo(stroll.sample()!.x * scale, 2));
