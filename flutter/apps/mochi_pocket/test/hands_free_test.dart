@@ -79,7 +79,6 @@ void main() {
         settings: settings,
         reader: UpdatesReader(engine: speech, focus: bridge, settings: settings, language: () => 'en-IN', announce: announced.add),
         opener: FakeOpener(),
-        library: Future.value(null),
         speech: listener,
         homeWidget: HomeWidget(document: widgetDocument, surface: FakeWidgetSurface()),
       ),
@@ -103,7 +102,7 @@ void main() {
 
   Future<void> go(WidgetTester tester, String place) async {
     bridge.placeController.add(place);
-    await tester.pump();
+    await tester.pump(Duration.zero);
     await tester.pump(const Duration(milliseconds: 700));
   }
 

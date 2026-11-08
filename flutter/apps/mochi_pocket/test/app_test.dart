@@ -64,7 +64,6 @@ void main() {
         settings: settings,
         reader: reader,
         opener: opener,
-        library: Future.value(null),
         scan: scan,
         live: LiveUpdates(notifier: liveNotifier, record: MemoryDocument(), enabled: () async => settings.showOnLockScreen),
       ),
@@ -104,7 +103,7 @@ void main() {
     // Named from the pairing code until the relay lists the room, then by what it is.
     expect(find.text('and Patch, from Test Mac'), findsOneWidget);
     relay.devices();
-    await tester.pump();
+    await tester.pump(Duration.zero);
     expect(find.text('and Patch, from your Mac'), findsOneWidget);
     expect(notifier.permissionRequests, 1, reason: 'notifications are asked for once paired');
     await finish(tester);
@@ -150,7 +149,7 @@ void main() {
     await launch(tester);
     relay.devices();
     relay.presence(macOnline: false, lastSeen: DateTime(2026, 11, 5, 14, 2).millisecondsSinceEpoch / 1000);
-    await tester.pump();
+    await tester.pump(Duration.zero);
     expect(find.textContaining('Mac away since'), findsOneWidget);
     await finish(tester);
   });
@@ -160,7 +159,7 @@ void main() {
     await launch(tester);
     relay.devices(platform: 'windows', name: 'DESKTOP-7');
     relay.presence(macOnline: false, lastSeen: DateTime(2026, 11, 5, 14, 2).millisecondsSinceEpoch / 1000);
-    await tester.pump();
+    await tester.pump(Duration.zero);
     expect(find.textContaining('PC away since'), findsOneWidget);
     expect(find.text('and Patch, from your PC'), findsOneWidget);
     expect(find.text('Claude on your PC'), findsOneWidget);
@@ -226,7 +225,7 @@ void main() {
         at: now(),
       ).toValue(),
     );
-    await tester.pump();
+    await tester.pump(Duration.zero);
     expect(find.text('Send to Claude?'), findsOneWidget);
     expect(find.text('Run the tests and push.'), findsOneWidget);
     await tester.tap(find.text('Send'));
@@ -400,6 +399,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     Brightness brightness() => Theme.of(tester.element(find.text('Appearance'))).brightness;
     expect(brightness(), Brightness.light, reason: 'System, and the test phone is light');
+    await tester.ensureVisible(find.text('Dark'));
+    await tester.pump();
     await tester.tap(find.text('Dark'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -490,9 +491,7 @@ void main() {
     tester.view.physicalSize = const Size(1080, 1800);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      MochiApp(model: model, bridge: bridge, notifier: notifier, settings: settings, reader: reader, library: Future.value(null)),
-    );
+    await tester.pumpWidget(MochiApp(model: model, bridge: bridge, notifier: notifier, settings: settings, reader: reader));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     await macShares(tester);
@@ -539,7 +538,7 @@ void main() {
     store.saved = phoneCredentials;
     await launch(tester);
     relay.socket.drop(4004);
-    await tester.pump();
+    await tester.pump(Duration.zero);
     expect(find.text('Not paired'), findsOneWidget);
     expect(find.textContaining("isn't in Test Mac's room any more"), findsOneWidget);
     await tester.tap(find.text('Pair Again'));

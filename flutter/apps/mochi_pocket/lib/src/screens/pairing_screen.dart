@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:mochi_art/mochi_art.dart';
+import 'package:mochi_world/mochi_world.dart' show PetPoseEvaluator, PoseContext;
 
 import '../model/pocket_model.dart';
-import '../scene/pose_library.dart';
-import '../scene/scene_director.dart';
 import '../theme.dart';
 import '../widgets/clay.dart';
 import 'scanner_screen.dart';
@@ -13,10 +12,9 @@ import 'scanner_screen.dart';
 /// Before pairing: join your Mac's Mochi Link room by scanning its QR code, pasting its link, or opening the link
 /// (iOS/MochiPocket/PocketLink.swift `LinkCard`).
 class PairingScreen extends StatelessWidget {
-  const PairingScreen({super.key, required this.model, required this.library, this.scan});
+  const PairingScreen({super.key, required this.model, this.scan});
 
   final PocketModel model;
-  final PoseLibrary? library;
 
   /// Opens the camera and returns the scanned link (replaced in tests).
   final Future<String?> Function(BuildContext context)? scan;
@@ -44,7 +42,7 @@ class PairingScreen extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.fromLTRB(Space.l, Space.xl, Space.l, Space.xl),
               children: [
-                SizedBox(height: 150, child: _WavingMochi(library: library)),
+                const SizedBox(height: 150, child: _WavingMochi()),
                 const SizedBox(height: Space.l),
                 Semantics(
                   header: true,
@@ -156,11 +154,9 @@ class PairingScreen extends StatelessWidget {
   }
 }
 
-/// Mochi waving hello while you pair (calmer when animations are off).
+/// Mochi waving hello while you pair (the Mac's gentle wave; calmer when animations are off, as under Reduce Motion).
 class _WavingMochi extends StatefulWidget {
-  const _WavingMochi({required this.library});
-
-  final PoseLibrary? library;
+  const _WavingMochi();
 
   @override
   State<_WavingMochi> createState() => _WavingMochiState();
@@ -190,8 +186,11 @@ class _WavingMochiState extends State<_WavingMochi> with SingleTickerProviderSta
       child: ValueListenableBuilder<double>(
         valueListenable: _clock,
         builder: (context, time, _) {
-          final track = widget.library?.petTrack(PetAnimation.waveGently);
-          final pose = track == null ? PetPose() : SceneDirector.calmed<PetPose>(track, time, calm: calm);
+          final pose = PetPoseEvaluator.pose(
+            PetAnimation.waveGently,
+            elapsed: time,
+            context: PoseContext(time: time, reducedMotion: calm, seed: 7, returnLoop: PetAnimation.waveGently),
+          );
           return CustomPaint(
             painter: PetPainter(pose: pose, fill: 0.85, dark: context.palette.isDark),
           );

@@ -7,7 +7,7 @@ import 'package:mochi_link/mochi_link.dart';
 import '../live/live_updates.dart';
 import '../model/app_settings.dart';
 import '../model/pocket_model.dart';
-import '../scene/pose_library.dart';
+import '../scene/phone_world.dart';
 import '../scene/room_view.dart';
 import '../services/alert_notifier.dart';
 import '../services/link_opener.dart';
@@ -31,7 +31,7 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     required this.model,
-    required this.library,
+    required this.world,
     required this.opener,
     required this.notifier,
     required this.settings,
@@ -44,7 +44,9 @@ class HomeScreen extends StatefulWidget {
   });
 
   final PocketModel model;
-  final PoseLibrary? library;
+
+  /// Mochi's world: what Mochi and Patch do in the room.
+  final PhoneWorld world;
   final LinkOpener opener;
 
   /// Alerts as notifications (Settings shows whether they are allowed).
@@ -473,8 +475,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _room(MochiPalette p) {
     final talk = widget.talk;
     final holding = talk?.isHolding ?? false;
-    // While you talk, Mochi's bubble is what it hears and what it sent; otherwise the Mac's last answer.
-    final bubble = talk?.bubble ?? _bubble;
     return Column(
       children: [
         Stack(
@@ -484,7 +484,7 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: claySurface(p),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(Radii.card),
-                child: RoomView(model: model, library: widget.library, onPet: () => model.interact('pet'), talk: talk),
+                child: RoomView(model: model, world: widget.world, onPet: () => model.interact('pet'), talk: talk),
               ),
             ),
             Positioned(
@@ -492,27 +492,11 @@ class _HomeScreenState extends State<HomeScreen> {
               right: 22,
               top: Space.m,
               child: IgnorePointer(
-                child: AnimatedSwitcher(
-                  duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 250),
-                  transitionBuilder: (child, animation) => FadeTransition(
-                    opacity: animation,
-                    child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(animation), child: child),
-                  ),
-                  child: bubble == null
-                      ? const SizedBox.shrink()
-                      // A live region: TalkBack reads what Mochi says (the Mac's reply) as it appears. Not while it
-                      // listens: TalkBack reading the words aloud would be heard by the microphone.
-                      : Semantics(
-                          key: ValueKey(bubble),
-                          liveRegion: !holding,
-                          label: !holding
-                              ? '${model.petName} says: $bubble'
-                              : talk!.transcript.isEmpty
-                              ? '${model.petName} is listening'
-                              : 'Heard: ${talk.transcript}',
-                          excludeSemantics: true,
-                          child: SpeechBubble(text: bubble, highlighted: holding),
-                        ),
+                // While you talk, Mochi's bubble is what it hears and what it sent; otherwise the computer's last
+                // answer, or what Mochi's world has it say (the iPhone's `activeSpeech`).
+                child: ValueListenableBuilder<String?>(
+                  valueListenable: widget.world.saying,
+                  builder: (context, saying, _) => _bubbleView(talk?.bubble ?? _bubble ?? saying, holding: holding),
                 ),
               ),
             ),
@@ -526,6 +510,32 @@ class _HomeScreenState extends State<HomeScreen> {
           style: context.type.footnote.copyWith(fontWeight: FontWeight.w500, color: holding ? p.tint : null),
         ),
       ],
+    );
+  }
+
+  Widget _bubbleView(String? bubble, {required bool holding}) {
+    final talk = widget.talk;
+    return AnimatedSwitcher(
+      duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 250),
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(animation), child: child),
+      ),
+      child: bubble == null
+          ? const SizedBox.shrink()
+          // A live region: TalkBack reads what Mochi says (the computer's reply) as it appears. Not while it listens:
+          // TalkBack reading the words aloud would be heard by the microphone.
+          : Semantics(
+              key: ValueKey(bubble),
+              liveRegion: !holding,
+              label: !holding
+                  ? '${model.petName} says: $bubble'
+                  : talk!.transcript.isEmpty
+                  ? '${model.petName} is listening'
+                  : 'Heard: ${talk.transcript}',
+              excludeSemantics: true,
+              child: SpeechBubble(text: bubble, highlighted: holding),
+            ),
     );
   }
 

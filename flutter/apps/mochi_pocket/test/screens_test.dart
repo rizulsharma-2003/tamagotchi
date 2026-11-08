@@ -17,7 +17,6 @@ import 'package:mochi_pocket/src/model/app_settings.dart';
 import 'package:mochi_pocket/src/model/done_marks.dart';
 import 'package:mochi_pocket/src/model/pocket_model.dart';
 import 'package:mochi_pocket/src/model/updates_history.dart';
-import 'package:mochi_pocket/src/scene/pose_library.dart';
 import 'package:mochi_pocket/src/services/credential_store.dart';
 import 'package:mochi_pocket/src/services/local_file.dart';
 import 'package:mochi_pocket/src/voice/updates_reader.dart';
@@ -26,10 +25,8 @@ import 'support/fakes.dart';
 
 void main() {
   final output = Platform.environment['MOCHI_SCREENSHOTS'];
-  late PoseLibrary library;
 
   setUpAll(() async {
-    library = PoseLibrary.parse(File(PoseLibrary.asset).readAsBytesSync());
     final nunito = FontLoader('Nunito');
     for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold', 'ExtraBold']) {
       nunito.addFont(Future.value(ByteData.sublistView(File('fonts/Nunito-$weight.ttf').readAsBytesSync())));
@@ -85,7 +82,6 @@ void main() {
             bridge: bridge,
             notifier: FakeNotifier(),
             opener: FakeOpener(),
-            library: Future.value(library),
             settings: settings,
             reader: UpdatesReader(engine: FakeSpeechEngine(), focus: bridge, settings: settings, language: () => 'en-IN'),
             live: LiveUpdates(notifier: FakeLiveNotifier(), record: MemoryDocument(), enabled: () async => settings.showOnLockScreen),
