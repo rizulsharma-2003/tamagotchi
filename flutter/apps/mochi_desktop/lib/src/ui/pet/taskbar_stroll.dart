@@ -12,6 +12,12 @@
 // - On the taskbar Mochi is drawn at the taskbar's size (40 pixels tall in a 48-pixel taskbar, scaled with the
 //   display), and the window is just Mochi's box, vertically centred in the taskbar. A speech bubble grows the window
 //   upwards, above the taskbar, and it shrinks back after.
+// - Mochi plays on its own, as the Mac's menu-bar Mochi does (zoomies, a ball, yarn, a butterfly, a leaf; stroller.dart),
+//   only while it's free to wander alone (not working, attending, asleep, paused, with animation effects off, or beside
+//   Patch). The toys are drawn by the pet's view, and the window makes room for them for the play's duration, as a
+//   speech bubble does: wider around Mochi (the window stays centred on it) and taller above it, growing a moment
+//   before the first toy shows and shrinking a moment after the last has gone (`_playRoom`). The frames are the
+//   walk's (25 a second) while a toy is in play; nothing runs for it otherwise or while the screen is unseen.
 // - It walks only in the taskbar's empty stretches (between the widgets tile and the buttons, and between the buttons
 //   and the tray), measured with UI Automation every few seconds; it hops between stretches, never over a button.
 // - The window lets clicks through to the taskbar everywhere but on Mochi itself: the pointer is checked 10 times a
@@ -179,6 +185,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     companion?.host.addListener(_holdForWorld);
     rhythm?.addListener(_rhythmChanged);
     _companionOnTaskbar = settings.companionOnTaskbar;
+    _reactionsPaused = settings.pauseReactions;
     _onlyMoments = settings.companionOnlyMoments;
     _spotSeen = _spotOf(settings);
     _standingSeen = _standingOf(settings);
@@ -321,8 +328,23 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
         _bubble ? Size(math.max(width, SurfaceSizes.taskbarBubbleWidth), box.height + SurfaceSizes.bubble) : Size(width, box.height),
       );
     }
-    return _atLeast(_bubble ? Size(SurfaceSizes.taskbarBubbleWidth, box.height + SurfaceSizes.bubble) : box);
+    final size = _bubble ? Size(SurfaceSizes.taskbarBubbleWidth, box.height + SurfaceSizes.bubble) : box;
+    final play = _playRoom;
+    if (play == null) return _atLeast(size);
+    // A toy in play: room for it on both sides of Mochi (the window stays centred on it) and above its feet.
+    final above = box.height * SurfaceSizes.taskbarFeet + play.up - box.height;
+    return _atLeast(
+      Size(
+        math.max(size.width, (box.width + 2 * play.x).ceilToDouble()),
+        math.max(size.height, (box.height + math.max(0.0, above)).ceilToDouble()),
+      ),
+    );
   }
+
+  /// The room the window makes for the toy in play now (how far it gets from Mochi sideways and how high above its
+  /// feet, logical pixels), or null: just Mochi's box.
+  ({double x, double up})? _playRoom;
+  ({double x, double up})? get playRoom => _playRoom;
 
   /// The smallest the window turned out to be able to get (logical; null: as small as asked). Windows keeps a window
   /// with a title bar at least 136 × 39 at 100% unless the runner lets it be smaller (windows/runner/flutter_window.cpp);
@@ -1070,7 +1092,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
 
   // MARK: Walking
 
-  StrollMode get _mode => StrollMode.of(_mood, reducedMotion: motion.reduced);
+  StrollMode get _mode => StrollMode.of(_mood, reducedMotion: motion.reduced, paused: settings.pauseReactions);
   double get _idleSeconds => _idle().inMilliseconds / 1000;
 
   void _tick() {
@@ -1081,8 +1103,19 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     }
     final now = _clock();
     stroller.update(now, mode: _mode, idleSeconds: _idleSeconds);
+    _makeRoom(now);
     _step(now);
     _schedule(now);
+  }
+
+  /// The window grows around Mochi for a toy about to show and shrinks when it's gone (queued with the other changes to
+  /// the window; Patch's stage has no play).
+  void _makeRoom(double now) {
+    final room = _home == null ? stroller.playRoom(now) : null;
+    if (room == _playRoom) return;
+    _playRoom = room;
+    log?.call('play room: $room');
+    unawaited(_enqueue(_resize));
   }
 
   /// Moves the window under Mochi (a resize on its way does the move itself).
@@ -1306,6 +1339,11 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
       _standingDirty = true;
       refreshing = true;
     }
+    if (settings.pauseReactions != _reactionsPaused) {
+      // Paused or resumed: Mochi sits where it is, or goes back to its stroll and its play.
+      _reactionsPaused = settings.pauseReactions;
+      if (onTaskbar) _tick();
+    }
     if (settings.companionOnlyMoments != _onlyMoments) {
       _onlyMoments = settings.companionOnlyMoments;
       refreshing = true;
@@ -1329,6 +1367,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
   }
 
   bool _onlyMoments = false;
+  bool _reactionsPaused = false;
 
   /// Patch arrived or left, Mochi's world started a moment (or, with "only for interesting moments", a moment began or
   /// ended).
