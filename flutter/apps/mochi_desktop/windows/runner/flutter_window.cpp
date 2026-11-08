@@ -5,6 +5,7 @@
 
 #include <optional>
 
+#include "desktop_icons.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "media.h"
 #include "native_stage.h"
@@ -58,6 +59,16 @@ int SessionLocked() {
   }
   ::WTSFreeMemory(buffer);
   return locked;
+}
+
+// A string argument that stays as UTF-8 (the icon ids are 16 hex characters).
+std::string RawStringArgument(const flutter::EncodableMap& arguments, const char* name) {
+  const auto found = arguments.find(flutter::EncodableValue(name));
+  if (found == arguments.end()) {
+    return std::string();
+  }
+  const auto* value = std::get_if<std::string>(&found->second);
+  return value == nullptr ? std::string() : *value;
 }
 
 int IntArgument(const flutter::EncodableMap& arguments, const char* name) {
@@ -128,6 +139,11 @@ bool FlutterWindow::OnCreate() {
 void FlutterWindow::OnDestroy() {
   mochi_toasts::Stop();
   mochi_media::Stop();
+  mochi_icons::Stop();
+  if (icons_result_) {
+    icons_result_->Success();
+    icons_result_ = nullptr;
+  }
   stage_ = nullptr;
   if (display_notification_ != nullptr) {
     ::UnregisterPowerSettingNotification(display_notification_);
@@ -150,6 +166,12 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // X5: the icon worker has an answer: the pending result is completed here, on the UI thread.
+  if (message == kDesktopIconsDone) {
+    AnswerIcons();
+    return 0;
+  }
+
   // Mochi was launched again: show the main window instead of a second copy.
   if (message == MochiShowMainMessage()) {
     if (instance_channel_) {
@@ -257,6 +279,16 @@ void FlutterWindow::HandleSystemCall(const flutter::MethodCall<flutter::Encodabl
     return;
   }
   const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+  // X5: desktop icon play (desktop_icons.cpp; opaque ids and positions only, never a name). The answer comes later, from
+  // the worker thread's post (kDesktopIconsDone).
+  if (method == "desktopIcons") {
+    AskIcons(false, nullptr, std::move(result));
+    return;
+  }
+  if (method == "moveDesktopIcon") {
+    AskIcons(true, arguments, std::move(result));
+    return;
+  }
   if (method == "registerHotKey" && arguments != nullptr) {
     const int id = IntArgument(*arguments, "id");
     const int modifiers = IntArgument(*arguments, "modifiers");
@@ -295,4 +327,68 @@ void FlutterWindow::HandleSystemCall(const flutter::MethodCall<flutter::Encodabl
     return;
   }
   result->NotImplemented();
+}
+
+// Starts a desktop icon request. One result is pending at a time: a second call answers the old one with null first (Dart
+// then reads again before it trusts anything).
+void FlutterWindow::AskIcons(bool move, const flutter::EncodableMap* arguments,
+                             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  if (icons_result_) {
+    icons_result_->Success();
+    icons_result_ = nullptr;
+  }
+  uint32_t seq = 0;
+  if (!move) {
+    seq = mochi_icons::RequestRead(GetHandle(), kDesktopIconsDone);
+  } else if (arguments != nullptr) {
+    const std::string id = RawStringArgument(*arguments, "id");
+    const bool has_point = arguments->count(flutter::EncodableValue("x")) != 0 && arguments->count(flutter::EncodableValue("y")) != 0;
+    if (!id.empty() && has_point) {
+      seq = mochi_icons::RequestMove(GetHandle(), kDesktopIconsDone, id, IntArgument(*arguments, "x"), IntArgument(*arguments, "y"));
+    }
+  }
+  if (seq == 0) {
+    result->Success();
+    return;
+  }
+  icons_seq_ = seq;
+  icons_result_ = std::move(result);
+}
+
+// The worker answered: completes the pending result when the answer is the one it waits for (an older answer is dropped).
+void FlutterWindow::AnswerIcons() {
+  mochi_icons::Answer answer;
+  if (!mochi_icons::Take(&answer) || !icons_result_ || answer.seq != icons_seq_) {
+    return;
+  }
+  auto result = std::move(icons_result_);
+  icons_result_ = nullptr;
+  if (answer.kind == mochi_icons::Kind::Move) {
+    result->Success(flutter::EncodableValue(answer.ok));
+    return;
+  }
+  if (!answer.ok) {
+    result->Success();
+    return;
+  }
+  flutter::EncodableMap map;
+  map[flutter::EncodableValue("autoArrange")] = flutter::EncodableValue(answer.auto_arrange);
+  map[flutter::EncodableValue("grid")] = flutter::EncodableValue(answer.grid);
+  map[flutter::EncodableValue("hidden")] = flutter::EncodableValue(answer.hidden);
+  map[flutter::EncodableValue("more")] = flutter::EncodableValue(answer.more);
+  map[flutter::EncodableValue("iconSize")] = flutter::EncodableValue(static_cast<int32_t>(answer.icon_size));
+  flutter::EncodableList spacing;
+  spacing.push_back(flutter::EncodableValue(static_cast<int32_t>(answer.spacing_x)));
+  spacing.push_back(flutter::EncodableValue(static_cast<int32_t>(answer.spacing_y)));
+  map[flutter::EncodableValue("spacing")] = flutter::EncodableValue(spacing);
+  flutter::EncodableList icons;
+  for (const auto& icon : answer.icons) {
+    flutter::EncodableMap entry;
+    entry[flutter::EncodableValue("id")] = flutter::EncodableValue(icon.id);
+    entry[flutter::EncodableValue("x")] = flutter::EncodableValue(static_cast<int32_t>(icon.x));
+    entry[flutter::EncodableValue("y")] = flutter::EncodableValue(static_cast<int32_t>(icon.y));
+    icons.push_back(flutter::EncodableValue(entry));
+  }
+  map[flutter::EncodableValue("icons")] = flutter::EncodableValue(icons);
+  result->Success(flutter::EncodableValue(map));
 }

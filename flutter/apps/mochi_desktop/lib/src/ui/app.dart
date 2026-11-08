@@ -25,6 +25,7 @@ import '../platform/native_stage.dart';
 import '../platform/foreground_window.dart';
 import '../platform/window_frames.dart';
 import '../platform/window_mover.dart';
+import '../platform/desktop_icons.dart';
 import '../core/window_nudge.dart' show WindowMover;
 import '../platform/win32_taskbar.dart' show Win32PetWindow, Win32TaskbarInfo;
 import 'perf_meter.dart';
@@ -83,6 +84,7 @@ class DesktopApp extends StatefulWidget {
     this.windowFrames,
     this.foregroundWindow,
     this.windowMover,
+    this.desktopIcons,
   });
 
   final MochiDesktop desktop;
@@ -102,6 +104,9 @@ class DesktopApp extends StatefulWidget {
 
   /// What the window nudges ask of Windows (X2; Win32 on Windows, none elsewhere, a fake in tests).
   final WindowMover? windowMover;
+
+  /// What desktop icon play asks of Windows (X5; the runner's shell calls on Windows, none elsewhere, a fake in tests).
+  final DesktopIcons? desktopIcons;
 
   /// Where the taskbar is (Win32 on Windows, none elsewhere, a fake in tests).
   final TaskbarInfo? taskbar;
@@ -186,6 +191,11 @@ class DesktopAppState extends State<DesktopApp> {
     nudgeStore: demoMode ? MemoryJsonStore() : FileJsonStore(desktop.paths.join(desktop.paths.home, 'nudge.json')),
     nudgeForce: MischiefStage.nudgeFrom(Platform.environment['MOCHI_DESKTOP_NUDGE']),
     nudgeLog: _strollLog(),
+    // Desktop icon play (X5): the journal that puts an icon back after a crash is icon-nudge.json in Mochi's folder.
+    desktopIcons: widget.desktopIcons ?? systemDesktopIcons(),
+    iconStore: demoMode ? MemoryJsonStore() : FileJsonStore(desktop.paths.join(desktop.paths.home, 'icon-nudge.json')),
+    iconForce: MischiefStage.iconsFrom(Platform.environment['MOCHI_DESKTOP_ICONS']),
+    iconLog: _strollLog(),
   );
 
   /// The Windows extras on the native stage (tests).

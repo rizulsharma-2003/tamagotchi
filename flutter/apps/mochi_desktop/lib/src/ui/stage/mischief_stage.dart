@@ -36,6 +36,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:mochi_world/mochi_world.dart' as w;
 
+import '../../core/icon_play.dart';
 import '../../core/json_store.dart';
 import '../../core/moods.dart';
 import '../../core/mischief.dart';
@@ -44,6 +45,7 @@ import '../../core/reacts.dart' show EditorApps;
 import '../../core/sessions.dart' show SessionPhase;
 import '../../core/window_nudge.dart';
 import '../../desktop.dart';
+import '../../platform/desktop_icons.dart';
 import '../../platform/displays.dart';
 import '../../platform/foreground_window.dart';
 import '../../platform/native_stage.dart';
@@ -88,6 +90,11 @@ class MischiefStage extends ChangeNotifier {
     JsonStore? nudgeStore,
     this.nudgeForce,
     void Function(String)? nudgeLog,
+    DesktopIcons? desktopIcons,
+    JsonStore? iconStore,
+    this.iconForce,
+    void Function(String)? iconLog,
+    math.Random? iconRandom,
   }) : cast = StageCast(stage),
        _shown = shown ?? (() => true),
        _clock = clock {
@@ -102,6 +109,15 @@ class MischiefStage extends ChangeNotifier {
     // The gate changing (a rule, a switch) sends a nudged window home at once; quitting does too.
     desktop.mischief.addListener(nudger.recheck);
     desktop.addExitHook(nudger.putBack);
+    // Desktop icon play (X5): the same shape, with its own journal. Quitting and the gate changing put an icon back too.
+    iconPlay = IconNudger(
+      icons: desktopIcons ?? const NoDesktopIcons(),
+      store: iconStore ?? MemoryJsonStore(),
+      allowed: () => desktop.mischief.may(MischiefExtra.desktopIcons),
+      log: iconLog,
+    );
+    desktop.mischief.addListener(iconPlay.recheck);
+    desktop.addExitHook(iconPlay.putBack);
     celebrations = StageCelebrations(stage: stage, cast: cast, gate: desktop.mischief, displays: displays, cursor: cursor, clock: clock);
     notes = StickyNotes(
       stage: stage,
@@ -189,7 +205,10 @@ class MischiefStage extends ChangeNotifier {
         demo: adventureDemo,
         nudger: nudger,
         nudgeForce: nudgeForce,
+        iconPlay: iconPlay,
+        iconForce: iconForce,
         random: random,
+        iconRandom: iconRandom,
       );
     }
   }
@@ -210,6 +229,10 @@ class MischiefStage extends ChangeNotifier {
   /// X2: the one nudge that may run at a time, the development switch, and what Windows says about windows.
   late final WindowNudger nudger;
   final NudgeForce? nudgeForce;
+
+  /// X5: the one icon visit that may run at a time, and the development switch (`MOCHI_DESKTOP_ICONS=visit`).
+  late final IconNudger iconPlay;
+  final IconForce? iconForce;
   late final WindowMover _mover;
   final double Function()? _clock;
 
@@ -292,6 +315,8 @@ class MischiefStage extends ChangeNotifier {
     _started = true;
     // A nudge cut short by a crash or a kill left its journal: that window goes home first.
     nudger.recover();
+    // The same for an icon a crash or a kill left away from home.
+    unawaited(iconPlay.recover());
     _subscriptions
       ..add(desktop.world.celebrated.listen(_celebrated))
       ..add(desktop.streaks.reached.listen(_streak))
@@ -446,6 +471,9 @@ class MischiefStage extends ChangeNotifier {
   /// A development switch: `MOCHI_DESKTOP_NUDGE=wobble|shove|tug`.
   static NudgeForce? nudgeFrom(String? value) => NudgeForce.from(value);
 
+  /// A development switch: `MOCHI_DESKTOP_ICONS=visit` (pair it with `MOCHI_DESKTOP_ADVENTURE_DEMO=40`).
+  static IconForce? iconsFrom(String? value) => IconForce.from(value);
+
   /// A development switch: `MOCHI_DESKTOP_WEATHER=rain|clear` forces the weather (and skips the network).
   static bool? weatherFrom(String? value) => switch ((value ?? '').trim().toLowerCase()) {
     'rain' => true,
@@ -476,6 +504,13 @@ class MischiefStage extends ChangeNotifier {
     }
     desktop.removeExitHook(nudger.putBack);
     nudger.dispose();
+    try {
+      desktop.mischief.removeListener(iconPlay.recheck);
+    } on FlutterError {
+      // The gate went with the app.
+    }
+    desktop.removeExitHook(iconPlay.putBack);
+    iconPlay.dispose();
     notes.dispose();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());

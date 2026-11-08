@@ -24,7 +24,7 @@ void main() {
       final settings = DesktopSettings(document);
       expect(settings.mischief.enabled, isFalse);
       for (final extra in MischiefExtra.values) {
-        expect(settings.mischief.on(extra), extra != MischiefExtra.windowNudges, reason: 'only the window nudges wait for you');
+        expect(settings.mischief.on(extra), extra != MischiefExtra.windowNudges && extra != MischiefExtra.desktopIcons, reason: 'only the window nudges and the desktop icons wait for you');
         expect(settings.mischief.allows(extra), isFalse, reason: 'the master switch is off');
       }
       settings.mischief = settings.mischief.copyWith(enabled: true).withExtra(MischiefExtra.cursorBuddy, false);
@@ -41,6 +41,7 @@ void main() {
         'moods': true,
         'reacts': true,
         'windowNudges': false,
+        'desktopIcons': false,
       });
       expect(document.json!['v'], 8);
       final again = DesktopSettings(MemorySettingsDocument(document.json));
@@ -266,12 +267,25 @@ void main() {
       await tester.pump();
       expect(t.desktop.settings.mischief.enabled, isTrue);
       expect(t.desktop.settings.mischief.on(MischiefExtra.windowNudges), isFalse, reason: 'it moves your windows: you opt in');
-      final nudges = tester.widgetList<Switch>(find.byType(Switch)).last;
-      expect(nudges.value, isFalse);
+      expect(t.desktop.settings.mischief.on(MischiefExtra.desktopIcons), isFalse, reason: 'it moves your icons: you opt in');
+      expect(find.text('Desktop icons'), findsOneWidget, reason: 'X5');
+      expect(
+        find.text('On its adventures, Mochi sits on a desktop icon, kicks it over a little and puts it back exactly where it was. Not with Auto arrange on.'),
+        findsOneWidget,
+      );
+      final icons = tester.widgetList<Switch>(find.byType(Switch)).last;
+      expect(icons.value, isFalse);
       await tester.ensureVisible(toggle('Window nudges'));
       await tester.pump();
       await tester.tap(toggle('Window nudges'));
       await tester.pump();
+      expect(t.desktop.settings.mischief.on(MischiefExtra.windowNudges), isTrue);
+      expect(t.desktop.settings.mischief.on(MischiefExtra.desktopIcons), isFalse, reason: 'its own switch');
+      await tester.ensureVisible(toggle('Desktop icons'));
+      await tester.pump();
+      await tester.tap(toggle('Desktop icons'));
+      await tester.pump();
+      expect(t.desktop.settings.mischief.on(MischiefExtra.desktopIcons), isTrue);
       expect(t.desktop.settings.mischief.on(MischiefExtra.windowNudges), isTrue);
       await tester.ensureVisible(toggle(MischiefExtra.cursorBuddy.title));
       await tester.pump();

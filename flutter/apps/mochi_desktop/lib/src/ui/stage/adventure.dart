@@ -56,6 +56,14 @@
 // - The window is never the one you are using, and any end of the adventure (home, hurried, a rule, the app quitting)
 //   sends a nudged window home at once.
 //
+// With Desktop icons (docs/SPRINT_2.md X5, Mischief; off until you turn it on) about one outing in two, once it is exploring,
+// Mochi may visit one desktop icon (core/icon_play.dart is the put-back contract and the rules):
+// - It picks the nearest icon on this display that no window covers, with icons shown and Auto arrange off; leaps to its
+//   top and sits there 2-4 s; kicks it a cell (or a third of a cell) sideways into a free place; hops after it and sits
+//   looking pleased for 2 s; pushes it back to exactly where it was; and drops off, carrying on from there.
+// - The desktop is read only when a visit is being considered and around each move. Any abort (the desktop or taskbar in
+//   use, a mouse button down, a rule, Mochi sent home, the app quitting) puts the icon back at once.
+//
 // Not done yet (known gaps): Mochi's speech bubbles don't show while it's out (the plan's lines are skipped), and
 // the carry swings around Mochi's feet rather than its scruff.
 //
@@ -70,6 +78,7 @@ import 'package:mochi_art/mochi_art.dart' show PetAnimation, PetEyes, PetPose, B
 import 'package:mochi_world/mochi_world.dart' as w;
 
 import '../../core/desktop_settings.dart';
+import '../../core/icon_play.dart';
 import '../../core/mischief.dart';
 import '../../core/pc_rhythm.dart';
 import '../../core/window_nudge.dart';
@@ -189,6 +198,11 @@ class _Outing {
   double landed = double.negativeInfinity;
   double paused = double.negativeInfinity;
   bool shoved = false;
+
+  /// Desktop icons: the dice were rolled for this outing (at most one visit), and the visit in progress (Mochi is then
+  /// scripted by it, as when riding a window).
+  bool iconsRolled = false;
+  IconVisit? visit;
 }
 
 /// The window Mochi stands on, as it was at the last read.
@@ -244,10 +258,14 @@ class DesktopAdventure extends ChangeNotifier {
     this.demo,
     this.nudger,
     this.nudgeForce,
+    this.iconPlay,
+    this.iconForce,
     math.Random? random,
+    math.Random? iconRandom,
     int? seed,
   }) : scheduler = w.AdventureScheduler(seed: seed ?? world.seed, frequency: settings.adventure.spontaneous),
-       _dice = random ?? math.Random((seed ?? world.seed) ^ 0x2B2B);
+       _dice = random ?? math.Random((seed ?? world.seed) ^ 0x2B2B),
+       _iconDice = iconRandom ?? math.Random((seed ?? world.seed) ^ 0x1C0A);
 
   final StagePet pet;
   final PetHome home;
@@ -295,6 +313,13 @@ class DesktopAdventure extends ChangeNotifier {
   final WindowNudger? nudger;
   final NudgeForce? nudgeForce;
   final math.Random _dice;
+
+  /// Desktop icon play (X5; null: none), the development switch that makes every outing visit an icon, and its dice (a visit
+  /// is rolled for once per outing, one in [iconOdds]).
+  final IconNudger? iconPlay;
+  final IconForce? iconForce;
+  final math.Random _iconDice;
+  static const int iconOdds = 2;
 
   /// A pause is shoved about one time in this many.
   static const int shoveOdds = 4;
@@ -402,6 +427,7 @@ class DesktopAdventure extends ChangeNotifier {
     final outing = _outing;
     if (outing == null) return false;
     nudger?.abort();
+    _cutVisit(outing);
     if (outing.carry != null) {
       _finish(null);
       return true;
@@ -580,11 +606,17 @@ class DesktopAdventure extends ChangeNotifier {
       _rideTick(outing, outing.ride!, now);
       return;
     }
+    final visit = outing.visit;
+    if (visit != null) {
+      _visitTick(outing, visit, now);
+      return;
+    }
     final plan = outing.plan;
     if (plan == null) return;
     final sample = plan.sample(now);
     if (_followWindow(outing, sample, now)) return;
     _considerNudge(outing, sample, now);
+    _considerIcons(outing, sample, now);
     final top = outing.terrain.bounds.maxY;
     if (sample.finished || (sample.phase == w.AdventurePhase.returning && sample.isAirborne && sample.point.y > top + outing.metrics.height * 0.15)) {
       _finish(plan.homeX);
@@ -760,6 +792,8 @@ class DesktopAdventure extends ChangeNotifier {
     if (outing == null) return;
     _outing = null;
     nudger?.abort();
+    iconPlay?.abort();
+    outing.visit = null;
     _pressedAt = null;
     _lifted = false;
     _stopFrames();
@@ -792,6 +826,115 @@ class DesktopAdventure extends ChangeNotifier {
   /// edge.
   static const double snapShare = 0.18;
   static const double snapJump = 96;
+
+  // ---- Desktop icons (X5) ----
+
+  /// Once per outing, when it is exploring and the extra may run: about one outing in two (always, with the development
+  /// switch) reads the desktop and, if an icon qualifies, begins a visit. The read is the only time the desktop is looked at
+  /// besides around each move.
+  void _considerIcons(_Outing outing, w.AdventureSample sample, double now) {
+    final play = iconPlay;
+    if (play == null || outing.iconsRolled || outing.hurrying || outing.plan == null || sample.finished) return;
+    if (sample.phase != w.AdventurePhase.exploring || sample.isAirborne || play.active) return;
+    if (!gate.may(MischiefExtra.desktopIcons)) return;
+    outing.iconsRolled = true;
+    if (iconForce == null && _iconDice.nextInt(iconOdds) != 0) return;
+    unawaited(_visitIcon(outing, play));
+  }
+
+  /// The outing is still as it was when the read began: nothing has taken Mochi's walk over, the rules still allow it.
+  bool _free(_Outing outing) =>
+      _outing == outing && outing.plan != null && outing.carry == null && outing.ride == null && outing.visit == null && !outing.hurrying && gate.may(MischiefExtra.desktopIcons);
+
+  Future<void> _visitIcon(_Outing outing, IconNudger play) async {
+    final read = await play.read();
+    if (read == null || !_free(outing)) return;
+    if (read.autoArrange) {
+      play.log?.call('icons: auto-arrange');
+      return;
+    }
+    final space = outing.space;
+    final area = space.display.workArea;
+    final windows = [for (final frame in outing.windows) frame.frame];
+    final sample = outing.plan!.sample(time());
+    final feet = space.feet(sample.point);
+    final candidates = IconRules.candidates(read, display: area, windows: windows, x: feet.$1, y: feet.$2);
+    if (candidates.isEmpty) {
+      play.log?.call('icons: none free');
+      return;
+    }
+    final icon = candidates.first;
+    final began = await play.begin(icon);
+    if (!began) return;
+    if (!_free(outing)) {
+      play.abort();
+      return;
+    }
+    final at = outing.plan!.sample(time());
+    outing.visit = IconVisit(
+      nudger: play,
+      read: read,
+      icon: icon,
+      from: space.feet(at.point),
+      facing: at.facing,
+      screen: area,
+      windows: windows,
+      scale: space.scale,
+      now: time(),
+      sit: 2 + 2 * _iconDice.nextDouble(),
+    );
+    outing.plan = null;
+    outing.stand = null;
+    _schedule(moveEvery);
+  }
+
+  /// A frame of the visit: the abort checks, then Mochi where the script has it.
+  void _visitTick(_Outing outing, IconVisit visit, double now) {
+    final play = iconPlay;
+    if (play == null || play.blocked()) {
+      _endVisit(outing, visit, abort: true);
+      return;
+    }
+    final frame = visit.frame(now);
+    if (frame == null) {
+      _endVisit(outing, visit);
+      return;
+    }
+    final animation = frame.animation;
+    pet.draw(
+      time: now,
+      motion: StrollSample(
+        x: 0,
+        facing: frame.facing,
+        animation: animation,
+        animationTime: frame.time,
+        activity: frame.oneShot ? StrollActivity.react : StrollActivity.rest,
+        oneShot: frame.oneShot,
+      ),
+      feet: frame.feet,
+      ratio: outing.space.scale,
+      unit: unit,
+      quantum: 1 / 15,
+      accent: frame.accent,
+    );
+    if (_ticks % 60 == 0) pet.raise();
+    _schedule(moveEvery);
+  }
+
+  /// A mouse button went down, or Mochi is being sent home: an icon in play goes back and Mochi carries on from where it is.
+  void _cutVisit(_Outing outing) {
+    final visit = outing.visit;
+    if (visit != null) _endVisit(outing, visit, abort: true);
+  }
+
+  /// The visit is over (or cut short, [abort]: the icon goes home now): Mochi drops off from where it is and the planner
+  /// carries on from there.
+  void _endVisit(_Outing outing, IconVisit visit, {bool abort = false}) {
+    if (abort) visit.abort();
+    outing.visit = null;
+    final feet = visit.feet;
+    _replan(outing, outing.space.point(feet.$1, feet.$2), facing: visit.facing);
+  }
 
   // ---- Window nudges (X2) ----
 
@@ -1126,6 +1269,8 @@ class DesktopAdventure extends ChangeNotifier {
       case StagePointerKind.down:
         _pressedAt = at;
         _lifted = false;
+        // A mouse button going down puts an icon back at once, and Mochi carries on from where it is.
+        _cutVisit(outing);
       case StagePointerKind.move:
         final pressed = _pressedAt;
         if (pressed == null) return;
@@ -1134,9 +1279,11 @@ class DesktopAdventure extends ChangeNotifier {
           return;
         }
         final far = ((at.$1 - pressed.$1).abs() + (at.$2 - pressed.$2).abs()) > liftAfter * outing.space.scale;
-        if (_lifted || !far || (outing.plan == null && outing.ride == null)) return;
+        if (_lifted || !far || (outing.plan == null && outing.ride == null && outing.visit == null)) return;
         _lifted = true;
-        final facing = outing.ride?.facing ?? outing.plan!.sample(time()).facing;
+        final facing = outing.ride?.facing ?? outing.visit?.facing ?? outing.plan!.sample(time()).facing;
+        iconPlay?.abort();
+        outing.visit = null;
         outing.carry = _Carry(startedAt: time(), facing: facing, lastX: at.$1.toDouble(), lastTime: time());
         outing.plan = null;
         outing.ride = null;
@@ -1190,6 +1337,7 @@ class DesktopAdventure extends ChangeNotifier {
     if (outing == null) return null;
     if (outing.carry != null) return 'adventure (carried)';
     if (outing.ride != null) return 'adventure (riding a window)';
+    if (outing.visit != null) return 'adventure (visiting an icon)';
     final plan = outing.plan;
     if (plan == null) return 'adventure';
     if (outing.hurrying) return 'adventure (heading home)';
