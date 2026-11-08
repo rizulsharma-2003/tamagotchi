@@ -1299,7 +1299,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
       if (_out) return const [];
       // Hidden in the taskbar (Peekaboo), only what still shows takes clicks.
       final sink = stroller.sinkAt(_clock());
-      return [stage.body(frame, sink: sink, shows: sink > 0 ? Stroller.peekShows * PetRenderer.bodyHeight * unit : null)];
+      return [stage.body(frame, sink: sink, shows: sink > 0 ? (Stroller.peekVisible + 0.05) * PetRenderer.bodyHeight * unit : null)];
     }
     return [if (!_out) stage.bodyAt(stroller.sample(_clock()).x), if (companion?.visible ?? false) stage.companionBody(home)];
   }

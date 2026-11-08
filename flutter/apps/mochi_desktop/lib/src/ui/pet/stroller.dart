@@ -640,9 +640,16 @@ class Stroller {
     return segment == null ? 0 : segment.sinkAt(math.min(math.max(t, segment.start), segment.end));
   }
 
-  /// How much of Mochi shows above the window's bottom edge once it has sunk right down: its ears and eyes (this part of
-  /// its body's height, `PetRenderer.bodyHeight`).
-  static const double peekShows = 0.5;
+  /// How far Mochi sinks once it has gone right down: its feet go `1 - peekShows` of `PetRenderer.bodyHeight` below the
+  /// window's bottom edge. Mochi's drawn body is only about [artTop] of that height, so this leaves its ears and eyes
+  /// showing (0.5 showed only the ear tips on the Windows VM, 2026-11-08).
+  static const double peekShows = 0.75;
+
+  /// Where the top of Mochi's ears is, as a part of `PetRenderer.bodyHeight` above its feet (measured on screen).
+  static const double artTop = 0.7;
+
+  /// The part of `PetRenderer.bodyHeight` that still shows once Mochi has sunk right down (its clickable slice).
+  static double get peekVisible => artTop - (1 - peekShows);
 
   /// Peekaboo's hide: Mochi (free to wander alone) walks to a free spot and sinks down into the taskbar, looking around
   /// now and then, until [popUp] or anything else cuts the plan. False when it can't (it isn't free, is beside Patch, is
