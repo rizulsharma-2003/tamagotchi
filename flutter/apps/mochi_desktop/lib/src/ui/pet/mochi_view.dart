@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart';
 
@@ -14,6 +15,7 @@ import 'companion_director.dart';
 import 'pet_director.dart';
 import 'pose_sprites.dart';
 import 'stroller.dart';
+import 'umbrella_art.dart';
 import '../../platform/taskbar.dart' show HomeStage;
 import 'taskbar_stroll.dart' show DuoLayout;
 
@@ -56,7 +58,13 @@ class MochiView extends StatefulWidget {
     this.season,
     this.roamBeat,
     this.petAway = false,
+    this.umbrella,
   });
+
+  /// Mochi holds an umbrella (X12: it rains where you are, and Mischief allows it). Drawn over Mochi on the taskbar only,
+  /// while it walks or stands: not asleep, not hiding in the taskbar, not in a moment with Patch. Never part of the pictures
+  /// of poses, which are the same with or without it.
+  final ValueListenable<bool>? umbrella;
 
   /// Mochi is out on the desktop (the native stage draws it): only Patch is drawn here.
   final bool petAway;
@@ -201,6 +209,7 @@ class MochiViewState extends State<MochiView> {
     widget.companion?.addListener(_frame);
     widget.purr?.addListener(_frame);
     widget.roamBeat?.addListener(_frame);
+    widget.umbrella?.addListener(_frame);
     _follow();
   }
 
@@ -231,6 +240,10 @@ class MochiViewState extends State<MochiView> {
     if (old.roamBeat != widget.roamBeat) {
       old.roamBeat?.removeListener(_frame);
       widget.roamBeat?.addListener(_frame);
+    }
+    if (old.umbrella != widget.umbrella) {
+      old.umbrella?.removeListener(_frame);
+      widget.umbrella?.addListener(_frame);
     }
     if (old.petAway != widget.petAway) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _frame() : null);
   }
@@ -327,6 +340,7 @@ class MochiViewState extends State<MochiView> {
     widget.companion?.removeListener(_frame);
     widget.purr?.removeListener(_frame);
     widget.roamBeat?.removeListener(_frame);
+    widget.umbrella?.removeListener(_frame);
     widget.world.removeListener(_worldChanged);
     _moodTimer?.cancel();
     _frames?.cancel();
@@ -375,6 +389,7 @@ class MochiViewState extends State<MochiView> {
             purr: widget.purr,
             season: widget.season,
             petAway: widget.petAway,
+            umbrella: widget.umbrella,
           ),
           size: Size.infinite,
         ),
@@ -420,7 +435,19 @@ class _MochiPainter extends CustomPainter {
     this.purr,
     this.season,
     this.petAway = false,
+    this.umbrella,
   }) : super(repaint: clock);
+
+  /// Whether Mochi holds an umbrella now (X12).
+  final ValueListenable<bool>? umbrella;
+
+  /// Mochi's umbrella, if it holds one: on the taskbar (a walking or standing Mochi: [roam]), not asleep, not hiding.
+  void _paintUmbrella(Canvas canvas, Offset feet, double height, StrollSample? roam, {PetPose? pose}) {
+    if (umbrella?.value != true || roam == null || roam.sink > 0 || roam.lift > 0 || _purring) return;
+    if (director.mood == PetMood.napping || roam.animation == PetAnimation.sleep || roam.animation == PetAnimation.curl) return;
+    if (pose != null && pose.opacity < 1) return;
+    UmbrellaArt.paint(canvas, feet, height, side: roam.facing < 0 ? -1 : 1, dark: dark);
+  }
 
   /// Mochi is out on the desktop: only Patch is drawn.
   final bool petAway;
@@ -546,6 +573,7 @@ class _MochiPainter extends CustomPainter {
       final prop = SceneProp(toy.kind, scale: toy.scale, opacity: toy.opacity, rotation: toy.rotation, variant: toy.variant);
       EffectRenderer.drawProp(prop, g, Offset(size.width / 2 + toy.x - roam!.x, baseline - toy.y), scale, dark);
     }
+    _paintUmbrella(canvas, Offset(size.width / 2, feetAt), PetRenderer.bodyHeight * scale, roam, pose: pose);
     _paintBadge(canvas, Offset(size.width / 2, feetAt), PetRenderer.bodyHeight * scale);
     final elapsed = burst ? patch?.burstAt(clock.value) : null;
     if (elapsed != null) {
@@ -639,6 +667,7 @@ class _MochiPainter extends CustomPainter {
         across: false,
         repeats: repeats && !purring,
       );
+      if (scene == null) _paintUmbrella(canvas, Offset(layout.local(x), baseline), PetRenderer.bodyHeight * k, roam, pose: pet);
       _paintBadge(canvas, Offset(layout.local(x), baseline), PetRenderer.bodyHeight * k);
     }
     for (final prop in scene?.props ?? const <SceneProp>[]) {
@@ -683,5 +712,6 @@ class _MochiPainter extends CustomPainter {
       old.window != window ||
       old.purr != purr ||
       old.season != season ||
-      old.petAway != petAway;
+      old.petAway != petAway ||
+      old.umbrella != umbrella;
 }

@@ -1,6 +1,7 @@
 // Peekaboo (docs/SPRINT_2.md X3): out on the desktop, Mochi's actor isn't topmost and sits just below the window you're
 // using, placed again only when that window changes; topmost as before with the switch off; the top of the normal band
 // for our own windows, the desktop and the shell; and no foreground reads while Mochi is home or the screen is unseen.
+// (An ordinary day: on Diwali the holiday takeover reads the foreground window too.)
 // (The taskbar's hide-while-you're-away is in taskbar_peekaboo_test.dart.)
 
 import 'package:flutter/material.dart';
@@ -51,10 +52,10 @@ void main() {
   late _Home home;
   late FakeForegroundWindows foreground;
   late MischiefStage mischief;
-  var now = DateTime(2026, 11, 8, 15);
+  var now = DateTime(2026, 11, 24, 15);
 
   setUp(() {
-    now = DateTime(2026, 11, 8, 15);
+    now = DateTime(2026, 11, 24, 15);
     t = TestDesktop.make(clock: () => now, activity: const SystemActivity(idleSeconds: 1));
     t.desktop.rhythm.sample();
     stage = FakeNativeStage();

@@ -21,6 +21,10 @@
 //   The toys are props on the plan ([StrollPropTrack]; the view draws them with mochi_art's EffectRenderer.drawProp), and the
 //   window grows around Mochi for them ([StrollPropTrack.reachX]). A toy's play stays inside the free stretch Mochi is in
 //   (so never over a button, and in "Plays in its spot" inside its room) and is skipped when the stretch is too short for it.
+// - Late at night (X12, the Mac's quiet-hours reshuffle; not behind Mischief, as the Mac does it always): with the Windows quiet
+//   hours active (or quiet mode; 23:00 to 05:00 when none are set) the caller says `lateNight`, and the free choice favours
+//   rest: naps three times as likely and twice as long, rests 1.4 times as long, a yawn among the fidgets, and quieter play
+//   (zoomies a quarter, the ball, the yarn and the butterfly half as likely). The Mac's `sleepAtHome` (bed) isn't ported.
 // - Peekaboo (Mischief's X3, only with Mochi free to wander alone): after two minutes without input Mochi walks to a
 //   free spot and sinks down into the taskbar until only its ears and eyes show above the bottom of its window
 //   (`StrollSample.sink`; the view draws it lower and the window's edge cuts it off), looking around now and then. When
@@ -71,6 +75,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:mochi_art/mochi_art.dart' show Ease, PetAnimation, ScenePropKind;
+
+import '../../core/notifications.dart' show NotificationPreferences;
 
 import 'pet_director.dart' show PetMood;
 
@@ -188,6 +194,19 @@ class StrollLine {
 
   @override
   String toString() => 'StrollLine($minX…$maxX)';
+}
+
+/// When it is "late at night" for the stroll (X12): the Mac's `context.quietHours`. The Windows quiet hours (Settings ›
+/// Notifications: the daily window, or quiet mode) when they're set; with none set, 23:00 to 05:00 local time.
+abstract final class LateNight {
+  static const int fromHour = 23;
+  static const int untilHour = 5;
+
+  static bool at(NotificationPreferences settings, DateTime now) {
+    if (settings.quietMode) return true;
+    if (settings.quietHours.enabled) return settings.quietHours.isActive(now);
+    return now.hour >= fromHour || now.hour < untilHour;
+  }
 }
 
 /// Speeds (logical pixels a second) and timings.
@@ -578,6 +597,13 @@ class Stroller {
   // to what a plain picture shows.
   bool _view = true;
 
+  // Late at night (the Mac's `context.quietHours`): the reshuffle of what Mochi chooses (`lateNight`).
+  bool Function() _lateNow = _never;
+
+  static bool _never() => false;
+
+  bool get _late => _lateNow();
+
   // Landmarks (X6): the ones that are known and allowed now, the visit in the plan (until when), and the room the window
   // makes for the visits in the plan.
   List<StrollLandmark> _landmarks = const [];
@@ -608,6 +634,22 @@ class Stroller {
 
   /// The pet's own view draws Mochi (the taskbar window), rather than the native stage.
   bool get view => _view;
+
+  /// It is late at night (quiet hours, or 23:00 to 05:00 without any set: [LateNight]): the Mac's quiet-hours reshuffle
+  /// (`MenuBarRoamer`'s `context.quietHours`). More yawns, longer rests (×1.4), naps three times as likely and twice as
+  /// long, and quieter play (zoomies a quarter, the ball, the yarn and the butterfly half as likely). Used when the next
+  /// stretch is planned; nothing is re-planned for it.
+  set lateNight(bool value) => _lateNow = value ? _always : _never;
+
+  static bool _always() => true;
+
+  /// It is late whenever [late] says so, asked as each stretch is planned (the stroll gives the Windows quiet hours).
+  void lateWhen(bool Function() late) => _lateNow = late;
+
+  bool get lateNight => _late;
+
+  /// Longer or shorter rests between outings: the tuning's, and the Mac's ×1.4 late at night.
+  double get _restScale => tuning.restScale * (_late ? 1.4 : 1);
 
   /// Whether the pet's own view draws Mochi from now on. Without it (Mochi's window is open and the native stage draws Mochi on
   /// the taskbar) the toys, the landmark visits and Peekaboo aren't chosen, since their props, lifts and sink are drawn by the
@@ -1466,12 +1508,12 @@ class Stroller {
         if (_chance(0.45)) _potterNearHome();
         _activity = StrollActivity.company;
         _goHome();
-        _rest(_chance(0.55) ? PetAnimation.sit : PetAnimation.idle, _uniform(12, 40) * tuning.restScale);
+        _rest(_chance(0.55) ? PetAnimation.sit : PetAnimation.idle, _uniform(12, 40) * _restScale);
       case StrollMode.working:
         if (_chance(0.22)) _potterNearHome();
         _activity = StrollActivity.watch;
         _goHome();
-        _rest(PetAnimation.watch, _uniform(14, 40) * tuning.restScale);
+        _rest(PetAnimation.watch, _uniform(14, 40) * _restScale);
       default:
         _chunkAlone();
     }
@@ -1511,20 +1553,20 @@ class Stroller {
         _recent.add(activity);
         if (_recent.length > 4) _recent.removeAt(0);
         _activity = StrollActivity.rest;
-        _rest(_chance(0.7) ? PetAnimation.idle : PetAnimation.sit, _uniform(10, 35) * tuning.restScale);
+        _rest(_chance(0.7) ? PetAnimation.idle : PetAnimation.sit, _uniform(10, 35) * _restScale);
       case StrollMode.working:
         if (_chance(0.25)) _potter();
         _activity = StrollActivity.watch;
-        _rest(PetAnimation.watch, _uniform(14, 40) * tuning.restScale);
+        _rest(PetAnimation.watch, _uniform(14, 40) * _restScale);
       case StrollMode.still:
         _activity = StrollActivity.still;
-        _hold(_chance(0.5) ? PetAnimation.sit : PetAnimation.idle, _uniform(14, 36));
+        _hold(_chance(0.5) ? PetAnimation.sit : PetAnimation.idle, _uniform(14, 36) * _restScale);
         _act(
           _pick([
             (PetAnimation.blep, 1.0),
             (PetAnimation.lookAround, 1.2),
             (PetAnimation.nod, 0.4),
-            if (_idle > 120) (PetAnimation.yawn, 0.8),
+            if (_idle > 120 || _late) (PetAnimation.yawn, 0.8),
           ]),
         );
       case StrollMode.attending || StrollMode.asleep || StrollMode.paused:
@@ -1538,8 +1580,9 @@ class Stroller {
   StrollActivity chooseFreeActivity() => _chooseFree();
 
   /// The Mac's weights (`chooseFreeActivity`): wander 3, sniff 2, fidget 1.8, nap 0.45, and the play: zoomies 1,
-  /// butterfly 1.2, ball 1, yarn 0.5, leaf 0.6 (its normal intensity: there's no calm or lively setting here, and no
-  /// quiet-hours reshuffle). The play only when the stretch Mochi is in is long enough for it.
+  /// butterfly 1.2, ball 1, yarn 0.5, leaf 0.6 (its normal intensity: there's no calm or lively setting here), with the
+  /// quiet-hours reshuffle late at night ([lateNight]; `sleepAtHome` isn't ported: Mochi naps where it is). The play only
+  /// when the stretch Mochi is in is long enough for it.
   StrollActivity _chooseFree() {
     // The longer Claude has been quiet, the sleepier Mochi gets.
     final naps = 0.45 * (_idle > 900 ? 3 : (_idle > 300 ? 2 : 1));
@@ -1560,6 +1603,21 @@ class Stroller {
       for (final visit in StrollVisit.values)
         if (_visitSpot(visit) != null) (visit.activity, 0.6),
     ];
+    if (_late) {
+      // The Mac's quiet-hours weights: naps ×3, zoomies ×0.25, the ball, the yarn and the butterfly ×0.5.
+      options = [
+        for (final (activity, weight) in options)
+          (
+            activity,
+            switch (activity) {
+              StrollActivity.nap => weight * 3,
+              StrollActivity.zoomies => weight * 0.25,
+              StrollActivity.ball || StrollActivity.yarn || StrollActivity.butterfly => weight * 0.5,
+              _ => weight,
+            },
+          ),
+      ];
+    }
     if (_recent.isNotEmpty) options.removeWhere((option) => option.$1 == _recent.last);
     if (_recent.length > 1) {
       final previous = _recent[_recent.length - 2];
@@ -2040,7 +2098,7 @@ class Stroller {
       (PetAnimation.shake, 0.7),
       (PetAnimation.lookAround, 1.0),
       (PetAnimation.blep, 0.6),
-      if (_idle > 120) (PetAnimation.yawn, 0.7),
+      if (_idle > 120 || _late) (PetAnimation.yawn, 0.7),
     ];
     final count = _chance(0.35) ? 2 : 1;
     for (var i = 0; i < count; i++) {
@@ -2053,7 +2111,7 @@ class Stroller {
   void _nap() {
     if (_chance(0.5)) _walk(_x + _roomyDirection() * _uniform(0, 80));
     _act(PetAnimation.yawn);
-    _hold(PetAnimation.curl, _uniform(18, 50) * (_idle > 300 ? 1.5 : 1));
+    _hold(PetAnimation.curl, _uniform(18, 50) * (_idle > 300 ? 1.5 : 1) * (_late ? 2 : 1));
     _act(PetAnimation.wakeUp);
     _act(PetAnimation.stretch);
   }
@@ -2076,7 +2134,7 @@ class Stroller {
       (PetAnimation.scratch, 0.5),
       (PetAnimation.stretch, 0.35),
       (PetAnimation.sniff, 0.3),
-      if (_idle > 120) (PetAnimation.yawn, 0.7),
+      if (_idle > 120 || _late) (PetAnimation.yawn, 0.7),
     ];
     final fidgets = duration >= 30 ? 2 : 1;
     var remaining = duration;

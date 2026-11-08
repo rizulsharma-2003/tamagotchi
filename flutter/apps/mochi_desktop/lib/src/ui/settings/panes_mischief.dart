@@ -3,9 +3,11 @@
 // the rules every extra keeps.
 
 import 'package:flutter/material.dart';
+import 'package:mochi_world/mochi_world.dart' as w;
 
 import '../../core/mischief.dart';
 import '../stage/celebrations.dart' show CelebrationKind;
+import 'mischief_weather_rows.dart';
 import 'settings_kit.dart';
 
 class MischiefPane extends StatelessWidget {
@@ -50,7 +52,10 @@ class MischiefPane extends StatelessWidget {
             SettingsGroup(
               title: 'Extras',
               children: [
-                for (final extra in MischiefExtra.available) _ExtraRow(extra: extra, host: host, everything: all),
+                for (final extra in MischiefExtra.available) ...[
+                  _ExtraRow(extra: extra, host: host, everything: all),
+                  if (extra == MischiefExtra.moods) WeatherRows(host: host),
+                ],
               ],
             ),
             if (stage != null && supported)
@@ -72,6 +77,25 @@ class MischiefPane extends StatelessWidget {
                         onPressed: mischief.enabled ? stage.previewNote : null,
                         child: const Text('Leave a note'),
                       ),
+                    ],
+                  ),
+                  NoteRow(
+                    text:
+                        'These show for 20 seconds, whatever today is. The lights and the snow go on the window you’re using, '
+                        'the pumpkins on your taskbar.',
+                    icon: Icons.celebration_outlined,
+                  ),
+                  ActionsRow(
+                    children: [
+                      for (final (label, event) in const [
+                        ('Diwali lights', w.SeasonalEvent.diwali),
+                        ('Christmas snow', w.SeasonalEvent.christmas),
+                        ('Halloween pumpkins', w.SeasonalEvent.halloween),
+                      ])
+                        OutlinedButton(
+                          onPressed: mischief.enabled && mischief.on(MischiefExtra.holidayTakeover) ? () => stage.previewTakeover(event) : null,
+                          child: Text(label),
+                        ),
                     ],
                   ),
                 ],

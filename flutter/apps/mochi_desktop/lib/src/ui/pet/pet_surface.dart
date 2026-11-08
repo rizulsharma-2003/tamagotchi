@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -48,7 +49,11 @@ class PetSurface extends StatefulWidget {
     this.onOpenPopover,
     this.companion,
     this.exploreLabel,
+    this.umbrella,
   });
+
+  /// Mochi holds an umbrella while it rains (X12: Settings › Mischief › Weather and time moods).
+  final ValueListenable<bool>? umbrella;
 
   final MochiDesktop desktop;
   final TaskbarStroll stroll;
@@ -356,6 +361,7 @@ class _PetSurfaceState extends State<PetSurface> {
                             badge: widget.desktop.reactions.badge?.level,
                             purr: widget.desktop.purr,
                           season: () => widget.desktop.holidays.event,
+                            umbrella: onTaskbar ? widget.umbrella : null,
                           ),
                         ),
                       ),

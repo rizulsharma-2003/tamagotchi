@@ -249,6 +249,8 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   bool _purrSound = true;
   RoomLayout _room = RoomLayout();
   MischiefSettings _mischief = const MischiefSettings();
+  LocalWeatherSettings _weather = const LocalWeatherSettings();
+  String? _coffeeDay;
   AdventureSettings _adventure = const AdventureSettings();
   late DateTime _adoptedAt;
 
@@ -357,6 +359,9 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _purrSound = flag('hapticPurr', true);
     _room = RoomLayout.fromJson(json['room']).sanitized();
     _mischief = MischiefSettings.fromJson(json['mischief']);
+    _weather = LocalWeatherSettings.fromJson(json['weather']);
+    final coffee = json['coffeeDay'];
+    _coffeeDay = coffee is String && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(coffee) ? coffee : null;
     _adventure = AdventureSettings.fromJson(json['adventure']);
   }
 
@@ -737,6 +742,20 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _set(() => _mischief = value);
   }
 
+  /// Local weather (Settings › Mischief › Weather and time moods; X12): off at first, the city and its rounded position.
+  LocalWeatherSettings get weather => _weather;
+  set weather(LocalWeatherSettings value) {
+    if (value == _weather) return;
+    _set(() => _weather = value);
+  }
+
+  /// The day (`2026-11-08`) Mochi last brought Patch his morning coffee (X12): once a day, kept across restarts.
+  String? get coffeeDay => _coffeeDay;
+  set coffeeDay(String? value) {
+    if (value == _coffeeDay) return;
+    _set(() => _coffeeDay = value);
+  }
+
   /// Desktop adventures (Settings › Fun › Adventures; the Mac's `adventure`): Mochi explores the desktop, and how often it
   /// sets off by itself.
   AdventureSettings get adventure => _adventure;
@@ -834,6 +853,8 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'hapticPurr': _purrSound,
     'room': _room.toJson(),
     'mischief': _mischief.toJson(),
+    'weather': _weather.toJson(),
+    if (_coffeeDay != null) 'coffeeDay': _coffeeDay,
     'adventure': _adventure.toJson(),
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
