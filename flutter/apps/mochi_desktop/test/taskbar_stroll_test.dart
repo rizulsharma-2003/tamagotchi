@@ -374,7 +374,10 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('a drag on the pet goes through the stroll: off the taskbar it parks Mochi', (tester) async {
+    testWidgets('a drag on the pet goes through the stroll: off the taskbar, with Adventures off, it parks Mochi', (tester) async {
+      // With Adventures on (the default) and a native stage (Windows), the drop starts an adventure instead
+      // (desktop_pet_test.dart covers that hook).
+      t.desktop.settings.adventure = t.desktop.settings.adventure.copyWith(enabled: false);
       tester.view.physicalSize = SurfaceSizes.pet;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
