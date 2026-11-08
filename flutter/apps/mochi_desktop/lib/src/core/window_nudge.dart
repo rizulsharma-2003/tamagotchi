@@ -9,12 +9,16 @@
 //   faces, held, back) and a tug (±6 px three times). Every one ends exactly at home.
 // - [WindowNudger] runs one nudge at a time:
 //   * `home` is the window's rect at the start (GetWindowRect space, physical pixels), `placed` the last position it set.
-//   * Before every step, the last one included, the rect is read. If it isn't at `placed` (at `home` before the first
-//     step) somebody else moved or resized the window: the nudge stops at once, puts nothing back and never touches
-//     that window again. One exception: an async move may land a frame late, so the rect may be at the previous
-//     `placed` for one step.
-//   * The last step is always a move to exactly `home`; about 100 ms later the rect is read back: still at the last
-//     `placed`, it is moved home once more; somewhere else, it is left.
+//   * Before every step, the last one included, the rect is read. If it is somewhere this nudge never put it (not home,
+//     not any position it sent, or another size) somebody else moved or resized the window: the nudge stops at once,
+//     puts nothing back and never touches that window again.
+//   * The moves are asynchronous (SWP_ASYNCWINDOWPOS): Windows posts them to the window's own thread, which applies them
+//     in order, so a busy window can lag behind. A window at one of the nudge's own earlier positions is lagging, not
+//     moved by you: the nudge waits for it, and after [WindowNudger.lagLimit] sends it home (queued after the rest, so
+//     it ends at home).
+//   * Once any move has been sent, every ending sends a move to exactly `home` (the last in the window's queue), even
+//     when the window still reads at home (the earlier moves may not have landed yet); about 100 ms later the rect is
+//     read back: still at one of the nudge's positions, it is moved home once more; somewhere else, it is left.
 //   * A `SetWindowPos` that fails (a window of a higher integrity level) ends the nudge; that window is skipped for the
 //     rest of the session.
 //   * Abort paths go home at once (one move, if the rect is still at `placed`): a mouse button goes down, the window
@@ -332,6 +336,9 @@ class WindowNudger {
   /// How long after the last step the window is read back.
   final Duration verifyAfter;
 
+  /// A window still behind the nudge's moves after this long (seconds) is sent home at once.
+  static const double lagLimit = 0.3;
+
   NudgePhase _phase = NudgePhase.idle;
   int _hwnd = 0;
   int _pid = 0;
@@ -340,9 +347,10 @@ class WindowNudger {
   late PixelRect _home;
   late (int, int) _homeAt;
   late (int, int) _placed;
-  (int, int)? _prev;
-  late (int, int) _sentFrom;
-  bool _late = false;
+
+  /// Every position this nudge has sent (top-left; home is not in it): where a lagging window may still be.
+  final Set<(int, int)> _sent = {};
+  double? _lateSince;
   bool _moved = false;
   double _startedAt = 0;
   Timer? _timer;
@@ -367,16 +375,18 @@ class WindowNudger {
   /// Where the window is now asked to be, relative to home (physical pixels); (0, 0) when nothing runs.
   (int, int) get offset => running && _phase == NudgePhase.moving ? (_placed.$1 - _homeAt.$1, _placed.$2 - _homeAt.$2) : (0, 0);
 
-  /// The offsets [hwnd]'s frame may be at while it is nudged: where it is asked to be and the step before (an async move
-  /// lands late), and home while it is being read back. Empty for any other window.
+  /// The offsets [hwnd]'s frame may be at while it is nudged: home and every position the nudge has sent (async moves
+  /// land late, in order). Empty for any other window.
   List<(int, int)> offsetsOf(int hwnd) {
     if (!running || hwnd != _hwnd) return const [];
-    (int, int) from(int x, int y) => (x - _homeAt.$1, y - _homeAt.$2);
-    return [
-      from(_placed.$1, _placed.$2),
-      if (_prev != null) from(_prev!.$1, _prev!.$2),
-      if (_phase == NudgePhase.verifying) (0, 0),
-    ];
+    return [(0, 0), for (final at in _sent) (at.$1 - _homeAt.$1, at.$2 - _homeAt.$2)];
+  }
+
+  /// [rect] is somewhere this nudge put the window (or home): the same size, at home or a position it sent.
+  bool _ours(PixelRect rect) {
+    if (rect.width != _home.width || rect.height != _home.height) return false;
+    final at = (rect.left, rect.top);
+    return at == _homeAt || _sent.contains(at);
   }
 
   /// [read] is [before] moved by this nudge (Mochi's own doing, not the user dragging it).
@@ -409,9 +419,8 @@ class WindowNudger {
     _home = rect;
     _homeAt = (rect.left, rect.top);
     _placed = _homeAt;
-    _prev = null;
-    _sentFrom = _homeAt;
-    _late = false;
+    _sent.clear();
+    _lateSince = null;
     _moved = false;
     _startedAt = clock();
     _phase = NudgePhase.moving;
@@ -431,17 +440,15 @@ class WindowNudger {
     if (mover.mouseDown()) return _goHome();
     if (mover.foreground() == _hwnd) return _goHome();
     final current = mover.rect(_hwnd);
-    if (current == null) return _finish('home ok');
+    if (current == null) return _finish('gone');
     if (current != _rectAt(_placed)) {
-      final previous = _prev;
-      if (!_late && previous != null && current == _rectAt(previous)) {
-        // An async move landing a frame late: look again next step.
-        _late = true;
-        return;
-      }
-      return _finish('left (moved by you)');
+      if (!_ours(current)) return _finish('left (moved by you)');
+      // One of the nudge's own moves still to land: wait for it; a window that lags too long goes home now.
+      final since = _lateSince ??= clock();
+      if (clock() - since >= lagLimit) return _goHome();
+      return;
     }
-    _late = false;
+    _lateSince = null;
     final t = clock() - _startedAt;
     if (t >= _motion.duration) return _finalStep();
     final offset = _motion.at(t);
@@ -454,30 +461,31 @@ class WindowNudger {
     _write(target);
     moves++;
     if (!mover.move(_hwnd, target.$1, target.$2)) return _refused();
-    _prev = _placed;
     _placed = target;
-    _late = false;
-    if (target != _homeAt) _moved = true;
+    if (target != _homeAt) {
+      _sent.add(target);
+      _moved = true;
+    }
   }
 
   /// The last step: always a move to exactly home, then a look at it a moment later.
-  void _finalStep() {
-    _sentFrom = _placed;
-    _sendHome();
-  }
+  void _finalStep() => _sendHome();
 
   /// SetWindowPos said no: the window did not move. Nothing is put back for a window that never moved; one that had
   /// already moved gets one try at home.
   void _refused() {
     _wontMove.add(_hwnd);
+    var stranded = false;
     if (_moved) {
+      // Earlier moves may still be landing, so home goes last even when the window reads at home.
       final current = mover.rect(_hwnd);
-      if (current != null && current != _home) {
+      if (current != null && _ours(current)) {
         moves++;
-        mover.move(_hwnd, _homeAt.$1, _homeAt.$2);
+        stranded = !mover.move(_hwnd, _homeAt.$1, _homeAt.$2);
       }
     }
-    _finish('failed');
+    // A window that took moves and now refuses home keeps the journal: the next start tries again.
+    _finish('failed', keepJournal: stranded);
   }
 
   /// Home (one move) and the look back; the journal stays until the window is read at home.
@@ -501,8 +509,11 @@ class WindowNudger {
     _verify?.cancel();
     _verify = null;
     final current = mover.rect(_hwnd);
-    if (current == null || current == _home) return _finish('home ok');
-    if (current == _rectAt(_sentFrom) || current == _rectAt(_placed)) {
+    if (current == null) return _finish('gone');
+    if (current == _home) return _finish('home ok');
+    if (_ours(current)) {
+      // Still at one of the nudge's positions (the home move hasn't landed): home once more, queued after it. Quitting
+      // can't wait to see it land, so the journal stays for the next start.
       if (closing) return _finish('home ok', keepJournal: true);
       moves++;
       mover.move(_hwnd, _homeAt.$1, _homeAt.$2);
@@ -513,22 +524,17 @@ class WindowNudger {
 
   // ---- ending early ----
 
-  /// Everything that sends a window home at once: if the rect is still where the nudge put it (or just before), one
-  /// move home; if somebody else moved it, it stays where they put it.
+  /// Everything that sends a window home at once: if the window is home or at one of the nudge's positions, one move
+  /// home (once anything was sent: an earlier move may still be on its way, and home must be the last); if somebody else
+  /// moved it, it stays where they put it.
   void _goHome() {
     if (_phase != NudgePhase.moving) return;
     _timer?.cancel();
     _timer = null;
     final current = mover.rect(_hwnd);
-    if (current == null || current == _home) return _finish('home ok');
-    final previous = _prev;
-    if (current == _rectAt(_placed)) {
-      _sentFrom = _placed;
-    } else if (previous != null && current == _rectAt(previous)) {
-      _sentFrom = previous;
-    } else {
-      return _finish('left (moved by you)');
-    }
+    if (current == null) return _finish('gone');
+    if (!_ours(current)) return _finish('left (moved by you)');
+    if (!_moved) return _finish('home ok');
     _sendHome();
   }
 
@@ -562,7 +568,8 @@ class WindowNudger {
     log?.call('nudge: ${_kind.name}, $result');
     _phase = NudgePhase.idle;
     _hwnd = 0;
-    _prev = null;
+    _sent.clear();
+    _lateSince = null;
   }
 
   // ---- the journal ----

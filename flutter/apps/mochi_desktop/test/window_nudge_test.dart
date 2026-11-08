@@ -1,5 +1,5 @@
 // Window nudges (docs/SPRINT_2.md X2), the put-back contract: every motion ends exactly at home; the foreground window is
-// never moved; a user's move or resize stops a nudge with nothing put back; a late async move is allowed for one step; a
+// never moved; a user's move or resize stops a nudge with nothing put back; a window lagging behind its own async moves is waited for and then sent home; a
 // refusing window is skipped; every abort goes home; the journal is written first, kept up, deleted, and replayed at
 // startup; every rule on which windows qualify; one at a time. A fake mover and the test clock (it moves with `pump`).
 
@@ -184,7 +184,7 @@ void main() {
       expect(nudger.running, isFalse);
     });
 
-    nudgeTest('an async move landing a frame late is allowed for one step, not two', (tester) async {
+    nudgeTest('a window lagging behind its own async moves is waited for, not taken for your doing', (tester) async {
       mover.deferred = true;
       Future<void> frame({bool land = true}) async {
         await tester.pump(const Duration(milliseconds: 33));
@@ -192,23 +192,62 @@ void main() {
       }
 
       expect(nudger.start(11, NudgeKind.tug), isTrue);
-      await frame(land: false);
-      expect(mover.pending, isNotEmpty, reason: 'the first step is on its way');
-      await frame(land: false);
-      expect(nudger.running, isTrue, reason: 'still behind the first step: allowed for one step');
+      // Two and three steps behind (still under the lag limit): it waits.
+      for (var i = 0; i < 4; i++) {
+        await frame(land: false);
+      }
+      expect(nudger.running, isTrue, reason: 'still behind its own moves, under the lag limit');
+      expect(log, isEmpty);
       mover.land();
-      for (var i = 0; i < 6; i++) {
+      for (var i = 0; i < 20; i++) {
         await frame();
       }
-      expect(nudger.running, isTrue, reason: 'it landed in time and the nudge went on');
-      // Now it stays behind for good: allowed once, then it is taken for the user’s doing.
-      mover.lose = true;
-      await frame();
-      await frame();
-      expect(nudger.running, isTrue, reason: 'one step late');
-      await frame();
       expect(nudger.running, isFalse);
-      expect(log.last, 'nudge: tug, left (moved by you)');
+      expect(mover.windows[11]!.rect, home);
+      expect(log.last, 'nudge: tug, home ok');
+    });
+
+    nudgeTest('a window that lags too long is sent home, last in its queue, and ends at home', (tester) async {
+      mover.deferred = true;
+      expect(nudger.start(11, NudgeKind.shove), isTrue);
+      await tester.pump(const Duration(milliseconds: 33));
+      // A shove step went out; the window doesn't apply anything for longer than the lag limit.
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 33));
+      }
+      expect(nudger.phase, NudgePhase.verifying, reason: 'past the lag limit: home now');
+      expect(mover.attempts.last, (11, home.left, home.top), reason: 'home is the last move queued');
+      mover.land();
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(nudger.running, isFalse);
+      expect(mover.windows[11]!.rect, home);
+      expect(log.last, 'nudge: shove, home ok');
+      expect(store.json, isNull);
+    });
+
+    nudgeTest('aborted while it still reads home but a move is on its way: a home move goes last', (tester) async {
+      mover.deferred = true;
+      expect(nudger.start(11, NudgeKind.shove), isTrue);
+      await tester.pump(const Duration(milliseconds: 66));
+      expect(mover.windows[11]!.rect, home, reason: 'nothing has landed yet');
+      expect(mover.pending, isNotEmpty);
+      mover.mouse = true;
+      await tester.pump(const Duration(milliseconds: 33));
+      expect(mover.attempts.last, (11, home.left, home.top));
+      mover.land();
+      mover.mouse = false;
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(mover.windows[11]!.rect, home, reason: 'the late shove landed, then home');
+      expect(nudger.running, isFalse);
+    });
+
+    nudgeTest('a position the nudge never sent is your doing: left there', (tester) async {
+      await away(tester, kind: NudgeKind.shove);
+      mover.windows[11]!.rect = home.shifted(37, 21);
+      await tester.pump(const Duration(milliseconds: 33));
+      expect(nudger.running, isFalse);
+      expect(mover.windows[11]!.rect, home.shifted(37, 21));
+      expect(log.last, 'nudge: shove, left (moved by you)');
     });
   });
 
