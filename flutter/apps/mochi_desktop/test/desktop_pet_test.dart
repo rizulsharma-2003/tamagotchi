@@ -303,6 +303,32 @@ void main() {
       expect(window.frames.last.bottom, lessThanOrEqualTo(1032), reason: 'above the taskbar');
     });
 
+    petTest('dragged off the taskbar with an adventure ready: it gets the drop point (physical pixels) and Mochi is not parked', (tester) async {
+      final settings = t.desktop.settings;
+      final stroll = await start(tester);
+      final stage = stroll.stage!;
+      final frame = stroll.frame!;
+      (int, int)? drop;
+      stroll.onDropOff = (x, y) {
+        drop = (x, y);
+        return true;
+      };
+      stroll.dragStarted();
+      stroll.dragEnded(Offset(frame.left / stage.scale, 600));
+      await tester.pump();
+      expect(drop, isNotNull);
+      expect(drop!.$2, lessThan(1032), reason: 'above the taskbar, in physical pixels');
+      expect(settings.petStyle, DesktopStyle.roam, reason: 'not parked: roaming stays on');
+      expect(settings.roamTaskbar, isTrue);
+      // An adventure that says no (Adventures off, a full-screen app…): today's behaviour, parked with roaming off.
+      stroll.onDropOff = (x, y) => false;
+      stroll.dragStarted();
+      stroll.dragEnded(Offset(frame.left / stage.scale, 600));
+      await tester.pump();
+      await tester.pump();
+      expect((settings.petStyle, stroll.placement), (DesktopStyle.icon, PetPlacement.standing));
+    });
+
     petTest('Patch only for interesting moments: his desk comes out for one, and goes again after', (tester) async {
       final settings = t.desktop.settings
         ..companionVisibility = CompanionVisibility.always

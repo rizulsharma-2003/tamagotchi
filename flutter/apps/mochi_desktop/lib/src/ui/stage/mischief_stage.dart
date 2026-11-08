@@ -8,9 +8,13 @@
 // - X8 roaming screens (screen_roamer.dart): Mochi walks to the next display and follows you to the one you work on.
 // - X9 sticky notes (sticky_notes.dart): green tests; Claude finishing or needing you while you're away from the PC; a
 //   stretch break after the best part of an hour at it; a streak milestone.
+// - W19 desktop adventures (adventure.dart): the Mac's explore-the-desktop, on the same stage and the same StagePet. It's
+//   a Mac feature, so it isn't behind the Mischief switches (only the rules every extra keeps); of the cursor buddy, the
+//   roamer and the adventure only one has Mochi out at a time, and an adventure you asked for takes Mochi from the other two.
 //
 // Development: `MOCHI_DESKTOP_MISCHIEF_DEMO` ("confetti:20,fireworks:45") repeats a preview every so many seconds
-// while the screen can be seen, for checking and measuring on a PC (with the `perf-debug` meter).
+// while the screen can be seen, for checking and measuring on a PC (with the `perf-debug` meter);
+// `MOCHI_DESKTOP_ADVENTURE_DEMO=60` sets Mochi off on an adventure every 60 seconds (at least 5) the same way.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -21,10 +25,13 @@ import 'package:mochi_world/mochi_world.dart' as w;
 import '../../core/json_store.dart';
 import '../../core/mischief.dart';
 import '../../core/pet_cues.dart';
+import '../../core/sessions.dart' show SessionPhase;
 import '../../desktop.dart';
 import '../../platform/displays.dart';
 import '../../platform/native_stage.dart';
+import '../../platform/window_frames.dart';
 import '../pet/taskbar_stroll.dart' show PetHome;
+import 'adventure.dart';
 import 'celebrations.dart';
 import 'cursor_buddy.dart';
 import 'screen_roamer.dart';
@@ -48,6 +55,8 @@ class MischiefStage extends ChangeNotifier {
     double Function()? clock,
     math.Random? random,
     this.demo = const {},
+    this.frames = const NoWindowFrames(),
+    this.adventureDemo,
   }) : cast = StageCast(stage),
        _shown = shown ?? (() => true) {
     celebrations = StageCelebrations(stage: stage, cast: cast, gate: desktop.mischief, displays: displays, cursor: cursor, clock: clock);
@@ -90,7 +99,41 @@ class MischiefStage extends ChangeNotifier {
         reacting: () => desktop.world.reacting,
         random: random,
       );
+      adventure = DesktopAdventure(
+        pet: pet!,
+        home: home,
+        gate: desktop.mischief,
+        rhythm: desktop.rhythm,
+        displays: displays,
+        windows: frames,
+        settings: desktop.settings,
+        world: desktop.world.world,
+        time: desktop.world.now,
+        shown: _shown,
+        cursor: cursor,
+        busy: _claudeBusy,
+        needsYou: _claudeWaits,
+        asleep: () => desktop.world.asleep,
+        patchHere: () => desktop.world.world.companionPresent,
+        yielding: () => buddy?.release() ?? roamer?.release(),
+        onPet: () => desktop.interact('pet'),
+        onMenu: onMenu,
+        demo: adventureDemo,
+      );
     }
+  }
+
+  /// A Claude session is working or waiting for you (the Mac's "context.activity != .idle").
+  bool _claudeBusy() {
+    final session = desktop.sessions.primary;
+    if (session == null || session.isStale(desktop.sessions.now)) return false;
+    return session.phase == SessionPhase.waitingForUser || session.phase.isWorking;
+  }
+
+  /// A session waits for you.
+  bool _claudeWaits() {
+    final session = desktop.sessions.primary;
+    return session != null && !session.isStale(desktop.sessions.now) && session.phase == SessionPhase.waitingForUser;
   }
 
   final MochiDesktop desktop;
@@ -102,6 +145,10 @@ class MischiefStage extends ChangeNotifier {
 
   /// Development: previews to repeat, every so often.
   final Map<CelebrationKind, Duration> demo;
+
+  /// Where other apps' windows are (W19, X1), and the development switch that sets Mochi off every so often.
+  final WindowFrames frames;
+  final Duration? adventureDemo;
 
   /// What every extra's actors last showed.
   final StageCast cast;
@@ -119,6 +166,9 @@ class MischiefStage extends ChangeNotifier {
 
   /// X8.
   ScreenRoamer? roamer;
+
+  /// W19.
+  DesktopAdventure? adventure;
 
   /// X9.
   late final StickyNotes notes;
@@ -152,6 +202,7 @@ class MischiefStage extends ChangeNotifier {
     desktop.world.everyMinute(_minute);
     buddy?.start();
     roamer?.start();
+    adventure?.start();
     for (final MapEntry(key: kind, value: every) in demo.entries) {
       _demoTimers.add(
         Timer.periodic(every, (_) {
@@ -222,6 +273,7 @@ class MischiefStage extends ChangeNotifier {
   /// The app's window changed form (Mochi's window or the popover opened, or the pet is back): Mochi comes home or may
   /// go out again.
   void surfaceChanged() {
+    adventure?.consider();
     buddy?.consider();
     roamer?.consider();
   }
@@ -229,7 +281,7 @@ class MischiefStage extends ChangeNotifier {
   /// What's on the stage, for the perf meter (null: nothing).
   String? perfState() {
     if (celebrations.running) return 'celebration (${celebrations.playing!.name})';
-    return buddy?.perfState() ?? roamer?.perfState() ?? (notes.notes.isEmpty || notes.hidden ? null : 'notes up (${notes.notes.length})');
+    return adventure?.perfState() ?? buddy?.perfState() ?? roamer?.perfState() ?? (notes.notes.isEmpty || notes.hidden ? null : 'notes up (${notes.notes.length})');
   }
 
   /// A development switch: `MOCHI_DESKTOP_MISCHIEF_DEMO=confetti:20,fireworks:45`.
@@ -245,6 +297,12 @@ class MischiefStage extends ChangeNotifier {
     return demo;
   }
 
+  /// A development switch: `MOCHI_DESKTOP_ADVENTURE_DEMO=60` (seconds, at least 5).
+  static Duration? adventureDemoFrom(String? value) {
+    final seconds = int.tryParse((value ?? '').trim());
+    return seconds == null || seconds < 5 ? null : Duration(seconds: seconds);
+  }
+
   @override
   void dispose() {
     _disposed = true;
@@ -255,6 +313,7 @@ class MischiefStage extends ChangeNotifier {
     for (final timer in _demoTimers) {
       timer.cancel();
     }
+    adventure?.stop();
     buddy?.stop();
     roamer?.stop();
     pet?.dispose();

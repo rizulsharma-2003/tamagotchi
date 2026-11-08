@@ -36,7 +36,14 @@ enum MischiefExtra {
   stickyNotes('Sticky notes', 'Mochi leaves little notes on your desktop, like “Claude finished the tests ✓”.', moves: false),
 
   /// X8: Mochi walks between your displays.
-  roamScreens('Roams your screens', 'Mochi walks from one display to the next and follows you to the one you’re using.', moves: true);
+  roamScreens('Roams your screens', 'Mochi walks from one display to the next and follows you to the one you’re using.', moves: true),
+
+  /// X1: Mochi rides your windows' title bars (on top of the adventures, W19).
+  titleBars(
+    'Title-bar walker',
+    'Mochi rides your windows’ title bars: it holds on when you drag a window and hops off when you snap or minimise it.',
+    moves: true,
+  );
 
   const MischiefExtra(this.title, this.detail, {required this.moves});
 
@@ -200,13 +207,25 @@ class MischiefGate extends ChangeNotifier {
     if (!supported) return MischiefPause.unsupported;
     if (!mischief.enabled) return MischiefPause.off;
     if (!ignoreSwitch && !mischief.on(extra)) return MischiefPause.extraOff;
+    return _rules(fullScreen: fullScreen, moves: extra.moves);
+  }
+
+  /// The rules every extra keeps, in the order they're asked.
+  MischiefPause? _rules({required bool fullScreen, required bool moves}) {
     if (rhythm.unseen) return MischiefPause.unseen;
     if (fullScreen) return MischiefPause.fullScreen;
     if (NotificationPolicy.isQuiet(settings, _clock())) return MischiefPause.quiet;
     if (settings.pauseReactions) return MischiefPause.paused;
-    if (extra.moves && _focusing()) return MischiefPause.focusing;
-    if (extra.moves && motion.reduced) return MischiefPause.calm;
+    if (moves && _focusing()) return MischiefPause.focusing;
+    if (moves && motion.reduced) return MischiefPause.calm;
     return null;
+  }
+
+  /// Why Mochi's desktop adventures (W19: a Mac feature, on by default, so not behind the Mischief switches) can't go out
+  /// now: the same rules as every extra, asked afresh (a full-screen app is looked for now, not at the last look).
+  MischiefPause? whyAdventure() {
+    if (!supported) return MischiefPause.unsupported;
+    return _rules(fullScreen: !rhythm.unseen && _fullScreen(), moves: true);
   }
 
   /// Starts watching.

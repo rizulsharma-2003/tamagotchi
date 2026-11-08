@@ -291,7 +291,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       final settings = t.desktop.settings;
       expect(find.text('Talking'), findsOneWidget);
-      expect(find.text('Not on Windows yet'), findsWidgets, reason: 'games and the rest are still to come');
+      expect(find.text('Not on Windows yet'), findsNothing, reason: 'Adventures (W19) was the last of the Mac’s Fun settings to come');
       expect(find.text('Talking in speech bubbles'), findsNothing, reason: 'no “Not on Windows yet” row for it any more');
 
       await tester.tap(find.widgetWithText(ChoiceChip, 'Chatty'));

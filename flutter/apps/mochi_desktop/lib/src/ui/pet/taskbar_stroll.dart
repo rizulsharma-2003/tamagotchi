@@ -20,8 +20,9 @@
 //   always-on-top windows then). Nothing here ever takes the focus.
 // - While Mochi walks, the window moves 25 times a second (Win32 SetWindowPos, without activating it); while it sits,
 //   watches or naps there's no frame timer at all, only a wake-up for when it next sets off.
-// - Dragging Mochi along the taskbar moves it there; dragging it off the taskbar turns roaming off and leaves it where
-//   it's dropped, until roaming is turned on again (Settings, or "Back to the taskbar" in the tray menu).
+// - Dragging Mochi along the taskbar moves it there; dragging it off the taskbar starts an adventure from where it's
+//   dropped when Adventures are on (W19, ui/stage/adventure.dart), else turns roaming off and leaves it where it's
+//   dropped, until roaming is turned on again (Settings, or "Back to the taskbar" in the tray menu).
 // - Animation effects off: Mochi stays put on the taskbar (expressions only).
 // - A full-screen app or a presentation (SHQueryUserNotificationState) hides the pet until it's over.
 // - Patch on the taskbar (while he's around and "Patch on the taskbar" is on, ui/pet/companion_director.dart): his
@@ -602,6 +603,13 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     return (position: Offset(x.roundToDouble(), (bottom - size.height - 8).roundToDouble()), size: size);
   }
 
+  /// Mochi was let go off the taskbar with its feet at x, y (physical pixels): true when an adventure takes it from
+  /// there (W19), so it isn't parked. Null: no adventures (it's parked, with roaming turned off).
+  bool Function(int x, int y)? onDropOff;
+
+  /// A logical x on the taskbar's display as physical pixels.
+  static int feetX(double x, TaskbarStage stage) => (x * stage.scale).round();
+
   /// Mochi is being dragged: it holds still (and nothing else moves the window) until [dragEnded].
   void dragStarted() {
     _dragging = true;
@@ -611,8 +619,8 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
   }
 
   /// The drag ended with the window's top-left at [to] (logical pixels, as window_manager reports it). Dropped on the
-  /// taskbar, Mochi carries on from there (in the nearest free stretch); dropped off it, roaming turns off and Mochi
-  /// stays where it was dropped. A nudge that left it where it was just carries on.
+  /// taskbar, Mochi carries on from there (in the nearest free stretch); dropped off it, an adventure starts from there
+  /// (W19, with Adventures on: [onDropOff]), else roaming turns off and Mochi stays where it was dropped. A nudge that left it where it was just carries on.
   void dragEnded(Offset? to) {
     _dragging = false;
     if (onTaskbar) {
@@ -643,6 +651,9 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
           _tick();
           return;
         }
+        // With Adventures on, an adventure starts from where Mochi was let go (W19: it falls onto what's below).
+        final drop = onDropOff;
+        if (drop != null && drop(feetX(feet.dx, stage), ((feet.dy - box.height * SurfaceSizes.taskbarFeet) * stage.scale).round())) return;
         _parking = true;
         try {
           _park(feet, stage);

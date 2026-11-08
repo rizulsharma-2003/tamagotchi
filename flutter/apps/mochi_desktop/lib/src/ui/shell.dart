@@ -36,6 +36,9 @@ enum ShellAction {
   recap,
   decorate,
 
+  /// "Explore the Desktop" / "Bring Mochi Home" (W19: Mochi walks along your windows and the taskbar).
+  explore,
+
   /// Where Mochi lives (the Mac's menu-bar styles): roaming the taskbar, playing in its spot there, or as the classic
   /// tray icon.
   roamTaskbar,
@@ -83,6 +86,9 @@ abstract interface class DesktopShell {
 
   /// "Start Focus" or "Stop Focus" in the tray menu, as a focus session runs or not.
   Future<void> setFocusing(bool focusing);
+
+  /// The tray menu's "Explore the Desktop" or "Bring Mochi Home" ([label]; null: no such item, as Adventures are off).
+  Future<void> setExploring(String? label);
 
   /// Shows the tray's menu at the pointer (right-clicking Mochi in the taskbar, whose window is too small for its own).
   Future<void> popUpMenu();
@@ -162,6 +168,7 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   DesktopStyle _style = DesktopStyle.roam;
   bool _updateReady = false;
   bool _focusing = false;
+  String? _explore;
 
   @override
   Size mainSize = SurfaceSizes.main;
@@ -213,7 +220,7 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
     await _menu();
   }
 
-  Future<void> _menu() => trayManager.setContextMenu(Menu(items: trayItems(style: _style, updateReady: _updateReady, focusing: _focusing)));
+  Future<void> _menu() => trayManager.setContextMenu(Menu(items: trayItems(style: _style, updateReady: _updateReady, focusing: _focusing, explore: _explore)));
 
   static const String _appIcon = 'assets/tray/tray_icon.ico';
   String? _trayIcon;
@@ -234,12 +241,13 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   }
 
   /// The tray menu.
-  static List<MenuItem> trayItems({required DesktopStyle style, bool updateReady = false, bool focusing = false}) => [
+  static List<MenuItem> trayItems({required DesktopStyle style, bool updateReady = false, bool focusing = false, String? explore}) => [
     if (updateReady) ...[MenuItem(key: ShellAction.restartToUpdate.name, label: 'Restart to Update'), MenuItem.separator()],
     MenuItem(key: ShellAction.showMain.name, label: 'Show Mochi'),
     MenuItem(key: ShellAction.pair.name, label: 'Pair a Phone…'),
     MenuItem(key: ShellAction.settings.name, label: 'Settings'),
     MenuItem.separator(),
+    if (explore != null) MenuItem(key: ShellAction.explore.name, label: explore),
     MenuItem(key: ShellAction.focus.name, label: focusing ? 'Stop Focus' : 'Start Focus'),
     MenuItem(key: ShellAction.games.name, label: 'Games…'),
     MenuItem(key: ShellAction.recap.name, label: 'Today’s Recap…'),
@@ -264,6 +272,13 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   Future<void> setFocusing(bool focusing) async {
     if (focusing == _focusing) return;
     _focusing = focusing;
+    await _menu();
+  }
+
+  @override
+  Future<void> setExploring(String? label) async {
+    if (label == _explore) return;
+    _explore = label;
     await _menu();
   }
 

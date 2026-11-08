@@ -269,6 +269,19 @@ class ScreenRoamer {
     home.comeBack(x: keep ? back?.$1 : null);
   }
 
+  /// Another extra takes Mochi over (an adventure you asked for): the roamer lets go where Mochi stands, which stays out
+  /// (the new owner brings it home). Returns where its feet are, or null when it wasn't out.
+  (int, int)? release() {
+    if (!_out) return null;
+    final feet = (_x.round(), _y.round());
+    _stopTimer();
+    _out = false;
+    _paused = false;
+    _legs = [];
+    _target = null;
+    return feet;
+  }
+
   void _displaysChanged() {
     if (_out && !_paused && _lost(displays.list())) _homeNow();
   }

@@ -26,6 +26,7 @@ import 'package:mochi_desktop/src/platform/displays.dart';
 import 'package:mochi_desktop/src/platform/startup.dart';
 import 'package:mochi_desktop/src/platform/system.dart';
 import 'package:mochi_desktop/src/platform/taskbar.dart';
+import 'package:mochi_desktop/src/platform/window_frames.dart';
 import 'package:mochi_desktop/src/ui/shell.dart';
 import 'package:mochi_desktop/src/update/self_install.dart';
 import 'package:mochi_desktop/src/update/updater.dart';
@@ -267,6 +268,12 @@ class FakeShell implements DesktopShell {
 
   @override
   Future<void> setFocusing(bool focusing) async => trayFocus.add(focusing);
+
+  /// The tray's Explore item, each time it changed (null: none).
+  final List<String?> trayExplore = [];
+
+  @override
+  Future<void> setExploring(String? label) async => trayExplore.add(label);
 
   @override
   Future<void> popUpMenu() async => menus++;
@@ -826,4 +833,34 @@ class FakeDisplays implements Displays {
 
   @override
   DisplayArea? foreground() => front;
+}
+
+/// Other apps' windows, as the test sets them: front to back, physical pixels (W19, X1).
+class FakeWindowFrames implements WindowFrames {
+  FakeWindowFrames([List<WindowFrame>? windows]) : windows = windows ?? [];
+
+  List<WindowFrame> windows;
+
+  /// Windows that are minimised (still there, but not on screen: neither listed nor read).
+  final Set<int> minimised = {};
+
+  /// How many times the whole list was read, and how many times one window was.
+  int lists = 0;
+  int reads = 0;
+
+  @override
+  List<WindowFrame> list() {
+    lists++;
+    return [
+      for (final window in windows)
+        if (!minimised.contains(window.hwnd)) window,
+    ];
+  }
+
+  @override
+  WindowFrame? frame(int hwnd) {
+    reads++;
+    if (minimised.contains(hwnd)) return null;
+    return windows.where((window) => window.hwnd == hwnd).firstOrNull;
+  }
 }

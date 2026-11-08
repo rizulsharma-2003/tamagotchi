@@ -109,6 +109,7 @@ void main() {
   }
 
   Future<void> done(WidgetTester tester) async {
+    mischief.adventure?.stop();
     mischief.buddy?.stop();
     mischief.roamer?.stop();
     t.desktop.mischief.stop();

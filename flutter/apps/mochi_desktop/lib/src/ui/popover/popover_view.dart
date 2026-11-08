@@ -41,6 +41,7 @@ class PopoverView extends StatelessWidget {
     required this.onSetUpClaude,
     this.onGames,
     this.onRecap,
+    this.onExplore,
     this.hidePet = false,
   });
 
@@ -60,6 +61,9 @@ class PopoverView extends StatelessWidget {
   /// The fun row: the Games window and today's recap.
   final VoidCallback? onGames;
   final VoidCallback? onRecap;
+
+  /// The fun row's Explore (W19: Mochi sets off along your windows; the popover closes first). Null: no such button.
+  final VoidCallback? onExplore;
 
   /// Mochi is leaping in or out: the room without it.
   final bool hidePet;
@@ -127,7 +131,7 @@ class PopoverView extends StatelessWidget {
                               const SizedBox(height: Space.xs),
                               _PetControls(desktop: desktop),
                               const SizedBox(height: Space.s),
-                              _FunRow(desktop: desktop, onGames: onGames, onRecap: onRecap),
+                              _FunRow(desktop: desktop, onGames: onGames, onRecap: onRecap, onExplore: onExplore),
                               const SizedBox(height: Space.s),
                               if (desktop.focus.status case final status?) ...[
                                 FocusRow(desktop: desktop, status: status),
@@ -640,17 +644,27 @@ class _PetControls extends StatelessWidget {
 
 /// The Mac's fun row: the games (and, as each comes to Windows, the rest of the Mac's row).
 class _FunRow extends StatelessWidget {
-  const _FunRow({required this.desktop, this.onGames, this.onRecap});
+  const _FunRow({required this.desktop, this.onGames, this.onRecap, this.onExplore});
 
   final MochiDesktop desktop;
   final VoidCallback? onGames;
   final VoidCallback? onRecap;
+  final VoidCallback? onExplore;
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
     final pet = desktop.settings.petName;
     final buttons = [
+      // The Mac's Explore (its popover shows Home while Mochi is out; here opening the popover brings Mochi home first).
+      if (onExplore != null && desktop.settings.adventure.enabled)
+        _ControlButton(
+          title: 'Explore',
+          label: 'Explore: $pet leaves the taskbar to explore your desktop',
+          icon: Icons.directions_walk_rounded,
+          tint: p.tint,
+          onTap: onExplore!,
+        ),
       if (onGames != null)
         _ControlButton(
           title: 'Games',

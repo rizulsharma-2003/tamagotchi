@@ -29,6 +29,7 @@ class SettingsHost {
     this.onGames,
     this.onRecap,
     this.onDecorate,
+    this.onExplore,
     this.mischief,
   });
 
@@ -42,6 +43,9 @@ class SettingsHost {
 
   /// Decorates the room in Mochi's window (Settings › Fun › Room › Decorate…).
   final VoidCallback? onDecorate;
+
+  /// Sets Mochi off to explore the desktop (Settings › Fun › Adventures › Explore Now).
+  final VoidCallback? onExplore;
 
   /// The Windows extras on the native stage, for Settings › Mischief's "Try it".
   final MischiefStage? mischief;
