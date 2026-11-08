@@ -37,6 +37,8 @@ struct Answer {
   int icon_size = 0;
   bool more = false;  // icons this answer does not list (more than 64, or one whose place is not known)
   std::vector<Icon> icons;
+  int failed_step = 0;  // when !ok: which shell call failed (desktop_icons.cpp's Step), and its HRESULT (0: none)
+  long failed_hr = 0;
 };
 
 // Asks the worker to read the desktop (Read), or to move icon |id| (from the latest Read) to the screen pixel (|x|, |y|)

@@ -3,6 +3,7 @@
 #include <flutter/standard_method_codec.h>
 #include <wtsapi32.h>
 
+#include <cstdio>
 #include <optional>
 
 #include "desktop_icons.h"
@@ -368,7 +369,12 @@ void FlutterWindow::AnswerIcons() {
     return;
   }
   if (!answer.ok) {
-    result->Success();
+    // Which shell call failed, for the stroll-debug log (a step number and an HRESULT, nothing about the desktop).
+    char failure[48] = {0};
+    sprintf_s(failure, sizeof(failure), "step %d, 0x%08lx", answer.failed_step, static_cast<unsigned long>(answer.failed_hr));
+    flutter::EncodableMap error;
+    error[flutter::EncodableValue("error")] = flutter::EncodableValue(std::string(failure));
+    result->Success(flutter::EncodableValue(error));
     return;
   }
   flutter::EncodableMap map;

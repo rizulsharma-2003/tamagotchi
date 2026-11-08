@@ -79,10 +79,22 @@ struct DesktopView {
   HWND list = nullptr;
 };
 
-bool Acquire(DesktopView* out) {
+// Which call failed, for the stroll-debug log when the desktop can't be read (a number and an HRESULT, nothing else).
+enum Step {
+  kCreate = 1, kFind, kProvider, kBrowser, kView, kFolder, kViewWindow, kList, kFlags, kSpacing, kIconSize, kItems
+};
+
+bool Fail(Answer* answer, int step, HRESULT hr) {
+  answer->failed_step = step;
+  answer->failed_hr = static_cast<long>(hr);
+  return false;
+}
+
+bool Acquire(DesktopView* out, Answer* answer) {
   ComPtr<IShellWindows> windows;
-  if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&windows)))) {
-    return false;
+  HRESULT hr = CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&windows));
+  if (FAILED(hr)) {
+    return Fail(answer, kCreate, hr);
   }
   VARIANT location;
   VariantInit(&location);
@@ -92,30 +104,36 @@ bool Acquire(DesktopView* out) {
   VariantInit(&empty);
   long found = 0;
   ComPtr<IDispatch> dispatch;
-  if (FAILED(windows->FindWindowSW(&location, &empty, SWC_DESKTOP, &found, SWFO_NEEDDISPATCH, &dispatch)) || !dispatch) {
-    return false;
+  hr = windows->FindWindowSW(&location, &empty, SWC_DESKTOP, &found, SWFO_NEEDDISPATCH, &dispatch);
+  if (FAILED(hr) || !dispatch) {
+    return Fail(answer, kFind, hr);
   }
   ComPtr<IServiceProvider> provider;
-  if (FAILED(dispatch.As(&provider))) {
-    return false;
+  hr = dispatch.As(&provider);
+  if (FAILED(hr)) {
+    return Fail(answer, kProvider, hr);
   }
   ComPtr<IShellBrowser> browser;
-  if (FAILED(provider->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&browser)))) {
-    return false;
+  hr = provider->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&browser));
+  if (FAILED(hr)) {
+    return Fail(answer, kBrowser, hr);
   }
   ComPtr<IShellView> view;
-  if (FAILED(browser->QueryActiveShellView(&view)) || !view) {
-    return false;
+  hr = browser->QueryActiveShellView(&view);
+  if (FAILED(hr) || !view) {
+    return Fail(answer, kView, hr);
   }
-  if (FAILED(view.As(&out->folder))) {
-    return false;
+  hr = view.As(&out->folder);
+  if (FAILED(hr)) {
+    return Fail(answer, kFolder, hr);
   }
   HWND def_view = nullptr;
-  if (FAILED(view->GetWindow(&def_view)) || def_view == nullptr) {
-    return false;
+  hr = view->GetWindow(&def_view);
+  if (FAILED(hr) || def_view == nullptr) {
+    return Fail(answer, kViewWindow, hr);
   }
   out->list = ::FindWindowExW(def_view, nullptr, L"SysListView32", nullptr);
-  return out->list != nullptr;
+  return out->list != nullptr || Fail(answer, kList, HRESULT_FROM_WIN32(::GetLastError()));
 }
 
 // The icons by id, as of the latest read: owned by the worker thread alone, each a clone freed with CoTaskMemFree when the
@@ -131,24 +149,32 @@ void Forget(Items* items) {
 
 void DoRead(Items* items, Answer* answer) {
   DesktopView view;
-  if (!Acquire(&view)) {
+  if (!Acquire(&view, answer)) {
     return;
   }
   DWORD flags = 0;
-  if (FAILED(view.folder->GetCurrentFolderFlags(&flags))) {
+  HRESULT hr = view.folder->GetCurrentFolderFlags(&flags);
+  if (FAILED(hr)) {
+    Fail(answer, kFlags, hr);
     return;
   }
   POINT spacing = {0, 0};
-  if (FAILED(view.folder->GetSpacing(&spacing))) {
+  hr = view.folder->GetSpacing(&spacing);
+  if (FAILED(hr)) {
+    Fail(answer, kSpacing, hr);
     return;
   }
   FOLDERVIEWMODE mode = FVM_ICON;
   int icon_size = 0;
-  if (FAILED(view.folder->GetViewModeAndIconSize(&mode, &icon_size))) {
+  hr = view.folder->GetViewModeAndIconSize(&mode, &icon_size);
+  if (FAILED(hr)) {
+    Fail(answer, kIconSize, hr);
     return;
   }
   ComPtr<IEnumIDList> list;
-  if (FAILED(view.folder->Items(SVGIO_ALLVIEW, IID_PPV_ARGS(&list))) || !list) {
+  hr = view.folder->Items(SVGIO_ALLVIEW, IID_PPV_ARGS(&list));
+  if (FAILED(hr) || !list) {
+    Fail(answer, kItems, hr);
     return;
   }
   Items fresh;
@@ -210,7 +236,7 @@ void DoMove(const Items& items, const Job& job, Answer* answer) {
     return;
   }
   DesktopView view;
-  if (!Acquire(&view)) {
+  if (!Acquire(&view, answer)) {
     return;
   }
   POINT at = {static_cast<LONG>(job.x), static_cast<LONG>(job.y)};

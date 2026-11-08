@@ -848,7 +848,7 @@ class DesktopAdventure extends ChangeNotifier {
 
   Future<void> _visitIcon(_Outing outing, IconNudger play) async {
     final read = await play.read();
-    if (read == null) return play.log?.call('icons: the desktop could not be read');
+    if (read == null) return play.log?.call('icons: the desktop could not be read (${play.icons.lastError ?? 'no answer'})');
     if (!_free(outing)) return;
     if (read.autoArrange) {
       play.log?.call('icons: auto-arrange');

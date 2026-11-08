@@ -122,6 +122,9 @@ abstract interface class DesktopIcons {
   /// The desktop (Progman, WorkerW) or a taskbar is the foreground window: you are using the desktop.
   bool usingDesktop();
 
+  /// Why the last [read] came back empty (which shell call failed), for the stroll-debug log; null when it didn't.
+  String? get lastError;
+
   /// A mouse button is down.
   bool mouseDown();
 }
@@ -132,6 +135,9 @@ class NoDesktopIcons implements DesktopIcons {
 
   @override
   Future<IconsRead?> read() async => null;
+
+  @override
+  String? get lastError => null;
 
   @override
   Future<bool> move(String id, int x, int y) async => false;
@@ -155,11 +161,17 @@ class RunnerDesktopIcons implements DesktopIcons {
   @override
   Future<IconsRead?> read() async {
     try {
-      return IconsRead.fromJson(await _channel.invokeMethod<Object?>('desktopIcons'));
-    } on Object {
+      final answer = await _channel.invokeMethod<Object?>('desktopIcons');
+      lastError = answer is Map && answer['error'] is String ? answer['error'] as String : null;
+      return IconsRead.fromJson(answer);
+    } on Object catch (error) {
+      lastError = error.runtimeType.toString();
       return null;
     }
   }
+
+  @override
+  String? lastError;
 
   @override
   Future<bool> move(String id, int x, int y) async {

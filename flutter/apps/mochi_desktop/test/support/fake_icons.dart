@@ -7,6 +7,9 @@ import 'dart:async';
 import 'package:mochi_desktop/src/platform/desktop_icons.dart';
 
 class FakeIcons implements DesktopIcons {
+  @override
+  String? lastError;
+
   FakeIcons(Map<String, (int, int)> icons, {this.grid = true, this.autoArrange = false, this.hidden = false, this.cellWidth = 75, this.cellHeight = 100, this.iconSize = 48})
     : positions = Map.of(icons);
 

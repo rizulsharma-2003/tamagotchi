@@ -137,7 +137,7 @@ New-NetFirewallRule -DisplayName 'mochi-check-no-network' -Direction Outbound -A
 New-Item -ItemType File -Force -Path \"\$env:LOCALAPPDATA\\Mochi\\perf-debug\" | Out-Null
 Remove-Item \"\$env:LOCALAPPDATA\\Mochi\\perf.log\" -ErrorAction SilentlyContinue
 Set-Content -Encoding ascii '$dir\\run.env' \"$env_lines\"
-schtasks /Create /TN MochiCheckRun /TR 'powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File $dir\\tools\\run.ps1 -Exe $rel\\Mochi.exe -EnvFile $dir\\run.env' /SC ONCE /ST 23:59 /IT /F | Out-Null
+schtasks /Create /TN MochiCheckRun /TR 'powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File $dir\\tools\\run.ps1 -Exe $rel\\Mochi.exe -EnvFile $dir\\run.env' /SC ONCE /ST 23:59 /IT /RL LIMITED /F | Out-Null
 schtasks /Run /TN MochiCheckRun | Out-Null
 'started'" | tee -a "$out/summary.txt"
 on_desktop MochiCheckWake "-File $dir\\tools\\wake.ps1" 5
