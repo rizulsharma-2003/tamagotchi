@@ -50,6 +50,10 @@
 //   stops, a pounce or a sit facing it. A pointer coming to Mochi (within a body and a half) stops it at once, facing
 //   you, holding still: it never moves away from one that's coming to it, so it can be clicked. The pointer leaving the
 //   taskbar, Mochi watches a moment and carries on strolling (`follow`).
+// - Always clickable, buddy or not (`reach`, the user's rule of 2026-11-08): a pointer within Mochi's body and a margin stops a
+//   walking Mochi where it is at once (even over a button), and it holds, facing you, for as long as the pointer stays near;
+//   a second after it left Mochi carries on (first to free room if it stands over a button). The buddy's own hold, Peekaboo,
+//   a lifted landmark visit, a drag and Patch's moments are left alone.
 // - Patch around (a home: his desk is to the right of it, ui/pet/companion_director.dart): Mochi keeps him company as
 //   on the Mac (`RoamMode.companion`, `.working`): it sits with him, potters a little way off and comes back, watches
 //   him work, waves from beside him when Claude needs you and naps there. For a moment together (a high five, a coffee
@@ -561,6 +565,11 @@ class Stroller {
   double? _offSince;
   double _lastRetarget = double.negativeInfinity;
 
+  // A pointer coming to Mochi (always clickable): whether the plan is Mochi holding still for it, and since when the pointer
+  // has been away (null: it's near).
+  bool _reaching = false;
+  double? _reachOff;
+
   // Peekaboo: the plan is Mochi hiding (walking to its spot, sunk down, looking around).
   bool _hiding = false;
 
@@ -686,6 +695,8 @@ class Stroller {
     _home = null;
     _buddy = false;
     _hiding = false;
+    _reaching = false;
+    _reachOff = null;
     _segments.clear();
     _props.clear();
     _rooms.clear();
@@ -701,7 +712,8 @@ class Stroller {
       _replan = true;
       _buddy = false;
     }
-    if (_replan && now >= _holdUntil) {
+    // A Mochi holding for a pointer on it goes on holding: the new mode starts when the pointer has left.
+    if (_replan && now >= _holdUntil && !_reaching) {
       _replan = false;
       _restart(now);
     }
@@ -1041,6 +1053,61 @@ class Stroller {
   /// Mochi is keeping the pointer company (tests).
   bool get buddying => _buddy;
 
+  // MARK: A pointer coming to click
+
+  /// Mochi holds still this long (seconds) after the pointer left it before it carries on, so a pointer that brushes past
+  /// doesn't jerk it about.
+  static const double reachWait = 1.0;
+
+  /// A walk that sets off within this long (seconds) of a pointer resting on Mochi is cut short before it starts.
+  static const double reachAhead = 1.5;
+
+  /// Mochi is holding still for a pointer that came to it (tests).
+  bool get reaching => _reaching;
+
+  /// Mochi is always clickable (called each time the pointer is read, with or without the cursor buddy): [near] is the pointer
+  /// within Mochi's body and a margin. Mochi never moves its body away from a pointer coming to click it: it stops where it
+  /// is at once, even over a button, and holds (facing you) for as long as the pointer stays near. A second after the pointer
+  /// left it carries on, first walking to the nearest free spot if it stands over a button. Left alone: the cursor buddy
+  /// (its own `follow` holds), Peekaboo (sunk down, it takes clicks as it is), a visit that has Mochi lifted, a drag or
+  /// reaction, Patch's moments together, and Mochi that doesn't travel (`StrollMode.still`). Returns whether the plan changed
+  /// (the caller then moves the window and times its frames).
+  bool reach(double now, {required bool near}) {
+    if (!isPlaced) return false;
+    if (_reaching) {
+      if (_hiding || _buddy || _home != null || _mode == StrollMode.still || now < _holdUntil) {
+        _reaching = false;
+        _reachOff = null;
+        return false;
+      }
+      if (near) {
+        _reachOff = null;
+        return false;
+      }
+      _reachOff ??= now;
+      if (now - _reachOff! < reachWait) return false;
+      _reaching = false;
+      _reachOff = null;
+      _replan = false;
+      _restart(now);
+      _extend(now);
+      return true;
+    }
+    if (!near || _hiding || _buddy || _home != null || _mode == StrollMode.still || now < _holdUntil) return false;
+    // Lifted on a landmark (or leaping to or from one): not walking, and cutting it would only make it leap away.
+    if (_state(now).lift > 0) return false;
+    // Only a plan that would move Mochi's body is cut: one that stays where it is goes on.
+    final moves = _segments.any((segment) => segment.travels && segment.end > now && segment.start < now + reachAhead);
+    if (!moves) return false;
+    _cut(now, settle: false);
+    _reaching = true;
+    _reachOff = null;
+    _activity = StrollActivity.follow;
+    _holdForever(PetAnimation.idle, style: StrollStyle.attentive);
+    _extend(now);
+    return true;
+  }
+
   // MARK: The plan
 
   void _pen(double t, double x, double facing, double odometer, {double sink = 0, double lift = 0}) {
@@ -1096,6 +1163,8 @@ class Stroller {
     final state = _state(now);
     _segments.clear();
     _hiding = false;
+    _reaching = false;
+    _reachOff = null;
     // A toy still in play goes with the plan.
     _props.removeWhere((track) => track.end > now);
     _rooms.removeWhere((room) => room.end > now);

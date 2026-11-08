@@ -27,6 +27,9 @@
 //   second, and the window takes clicks only while it's over Mochi (to pet, open or drag it). The same check puts the
 //   window back on top of the taskbar every half second, and at once when the taskbar is clicked (it rises over other
 //   always-on-top windows then). Nothing here ever takes the focus.
+// - Mochi never runs away from a pointer coming to click it (2026-11-08): each pointer tick hands the stroll whether the
+//   pointer is near Mochi's body (the pet window's, or, with Mochi's window open, where the stage draws it: `_reach`,
+//   `Stroller.reach`), and Mochi stops where it is and holds until a second after the pointer left, buddy or not.
 // - While Mochi walks, the window moves 25 times a second (Win32 SetWindowPos, without activating it); while it sits,
 //   watches or naps there's no frame timer at all, only a wake-up for when it next sets off.
 // - Dragging Mochi along the taskbar moves it there; dragging it off the taskbar starts an adventure from where it's
@@ -1461,9 +1464,6 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     _taskbarWasInFront = inFront;
     final cursor = taskbar.cursor();
     _follow(stage, cursor);
-    _peek(cursor);
-    _visitLandmarks();
-    _setClickThrough(!(_dragging || (cursor != null && _overBody(stage, frame, cursor.$1, cursor.$2))));
     // Faster while the pointer is near them, the usual pace otherwise.
     final margin = (nearMargin * stage.scale).round();
     final near =
@@ -1472,6 +1472,10 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
           (body) =>
               PixelRect(body.left - margin, body.top - margin, body.right + margin, body.bottom + margin).contains(cursor.$1, cursor.$2),
         );
+    _reach(near);
+    _peek(cursor);
+    _visitLandmarks();
+    _setClickThrough(!(_dragging || (cursor != null && _overBody(stage, frame, cursor.$1, cursor.$2))));
     // While Mochi naps and the pointer hasn't moved (you're away), twice a second is enough; it moves, and the usual
     // pace is back at once.
     final still = cursor != null && cursor == _lastCursor;
@@ -1510,6 +1514,14 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     _taskbarWasInFront = inFront;
     final cursor = taskbar.cursor();
     _follow(stage, cursor);
+    // The same test as the pet window's, against where the stage draws Mochi (its feet and box: there's no window frame).
+    final margin = (nearMargin * stage.scale).round();
+    final body = stroller.isPlaced ? stage.bodyAt(stroller.sample(now).x) : null;
+    _reach(
+      cursor != null &&
+          body != null &&
+          PixelRect(body.left - margin, body.top - margin, body.right + margin, body.bottom + margin).contains(cursor.$1, cursor.$2),
+    );
     final still = cursor != null && cursor == _lastCursor;
     _lastCursor = cursor;
     final interval = _mood == PetMood.napping && still ? napPointerInterval : pointerInterval;
@@ -1531,6 +1543,12 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
       allowed: mischief?.may(MischiefExtra.cursorBuddy) ?? false,
     );
     if (changed) _tick();
+  }
+
+  /// Always clickable: whether the pointer is near Mochi goes to the stroll every tick, with or without the cursor buddy, and
+  /// Mochi holds still for a pointer coming to click it (and carries on a second after it left).
+  void _reach(bool near) {
+    if (stroller.reach(_clock(), near: near)) _tick();
   }
 
   /// Sends Mochi to [kind]'s landmark now (tests).
