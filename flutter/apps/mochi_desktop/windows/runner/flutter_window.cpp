@@ -146,8 +146,13 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   mochi_toasts::Stop();
-  mochi_media::Stop();
-  mochi_icons::Stop();
+  // Win32Window::Create calls Destroy (and so this) before the window exists. The media and icon workers stop for good, so
+  // they are stopped only once the window was made (the Flutter controller is OnCreate's); stopping them at that first
+  // call left music detection (X7) and icon play (X5) off for the whole run.
+  if (flutter_controller_) {
+    mochi_media::Stop();
+    mochi_icons::Stop();
+  }
   if (icons_result_) {
     icons_result_->Success(IconsError("closing"));
     icons_result_ = nullptr;
