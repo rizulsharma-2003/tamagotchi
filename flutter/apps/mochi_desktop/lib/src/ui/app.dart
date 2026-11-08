@@ -722,7 +722,13 @@ class DesktopAppState extends State<DesktopApp> {
           onClosed: () => unawaited(_popoverClosed()),
           panel: (hidePet) => _popoverPanel(hidePet),
         ),
-        Surface.main => _MainSurface(state: this),
+        // While nobody can see the screen (the display off, the PC locked or asleep), Mochi's window stops its
+        // animations too, as the taskbar pet does: left open overnight it would otherwise draw its room all night.
+        Surface.main => ListenableBuilder(
+          listenable: desktop.rhythm,
+          builder: (context, child) => TickerMode(enabled: !desktop.rhythm.unseen, child: child!),
+          child: _MainSurface(state: this),
+        ),
         Surface.hidden => const SizedBox.shrink(),
       },
     ),

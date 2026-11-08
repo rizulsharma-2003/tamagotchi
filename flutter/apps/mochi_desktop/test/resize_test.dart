@@ -4,7 +4,9 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_art/pose_tracks.dart';
+import 'package:mochi_desktop/src/core/pc_rhythm.dart';
 import 'package:mochi_desktop/src/ui/app.dart';
+import 'package:mochi_desktop/src/ui/screens/home_screen.dart';
 import 'package:mochi_desktop/src/ui/shell.dart';
 import 'package:mochi_desktop/src/ui/widgets/resize_edges.dart';
 
@@ -104,6 +106,26 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(t.desktop.settings.mainWindowSize, isNull);
+  });
+
+  testWidgets("Mochi's window stops animating while nobody can see the screen, and carries on when it's back", (
+    tester,
+  ) async {
+    await show(tester);
+    bool animating() => TickerMode.of(tester.element(find.byType(HomeScreen)));
+    t.desktop.rhythm.report(const SystemActivity(idleSeconds: 2));
+    await tester.pump();
+    expect(animating(), isTrue);
+
+    // The display goes off, or the PC is locked.
+    t.desktop.rhythm.report(const SystemActivity(idleSeconds: 2, displaysAsleep: true));
+    await tester.pump();
+    expect(t.desktop.rhythm.unseen, isTrue);
+    expect(animating(), isFalse);
+
+    t.desktop.rhythm.report(const SystemActivity(idleSeconds: 0));
+    await tester.pump();
+    expect(animating(), isTrue);
   });
 
   test('saved window sizes survive a restart and silly values are ignored', () {
