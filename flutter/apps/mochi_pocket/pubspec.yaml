@@ -18,6 +18,10 @@ dependencies:
     path: ../../packages/mochi_art
   mochi_link:
     path: ../../packages/mochi_link
+  # Mochi's world: the Mac's pet-life engine in Dart (Sprint 2 G1), which runs the room as the iPhone's CompanionWorld
+  # does (A5).
+  mochi_world:
+    path: ../../packages/mochi_world
   # Mochi's ongoing notification while Claude works (A1), a local plugin so the push handler's background engine has it.
   mochi_live_update:
     path: plugins/mochi_live_update
@@ -52,9 +56,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    # Mochi's and Patch's animations recorded from the Swift app (the same file as mochi_gallery's).
-    - assets/pose_tracks.json.deflate
   # Nunito (SIL OFL 1.1, fonts/OFL.txt; no Reserved Font Name), the open rounded face closest to the iPhone's SF Pro
   # Rounded, which Apple licenses for Apple platforms only. Bundled, so text works offline. Source: google/fonts
   # ofl/nunito/Nunito[wght].ttf (v3.602) at commit 8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5. Flutter 3.35 doesn't map

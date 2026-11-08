@@ -407,7 +407,6 @@ void main() {
           settings: settings,
           reader: UpdatesReader(engine: FakeSpeechEngine(), focus: bridge, settings: settings, language: () => 'en-IN'),
           opener: FakeOpener(),
-          library: Future.value(null),
           homeWidget: HomeWidget(document: MemoryDocument(), surface: surface),
         ),
       );

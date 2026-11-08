@@ -7,7 +7,7 @@ import 'package:mochi_link/mochi_link.dart';
 import 'live/live_updates.dart';
 import 'model/app_settings.dart';
 import 'model/pocket_model.dart';
-import 'scene/pose_library.dart';
+import 'scene/phone_world.dart';
 import 'screens/home_screen.dart';
 import 'screens/pairing_screen.dart';
 import 'services/alert_notifier.dart';
@@ -31,7 +31,7 @@ class MochiApp extends StatefulWidget {
     required this.settings,
     required this.reader,
     this.opener = const UrlLinkOpener(),
-    this.library,
+    this.world,
     this.scan,
     this.live,
     this.speech,
@@ -50,8 +50,8 @@ class MochiApp extends StatefulWidget {
   final UpdatesReader reader;
   final LinkOpener opener;
 
-  /// The recorded animations; loaded from the assets when not given.
-  final Future<PoseLibrary?>? library;
+  /// Mochi's world, following [model]'s room (made here when not given).
+  final PhoneWorld? world;
 
   /// Replaces the camera scanner (tests).
   final Future<String?> Function(BuildContext context)? scan;
@@ -81,7 +81,10 @@ class _MochiAppState extends State<MochiApp> {
 
   /// Where the app is asked to go ([AppPlace]): the widget's taps, the ongoing notification's buttons.
   final StreamController<String> _places = StreamController.broadcast();
-  PoseLibrary? _library;
+
+  /// Mochi's world for the room the app shows (the iPhone's `PhoneWorld.shared`): it follows the room from launch and
+  /// ticks only while the room can be seen.
+  late final PhoneWorld _world = widget.world ?? PhoneWorld(model: widget.model);
   bool _askedForNotifications = false;
 
   PocketModel get model => widget.model;
@@ -91,22 +94,13 @@ class _MochiAppState extends State<MochiApp> {
     super.initState();
     _lifecycle;
     model.addListener(_modelChanged);
-    unawaited(_loadLibrary());
+    _world;
     unawaited(_start());
   }
 
   /// Once paired (scanned, pasted or opened), ask once for permission to show the Mac's alerts.
   void _modelChanged() {
     if (model.paired) unawaited(_askForNotifications());
-  }
-
-  Future<void> _loadLibrary() async {
-    try {
-      final library = await (widget.library ?? PoseLibrary.load(rootBundle));
-      if (mounted) setState(() => _library = library);
-    } on Object catch (error) {
-      debugPrint('Mochi: the animations could not be loaded (${error.runtimeType})');
-    }
   }
 
   Future<void> _start() async {
@@ -160,6 +154,7 @@ class _MochiAppState extends State<MochiApp> {
     unawaited(_placeSubscription?.cancel());
     unawaited(_places.close());
     _talk?.dispose();
+    if (widget.world == null) _world.dispose();
     super.dispose();
   }
 
@@ -190,10 +185,10 @@ class _MochiAppState extends State<MochiApp> {
               child: Center(child: CircularProgressIndicator(semanticsLabel: 'Loading')),
             ),
           ),
-          PairingPhase.unpaired => PairingScreen(model: model, library: _library, scan: widget.scan),
+          PairingPhase.unpaired => PairingScreen(model: model, scan: widget.scan),
           PairingPhase.paired => HomeScreen(
             model: model,
-            library: _library,
+            world: _world,
             opener: widget.opener,
             notifier: widget.notifier,
             settings: widget.settings,

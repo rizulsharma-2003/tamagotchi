@@ -340,7 +340,6 @@ void main() {
           notifier: FakeNotifier(),
           settings: settings,
           reader: UpdatesReader(engine: FakeSpeechEngine(), focus: bridge, settings: settings, language: () => 'en-IN'),
-          library: Future.value(null),
           speech: speech,
         ),
       );

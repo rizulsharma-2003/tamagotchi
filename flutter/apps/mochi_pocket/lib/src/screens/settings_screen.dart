@@ -223,6 +223,8 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
             LinkStatus.offline => 'Not connected',
             LinkStatus.removed => 'Ended',
           }),
+          // The room and Mochi follow the computer's look and what Claude does there (the iPhone's "Room and pet").
+          _detail('Room and pet', model.look != null ? 'Following ${host.yours}' : 'Waiting for ${host.yours}'),
           const SizedBox(height: Space.m),
           OutlinedButton.icon(
             onPressed: _confirmUnpair,
