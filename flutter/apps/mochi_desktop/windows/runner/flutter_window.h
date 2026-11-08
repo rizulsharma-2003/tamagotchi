@@ -8,6 +8,7 @@
 
 #include <memory>
 
+#include "native_stage.h"
 #include "win32_window.h"
 
 // The window message a second copy of Mochi posts to the first before it exits (main.cpp): "show the main window".
@@ -51,6 +52,9 @@ class FlutterWindow : public Win32Window {
   // when one of its own combinations is pressed).
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> system_channel_;
   HPOWERNOTIFY display_notification_ = nullptr;
+
+  // `mochi/stage` (lib/src/platform/native_stage.dart): Mochi's native stage, windows of its own anywhere on screen.
+  std::unique_ptr<mochi_stage::Stage> stage_;
   bool session_notifications_ = false;
 
   // The console display: 0 off, 1 on, 2 dimmed (-1 not known yet); the session: 1 locked, 0 not (-1 not known).

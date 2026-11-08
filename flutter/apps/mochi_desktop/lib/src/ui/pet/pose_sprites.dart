@@ -68,23 +68,13 @@ class PoseSprites {
         '$key@$fx,$fy#${(bounds.left * ratio).round()},${(bounds.top * ratio).round()},'
         '${(bounds.right * ratio).round()},${(bounds.bottom * ratio).round()}';
     // The picture's origin pixel: far enough in for everything inside [bounds].
-    final ox = (-bounds.left * ratio).ceilToDouble() + 1, oy = (-bounds.top * ratio).ceilToDouble() + 1;
+    final (ox, oy) = origin(bounds, ratio);
     var image = _images.remove(fullKey);
     if (image != null) {
       hits++;
     } else {
       misses++;
-      final width = math.max(1, (ox + bounds.right * ratio).ceil() + 1);
-      final height = math.max(1, (oy + bounds.bottom * ratio).ceil() + 1);
-      final recorder = ui.PictureRecorder();
-      final offscreen = Canvas(recorder)
-        ..translate(ox + fx, oy + fy)
-        ..scale(ratio)
-        ..clipRect(bounds);
-      paint(offscreen);
-      final picture = recorder.endRecording();
-      image = picture.toImageSync(width, height);
-      picture.dispose();
+      image = render(bounds: bounds, ratio: ratio, paint: paint, fx: fx, fy: fy);
       _bytes += _size(image);
     }
     _images[fullKey] = image;
@@ -97,6 +87,29 @@ class PoseSprites {
       Rect.fromLTWH(left / ratio, top / ratio, image.width / ratio, image.height / ratio),
       _paint,
     );
+  }
+
+  /// The pixel in a picture of [bounds] (logical, around the art's origin) at [ratio] where the origin goes: far enough
+  /// in for everything inside [bounds].
+  static (double, double) origin(Rect bounds, double ratio) => ((-bounds.left * ratio).ceilToDouble() + 1, (-bounds.top * ratio).ceilToDouble() + 1);
+
+  /// A picture of what [paint] draws within [bounds] around the origin (logical pixels) at [ratio], with the origin at
+  /// [origin]'s pixel plus [fx], [fy] (a fraction of a pixel). Used here and by the native stage's pictures
+  /// (ui/stage/stage_sprites.dart), so both look exactly the same.
+  static ui.Image render({required Rect bounds, required double ratio, required void Function(Canvas canvas) paint, double fx = 0, double fy = 0}) {
+    final (ox, oy) = origin(bounds, ratio);
+    final width = math.max(1, (ox + bounds.right * ratio).ceil() + 1);
+    final height = math.max(1, (oy + bounds.bottom * ratio).ceil() + 1);
+    final recorder = ui.PictureRecorder();
+    final offscreen = Canvas(recorder)
+      ..translate(ox + fx, oy + fy)
+      ..scale(ratio)
+      ..clipRect(bounds);
+    paint(offscreen);
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(width, height);
+    picture.dispose();
+    return image;
   }
 
   static final Paint _paint = Paint()..filterQuality = FilterQuality.low;
