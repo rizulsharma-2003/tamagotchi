@@ -4,7 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_ui/mochi_ui.dart';
-import 'package:mochi_world/mochi_world.dart' show AchievementID, Chattiness, FocusSettings, ProgressState;
+import 'package:mochi_world/mochi_world.dart' show AchievementID, Chattiness, FocusSettings, ProgressState, RecapSettings;
 
 import '../../core/desktop_settings.dart';
 import '../../core/hotkeys.dart';
@@ -711,6 +711,7 @@ class FunPane extends StatelessWidget {
         _TalkingGroup(host: host),
         _GrowingUpGroup(host: host),
         _FocusGroup(host: host),
+        _RecapGroup(host: host),
         _GamesGroup(host: host),
         SettingsGroup(
           title: 'Holidays',
@@ -751,7 +752,6 @@ class FunPane extends StatelessWidget {
           title: 'From the Mac',
           children: [
             SoonRow(title: 'Adventures', detail: '$pet heads out to explore your desktop and comes back with stories.'),
-            SoonRow(title: 'Daily recap', detail: 'A card of what you and Claude did today.'),
             SoonRow(title: 'Room furniture', detail: 'Arrange furniture in $pet’s room.'),
           ],
         ),
@@ -829,6 +829,53 @@ class _FocusGroup extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Settings › Fun › Daily recap (the Mac's RecapSettingsSection): the evening announcement, from which hour, a Windows
+/// notification too, and Open Recap….
+class _RecapGroup extends StatelessWidget {
+  const _RecapGroup({required this.host});
+
+  final SettingsHost host;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = host.desktop.settings;
+    final recap = settings.recap;
+    final localizations = MaterialLocalizations.of(context);
+    final twentyFour = MediaQuery.alwaysUse24HourFormatOf(context);
+    String hour(int h) => localizations.formatTimeOfDay(TimeOfDay(hour: h, minute: 0), alwaysUse24HourFormat: twentyFour);
+    void set(void Function(RecapSettings recap) change) {
+      final next = settings.recap;
+      change(next);
+      settings.recap = next;
+    }
+
+    final open = host.onRecap;
+    return SettingsGroup(
+      title: 'Daily recap',
+      footer: 'Once a day, only after real Claude Code activity. Cards use your history on this PC only.',
+      children: [
+        ToggleRow(
+          title: 'Tell me when my day’s recap is ready',
+          value: recap.announce,
+          onChanged: (value) => set((r) => r.announce = value),
+        ),
+        MenuRow<int>(
+          label: 'From',
+          value: recap.hour.clamp(12, 23),
+          items: [for (var h = 12; h < 24; h++) (h, hour(h))],
+          onChanged: recap.announce ? (value) => set((r) => r.hour = value) : null,
+        ),
+        ToggleRow(
+          title: 'Also show a notification',
+          value: recap.banner,
+          onChanged: recap.announce ? (value) => set((r) => r.banner = value) : null,
+        ),
+        if (open != null) ActionsRow(children: [FilledButton(onPressed: open, child: const Text('Open Recap…'))]),
+      ],
     );
   }
 }

@@ -7,7 +7,7 @@
 // turn that just finished; its recent events (LATE for ones that came in while Mochi wasn't running); Pet, Play and
 // Treat; quick switches; and the way to Mochi's window, Ask Mochi and Settings.
 //
-// Under Pet, Play and Treat are the Mac's fun row (Games and Focus so far; the rest of the Mac's row joins it as each
+// Under Pet, Play and Treat are the Mac's fun row (Games, Focus and Recap so far; the rest of the Mac's row joins it as each
 // is built for Windows, and nothing is shown dead), the running focus session and the friendship hearts. Its switches are the Windows ones: pause
 // reactions, the desktop pet, roaming the taskbar and Patch on the taskbar.
 
@@ -40,6 +40,7 @@ class PopoverView extends StatelessWidget {
     required this.onSettings,
     required this.onSetUpClaude,
     this.onGames,
+    this.onRecap,
     this.hidePet = false,
   });
 
@@ -56,8 +57,9 @@ class PopoverView extends StatelessWidget {
   /// Settings › Claude Code (connecting it).
   final VoidCallback onSetUpClaude;
 
-  /// The fun row: the Games window.
+  /// The fun row: the Games window and today's recap.
   final VoidCallback? onGames;
+  final VoidCallback? onRecap;
 
   /// Mochi is leaping in or out: the room without it.
   final bool hidePet;
@@ -117,7 +119,7 @@ class PopoverView extends StatelessWidget {
                               const SizedBox(height: Space.xs),
                               _PetControls(desktop: desktop),
                               const SizedBox(height: Space.s),
-                              _FunRow(desktop: desktop, onGames: onGames),
+                              _FunRow(desktop: desktop, onGames: onGames, onRecap: onRecap),
                               const SizedBox(height: Space.s),
                               if (desktop.focus.status case final status?) ...[
                                 FocusRow(desktop: desktop, status: status),
@@ -630,10 +632,11 @@ class _PetControls extends StatelessWidget {
 
 /// The Mac's fun row: the games (and, as each comes to Windows, the rest of the Mac's row).
 class _FunRow extends StatelessWidget {
-  const _FunRow({required this.desktop, this.onGames});
+  const _FunRow({required this.desktop, this.onGames, this.onRecap});
 
   final MochiDesktop desktop;
   final VoidCallback? onGames;
+  final VoidCallback? onRecap;
 
   @override
   Widget build(BuildContext context) {
@@ -659,6 +662,14 @@ class _FunRow extends StatelessWidget {
           onTap: desktop.focus.toggle,
         ),
       ),
+      if (onRecap != null)
+        _ControlButton(
+          title: 'Recap',
+          label: 'Today’s recap: what you and Claude did today',
+          icon: Icons.calendar_today_rounded,
+          tint: const Color(0xFFE8663D),
+          onTap: onRecap!,
+        ),
     ];
     if (buttons.isEmpty) return const SizedBox.shrink();
     return Row(

@@ -17,6 +17,7 @@ import 'core/hook_setup.dart';
 import 'core/hotkeys.dart';
 import 'core/pc_rhythm.dart';
 import 'core/pet_cues.dart';
+import 'core/recap.dart';
 import 'core/reactions.dart';
 import 'core/session_store.dart';
 import 'core/sessions.dart';
@@ -102,6 +103,7 @@ class MochiDesktop {
     final store = stores ?? (_) => MemoryJsonStore();
     focus = DesktopFocus(settings: settings, world: world, rhythm: rhythm, store: store('focus-log.json'));
     reactions.focusing = () => focus.focusing;
+    recap = DesktopRecap(settings: settings, world: world, focus: focus, toasts: this.toasts, store: store('journal.json'), clock: clock);
     this.hotkeys = Hotkeys(
       registrar: hotkeys ?? const UnsupportedHotkeys(),
       chosen: settings.shortcut,
@@ -267,6 +269,9 @@ class MochiDesktop {
   /// The focus buddy (W15): a Pomodoro timer Mochi naps through, and the blocks it kept for the recap.
   late final DesktopFocus focus;
 
+  /// The daily recap (W16): the week of real events it counts, and the evening announcement.
+  late final DesktopRecap recap;
+
   /// The global shortcuts (Settings › Desktop Pet and Assistant).
   late final Hotkeys hotkeys;
 
@@ -349,6 +354,7 @@ class MochiDesktop {
     _startUpdates();
     rhythm.start();
     world.start();
+    recap.start();
     await toasts.start((target) {
       if (!_opens.isClosed) _opens.add(target);
     });
@@ -468,6 +474,7 @@ class MochiDesktop {
     link.dispose();
     motion.dispose();
     games.dispose();
+    recap.dispose();
     focus.dispose();
     world.dispose();
     rhythm.dispose();

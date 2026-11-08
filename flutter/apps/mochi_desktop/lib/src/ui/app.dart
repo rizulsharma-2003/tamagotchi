@@ -17,7 +17,8 @@ import '../desktop.dart';
 import '../platform/displays.dart';
 import '../platform/process_cpu.dart';
 import '../platform/taskbar.dart';
-import '../platform/win32_taskbar.dart' show Win32TaskbarInfo;
+import '../platform/image_export.dart';
+import '../platform/win32_taskbar.dart' show Win32PetWindow, Win32TaskbarInfo;
 import 'perf_meter.dart';
 import 'pet/companion_director.dart';
 import 'pet/pet_director.dart' show PetMood;
@@ -25,6 +26,7 @@ import '../update/updater.dart';
 import 'pet/pet_surface.dart';
 import 'pet/taskbar_stroll.dart';
 import 'games/games_screen.dart';
+import 'recap/recap_screen.dart';
 import '../core/games.dart' show GameTab;
 import 'popover/frame_meter.dart';
 import 'popover/popover_stage.dart';
@@ -44,7 +46,8 @@ enum MainPage {
   home('Mochi'),
   pairing('Pair a Phone'),
   settings('Settings'),
-  games('Games');
+  games('Games'),
+  recap('Today’s Recap');
 
   const MainPage(this.title);
   final String title;
@@ -65,10 +68,14 @@ class DesktopApp extends StatefulWidget {
     this.displays,
     this.strollClock,
     this.strollRandom,
+    this.images,
   });
 
   final MochiDesktop desktop;
   final DesktopShell shell;
+
+  /// Where saved and copied pictures go (the recap card); the system's when not given.
+  final ImageExport? images;
 
   /// Where the taskbar is (Win32 on Windows, none elsewhere, a fake in tests).
   final TaskbarInfo? taskbar;
@@ -121,6 +128,16 @@ class DesktopAppState extends State<DesktopApp> {
     log: _strollLog(),
   );
   late DesktopStyle _trayStyle = desktop.settings.petStyle;
+
+  /// The clipboard and Downloads, for the recap's picture (Mochi's window owns what it puts on the clipboard).
+  late final ImageExport _images =
+      widget.images ??
+      ImageExport.system(
+        owner: () => switch (widget.shell.petWindow) {
+          final Win32PetWindow window => window.hwnd,
+          _ => 0,
+        },
+      );
 
   /// The classic tray icon (while Mochi lives there).
   late final TrayGlyphController _tray = TrayGlyphController(
@@ -340,6 +357,8 @@ class DesktopAppState extends State<DesktopApp> {
         desktop.focus.toggle();
       case ShellAction.games:
         openGames();
+      case ShellAction.recap:
+        openRecap();
       // On the taskbar (roaming it, or playing in its spot) is where you'll see Mochi: the pet shows too.
       case ShellAction.roamTaskbar:
         desktop.settings
@@ -389,6 +408,7 @@ class DesktopAppState extends State<DesktopApp> {
     widget.shell.mainSize = switch (page) {
       MainPage.settings => settingsSize(),
       MainPage.games => _fit(SurfaceSizes.games),
+      MainPage.recap => _fit(SurfaceSizes.recap),
       MainPage.home || MainPage.pairing => mainWindowSize(),
     };
     setState(() => _page = page);
@@ -400,6 +420,9 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.games.show(tab);
     open(MainPage.games);
   }
+
+  /// The Mac's "Today's Recap…": the card for today.
+  void openRecap() => open(MainPage.recap);
 
   /// Escape in Settings (or a fun feature's page): back to Mochi's window if it was opened from there, else back to
   /// the desktop.
@@ -437,7 +460,7 @@ class DesktopAppState extends State<DesktopApp> {
     final size = await widget.shell.size();
     if (size == null || size.width < SurfaceSizes.mainMinimum.width - 1 || size.height < SurfaceSizes.mainMinimum.height - 1) return;
     widget.shell.mainSize = size;
-    if (_page == MainPage.games) return;
+    if (_page == MainPage.games || _page == MainPage.recap) return;
     if (_page == MainPage.settings) {
       if (desktop.settings.settingsWindowSize != size) desktop.settings.settingsWindowSize = size;
     } else if (desktop.settings.mainWindowSize != size) {
@@ -514,6 +537,8 @@ class DesktopAppState extends State<DesktopApp> {
         open(MainPage.home);
       case ToastTargetKind.agent:
         open(MainPage.settings, pane: SettingsTab.agent);
+      case ToastTargetKind.recap:
+        openRecap();
     }
   }
 
@@ -565,6 +590,7 @@ class DesktopAppState extends State<DesktopApp> {
     onSettings: () => open(MainPage.settings),
     onSetUpClaude: () => open(MainPage.settings, pane: SettingsTab.claude),
     onGames: openGames,
+    onRecap: openRecap,
   );
 
   /// The popover is drawn once out of sight soon after launch, on Windows (see [_PopoverWarmUp]).
@@ -818,9 +844,11 @@ class _MainSurface extends StatelessWidget {
                   onInstall: () => unawaited(state.installMochi()),
                   onRestartToUpdate: () => unawaited(state.restartToUpdate()),
                   onGames: state.openGames,
+                  onRecap: state.openRecap,
                 ),
               ),
               MainPage.games => GamesScreen(desktop: desktop),
+              MainPage.recap => RecapScreen(desktop: desktop, images: state._images),
             },
           ),
         ],
@@ -830,7 +858,7 @@ class _MainSurface extends StatelessWidget {
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): switch (page) {
           MainPage.home => state.closeMain,
-          MainPage.settings || MainPage.games => state.closeSettings,
+          MainPage.settings || MainPage.games || MainPage.recap => state.closeSettings,
           MainPage.pairing => back,
         },
         const SingleActivator(LogicalKeyboardKey.comma, control: true): () => state.open(MainPage.settings),

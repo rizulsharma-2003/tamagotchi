@@ -26,12 +26,16 @@ class SettingsHost {
     this.onInstall,
     this.onRestartToUpdate,
     this.onGames,
+    this.onRecap,
   });
 
   final MochiDesktop desktop;
 
   /// Opens the Games window (Settings › Fun › Games › Play…).
   final VoidCallback? onGames;
+
+  /// Opens today's recap (Settings › Fun › Daily recap › Open Recap…).
+  final VoidCallback? onRecap;
 
   /// "Install Mochi": the app copies itself into place and hands over to the installed copy.
   final VoidCallback? onInstall;

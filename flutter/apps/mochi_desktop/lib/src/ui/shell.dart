@@ -33,6 +33,7 @@ enum ShellAction {
   /// The fun features (the Mac's status menu): start or stop a focus session, the Games window.
   focus,
   games,
+  recap,
 
   /// Where Mochi lives (the Mac's menu-bar styles): roaming the taskbar, playing in its spot there, or as the classic
   /// tray icon.
@@ -145,6 +146,9 @@ abstract final class SurfaceSizes {
 
   /// The Games page: the Mac's Games window (572 × 512 points) with the title bar.
   static const Size games = Size(600, 600);
+
+  /// Today's Recap: the Mac's recap window (470 × 660 points) with the title bar.
+  static const Size recap = Size(480, 740);
 }
 
 /// window_manager and tray_manager (Windows; the macOS development build).
@@ -237,6 +241,7 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
     MenuItem.separator(),
     MenuItem(key: ShellAction.focus.name, label: focusing ? 'Stop Focus' : 'Start Focus'),
     MenuItem(key: ShellAction.games.name, label: 'Games…'),
+    MenuItem(key: ShellAction.recap.name, label: 'Today’s Recap…'),
     MenuItem.separator(),
     // Where Mochi lives, as the Mac's status menu lists its styles.
     MenuItem.checkbox(key: ShellAction.roamTaskbar.name, label: DesktopStyle.roam.title, checked: style == DesktopStyle.roam),

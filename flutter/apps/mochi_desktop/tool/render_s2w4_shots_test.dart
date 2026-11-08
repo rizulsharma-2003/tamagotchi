@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_desktop/src/core/desktop_world.dart';
 import 'package:mochi_desktop/src/core/games.dart';
+import 'package:mochi_desktop/src/ui/recap/recap_card.dart';
 import 'package:mochi_desktop/src/ui/app.dart';
 import 'package:mochi_desktop/src/ui/shell.dart';
 import 'package:mochi_world/mochi_world.dart' as w;
@@ -111,7 +112,14 @@ void main() {
   for (final theme in [ThemeMode.light, ThemeMode.dark]) {
     testWidgets('W14 games, ${theme.name}', (tester) async {
       t.desktop.settings.themeMode = theme;
-      t.desktop.settings.games = w.GameRecords(catchHighScore: 37, catchGamesPlayed: 4, catchBestCombo: 11, rpsWins: 6, rpsLosses: 4, rpsDraws: 2);
+      t.desktop.settings.games = w.GameRecords(
+        catchHighScore: 37,
+        catchGamesPlayed: 4,
+        catchBestCombo: 11,
+        rpsWins: 6,
+        rpsLosses: 4,
+        rpsDraws: 2,
+      );
       await app(tester, size: SurfaceSizes.games, page: MainPage.games);
       await save(tester, 'w14-catch-ready-${theme.name}', SurfaceSizes.games);
       final games = t.desktop.games..startCatch();
@@ -178,6 +186,66 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 1));
   });
+
+  /// A day's work in "web" and "api": turns, tests, an error bounced back, a milestone, a focus block.
+  void busyDay() {
+    var at = DateTime(2026, 11, 8, 9, 12);
+    void claude(String event, {String session = 's1', String project = 'web', String? tool, String? id, String? kind}) {
+      final wire = hook(event, session: session, project: project, tool: tool, toolUseId: id, at: at);
+      if (kind != null) {
+        wire
+          ..commandKind = kind
+          ..commandReliable = true;
+      }
+      t.desktop.sessions.apply(wire);
+      t.desktop.world.ingest(wire);
+      at = at.add(const Duration(minutes: 7));
+    }
+
+    claude('SessionStart');
+    for (var i = 0; i < 4; i++) {
+      claude('UserPromptSubmit');
+      claude('PreToolUse', tool: 'Read', id: 'r$i');
+      claude('PostToolUse', tool: 'Read', id: 'r$i');
+      claude('PreToolUse', tool: 'Bash', id: 'b$i', kind: 'test');
+      claude('PostToolUse', tool: 'Bash', id: 'b$i', kind: 'test');
+      if (i == 2) claude('PostToolUseFailure', tool: 'Edit', id: 'e$i');
+      claude('Stop');
+    }
+    claude('SessionStart', session: 's2', project: 'api');
+    claude('UserPromptSubmit', session: 's2', project: 'api');
+    claude('Stop', session: 's2', project: 'api');
+  }
+
+  for (final theme in [ThemeMode.light, ThemeMode.dark]) {
+    testWidgets('W16 today’s recap, ${theme.name}', (tester) async {
+      t.desktop.settings.themeMode = theme;
+      busyDay();
+      await app(tester, size: SurfaceSizes.recap, page: MainPage.recap);
+      await frames(tester, const Duration(milliseconds: 1500));
+      await save(tester, 'w16-recap-${theme.name}', SurfaceSizes.recap);
+      if (theme == ThemeMode.light) {
+        final screen = tester.state(find.byWidgetPredicate((widget) => widget.runtimeType.toString() == 'RecapScreen'));
+        expect(screen, isNotNull);
+        await tester.runAsync(() async {
+          final look = RecapLook(
+            petName: 'Mochi',
+            companionName: 'Patch',
+            formatTime: (utc) {
+              final time = utc.toLocal();
+              return '${time.hour > 12 ? time.hour - 12 : time.hour}:${time.minute.toString().padLeft(2, '0')} ${time.hour >= 12 ? 'PM' : 'AM'}';
+            },
+          );
+          final image = await RecapImage.render(t.desktop.recap.recap(), look, now);
+          File('${out.path}/w16-recap-exported.png').writeAsBytesSync(image.png);
+          final quiet = await RecapImage.render(t.desktop.recap.recap(DateTime(2026, 11, 7)), look, now);
+          File('${out.path}/w16-recap-quiet-exported.png').writeAsBytesSync(quiet.png);
+        });
+      }
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 8));
+    });
+  }
 
   testWidgets('W14 games at 2× text', (tester) async {
     await app(tester, size: SurfaceSizes.games, page: MainPage.games, scale: 2);

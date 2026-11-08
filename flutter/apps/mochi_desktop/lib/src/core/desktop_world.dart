@@ -121,6 +121,7 @@ class DesktopWorld extends ChangeNotifier {
       uptime: uptime,
       calendar: calendar,
       effects: _WorldEffects(this),
+      onRecord: (event) => onRecord?.call(event),
     );
     world.setSystemReducedMotion(_reducedMotion());
     celebrations = w.Celebrations(
@@ -203,6 +204,18 @@ class DesktopWorld extends ChangeNotifier {
   DateTime? _lastSave;
   w.LifeStage _stage = w.LifeStage.grownUp;
   Object? _signature;
+
+  /// Every real event the world records (live or late; never simulated or restored), for the daily recap's journal.
+  void Function(w.CompanionEvent event)? onRecord;
+
+  final List<void Function()> _minutely = [];
+
+  /// [check] runs once a minute with the world's tick (so only while the screen can be seen).
+  void everyMinute(void Function() check) => _minutely.add(check);
+
+  /// Run whenever the world is saved (every few minutes, when the screen goes off and on quit): the features' own
+  /// files go with it.
+  final List<void Function()> savers = [];
 
   /// Where the world is kept (Settings › Privacy), or null in memory.
   String? get file => switch (store) {
@@ -385,7 +398,12 @@ class DesktopWorld extends ChangeNotifier {
     world.tick();
     speech.tick();
     final date = _clock();
-    if (_lastGrowthCheck == null || date.difference(_lastGrowthCheck!) >= const Duration(minutes: 1)) _growth();
+    if (_lastGrowthCheck == null || date.difference(_lastGrowthCheck!) >= const Duration(minutes: 1)) {
+      _growth();
+      for (final check in List.of(_minutely)) {
+        check();
+      }
+    }
     if (_dirty || _lastSave == null || date.difference(_lastSave!) >= saveInterval) save();
     _changed();
   }
@@ -492,6 +510,9 @@ class DesktopWorld extends ChangeNotifier {
       final history = json['history'];
       if (history is List) json['history'] = [for (final e in history) e is Map ? (Map<String, Object?>.of(e.cast<String, Object?>())..remove('message')) : e];
       store.write({'v': 1, 'seed': world.seed, 'world': json});
+      for (final saver in List.of(savers)) {
+        saver();
+      }
     } on Object catch (error) {
       debugPrint('Mochi: its world could not be saved (${error.runtimeType})');
     }
