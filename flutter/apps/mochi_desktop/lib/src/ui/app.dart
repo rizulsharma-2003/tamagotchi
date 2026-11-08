@@ -141,6 +141,14 @@ class DesktopAppState extends State<DesktopApp> {
     stage: widget.stage ?? systemStage(),
     displays: _stroll.displays,
     cursor: _stroll.taskbar.cursor,
+    home: _stroll,
+    shown: () => _surface == Surface.pet && desktop.settings.showPet,
+    dark: () => switch (desktop.settings.themeMode) {
+      ThemeMode.dark => true,
+      ThemeMode.light => false,
+      ThemeMode.system => WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark,
+    },
+    onMenu: (_, _) => unawaited(widget.shell.popUpMenu()),
     demo: MischiefStage.demoFrom(Platform.environment['MOCHI_DESKTOP_MISCHIEF_DEMO']),
   );
 
@@ -605,6 +613,8 @@ class DesktopAppState extends State<DesktopApp> {
     final shown = _stroll.show(surface);
     if (surface == Surface.popover) _popoverReady = shown;
     unawaited(shown);
+    // Mochi out with the pointer comes home while its window or the popover is open (and may go out again after).
+    _mischief.surfaceChanged();
   }
 
   /// Completes once the window is in place for the popover.

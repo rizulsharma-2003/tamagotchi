@@ -268,7 +268,7 @@ class StageCelebrations {
         for (var color = 0; color < celebrationColors.length; color++)
           for (var size = 0; size < 3; size++)
             sparkKey(color, size): SpriteRecipe(
-              bounds: const Rect.fromLTRB(-9, -9, 9, 9),
+              bounds: const Rect.fromLTRB(-12, -12, 12, 12),
               ratio: ratio,
               paint: (canvas) => CelebrationPieces.spark(canvas, celebrationColors[color], size),
             ),
@@ -279,7 +279,7 @@ class StageCelebrations {
         for (var color = 0; color < celebrationColors.length; color++)
           for (var step = 0; step < tumbleSteps; step++)
             confettiKey(shape, color, step): SpriteRecipe(
-              bounds: const Rect.fromLTRB(-8, -8, 8, 8),
+              bounds: const Rect.fromLTRB(-12, -12, 12, 12),
               ratio: ratio,
               paint: (canvas) => CelebrationPieces.confetti(canvas, celebrationColors[color], shape, step),
             ),
@@ -392,8 +392,8 @@ abstract final class CelebrationPieces {
       ..rotate(turn * math.pi * 0.9 + (shape == 0 ? 0.4 : 0))
       ..scale(squash, 1);
     final face = Paint()..color = Color.lerp(color, const Color(0xFF000000), (1 - squash) * 0.25)!;
-    final rect = shape == 0 ? const Rect.fromLTRB(-2.4, -6, 2.4, 6) : const Rect.fromLTRB(-4, -4, 4, 4);
-    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(1.2)), face);
+    final rect = shape == 0 ? const Rect.fromLTRB(-3.4, -8.6, 3.4, 8.6) : const Rect.fromLTRB(-5.6, -5.6, 5.6, 5.6);
+    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(1.6)), face);
     // A soft highlight along one edge, so it reads as paper catching the light.
     final light = Paint()..color = const Color(0x66FFFFFF);
     canvas
@@ -404,9 +404,9 @@ abstract final class CelebrationPieces {
   /// A spark of a firework: a bright core with a glow, smaller as it burns out ([size] 0 big, 2 small).
   static void spark(Canvas canvas, Color color, int size) {
     final radius = switch (size) {
-      0 => 3.6,
-      1 => 2.6,
-      _ => 1.8,
+      0 => 4.6,
+      1 => 3.4,
+      _ => 2.3,
     };
     canvas
       ..drawCircle(Offset.zero, radius * 2.2, Paint()..color = color.withValues(alpha: 0.28))

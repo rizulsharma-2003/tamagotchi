@@ -54,7 +54,11 @@ class MochiView extends StatefulWidget {
     this.time,
     this.purr,
     this.season,
+    this.petAway = false,
   });
+
+  /// Mochi is out on the desktop (the native stage draws it): only Patch is drawn here.
+  final bool petAway;
 
   /// Mochi's world: what Mochi (and Patch) do, and their poses.
   final DesktopWorld world;
@@ -341,6 +345,7 @@ class MochiViewState extends State<MochiView> {
             quantum: () => MochiView.quantum(_fps),
             purr: widget.purr,
             season: widget.season,
+            petAway: widget.petAway,
           ),
           size: Size.infinite,
         ),
@@ -385,7 +390,11 @@ class _MochiPainter extends CustomPainter {
     this.quantum,
     this.purr,
     this.season,
+    this.petAway = false,
   }) : super(repaint: clock);
+
+  /// Mochi is out on the desktop: only Patch is drawn.
+  final bool petAway;
 
   /// Today's holiday, for the decoration beside Patch's desk.
   final SeasonalEvent? Function()? season;
@@ -489,6 +498,7 @@ class _MochiPainter extends CustomPainter {
     final scale = size.height * fill / 66;
     sprites?.use(_context(scale, layout?.home.unit ?? 0));
     if (layout != null && patch != null) return _paintDuo(canvas, size, baseline, layout, patch);
+    if (petAway) return;
     final roam = stroll?.call();
     final frame = director.pose(clock.value, roam: roam, quantum: sprites == null ? null : quantum?.call());
     final purring = _purring;
@@ -578,16 +588,18 @@ class _MochiPainter extends CustomPainter {
       x = from;
     }
     final purring = _purring;
-    _pet(
-      canvas,
-      size,
-      purring ? PurrSession.decorate(pet, now, calm: calm) : pet,
-      Offset(layout.local(x), baseline),
-      k,
-      across: false,
-      repeats: repeats && !purring,
-    );
-    _paintBadge(canvas, Offset(layout.local(x), baseline), PetRenderer.bodyHeight * k);
+    if (!petAway) {
+      _pet(
+        canvas,
+        size,
+        purring ? PurrSession.decorate(pet, now, calm: calm) : pet,
+        Offset(layout.local(x), baseline),
+        k,
+        across: false,
+        repeats: repeats && !purring,
+      );
+      _paintBadge(canvas, Offset(layout.local(x), baseline), PetRenderer.bodyHeight * k);
+    }
     for (final prop in scene?.props ?? const <SceneProp>[]) {
       final point = Offset(layout.local(from + prop.x * span), baseline - prop.y * PetRenderer.bodyHeight * k);
       EffectRenderer.drawProp(prop, g, point, k, dark);
@@ -629,5 +641,6 @@ class _MochiPainter extends CustomPainter {
       old.ratio != ratio ||
       old.window != window ||
       old.purr != purr ||
-      old.season != season;
+      old.season != season ||
+      old.petAway != petAway;
 }

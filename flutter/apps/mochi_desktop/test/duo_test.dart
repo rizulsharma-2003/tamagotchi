@@ -214,6 +214,53 @@ void main() {
       expect(stroll.home, home, reason: 'his desk stays put');
     });
 
+    duoTest('Mochi out on the desktop (Mischief): Patch stays at his desk, only he takes clicks; back beside him after', (tester) async {
+      final (stroll, companion) = await start(tester);
+      session('SessionStart');
+      await elapse(tester, 0.5);
+      final home = stroll.home!;
+      expect(stroll.canGoOut, isTrue);
+      final departure = stroll.departure()!;
+      final stage = stroll.stage!;
+      expect(departure.y, lessThanOrEqualTo(stage.boxBottom), reason: 'its feet in its box on the taskbar');
+      expect((departure.x / stage.scale - stroll.sample()!.x).abs(), lessThan(1));
+      final shows = shell.shows.length;
+      stroll.goOut();
+      await elapse(tester, 0.3);
+      expect(stroll.out, isTrue);
+      expect(stroll.canGoOut, isFalse);
+      expect(stroll.placement, PetPlacement.taskbar, reason: 'Patch keeps the window');
+      expect(shell.shows.skip(shows).where((show) => show.surface == Surface.hidden), isEmpty);
+      expect(stroll.bodies(), [stage.companionBody(home)], reason: 'only Patch takes clicks');
+      expect(stroll.moving, isFalse, reason: 'Mochi’s stroll here waits');
+      stroll.comeBack(x: ((home.petHome - 10) * stage.scale).round());
+      await elapse(tester, 0.3);
+      expect(stroll.out, isFalse);
+      expect(stroll.bodies(), hasLength(2));
+      expect(stroll.sample()!.x, closeTo(home.petHome - 10, 12), reason: 'back where the stage left it, beside him');
+      expect(companion.visible, isTrue);
+    });
+
+    duoTest('Mochi out with nobody left on the taskbar: the window hides, and comes back where Mochi lands', (tester) async {
+      final (stroll, _) = await start(tester);
+      await elapse(tester, 0.5);
+      expect(stroll.home, isNull, reason: 'no session: Mochi alone');
+      final stage = stroll.stage!;
+      stroll.goOut();
+      await elapse(tester, 0.3);
+      expect(stroll.placement, PetPlacement.hidden);
+      expect(shell.shows.last.surface, Surface.hidden);
+      expect(stroll.anyTimer, isTrue, reason: 'it still looks at the taskbar now and then (cheap)');
+      expect(stroll.moving || stroll.waiting, isFalse, reason: 'no stroll while it’s away');
+      final zone = stage.zones.last;
+      final x = ((zone.minX + zone.maxX) / 2 * stage.scale).round();
+      stroll.comeBack(x: x);
+      await elapse(tester, 0.5);
+      expect(stroll.placement, PetPlacement.taskbar);
+      expect(shell.shows.last.surface, Surface.pet);
+      expect(stroll.sample()!.x, closeTo(x / stage.scale, 2), reason: 'where the stage left it');
+    });
+
     duoTest('clicks reach only their bodies: Mochi, Patch, and nothing between or around them', (tester) async {
       final (stroll, _) = await start(tester);
       session('SessionStart');

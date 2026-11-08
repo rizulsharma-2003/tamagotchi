@@ -4,6 +4,7 @@
 //
 // - X10 full-screen celebrations: confetti for G2's big wins (graduation, a milestone, green tests or build: real,
 //   live events only), fireworks for streak milestones (core/streaks.dart).
+// - X4 the cursor buddy: Mochi out with your pointer (cursor_buddy.dart), from the taskbar or the desktop ([home]).
 //
 // Development: `MOCHI_DESKTOP_MISCHIEF_DEMO` ("confetti:20,fireworks:45") repeats a preview every so many seconds
 // while the screen can be seen, for checking and measuring on a PC (with the `perf-debug` meter).
@@ -17,8 +18,12 @@ import '../../core/mischief.dart';
 import '../../desktop.dart';
 import '../../platform/displays.dart';
 import '../../platform/native_stage.dart';
+import '../pet/taskbar_stroll.dart' show PetHome;
 import 'celebrations.dart';
+import 'cursor_buddy.dart';
 import 'stage_cast.dart';
+import 'stage_pet.dart';
+import 'stage_sprites.dart';
 
 class MischiefStage extends ChangeNotifier {
   MischiefStage({
@@ -26,10 +31,33 @@ class MischiefStage extends ChangeNotifier {
     required this.stage,
     required this.displays,
     required this.cursor,
+    this.home,
+    bool Function()? shown,
+    bool Function()? dark,
+    void Function(int x, int y)? onMenu,
     double Function()? clock,
     this.demo = const {},
-  }) : cast = StageCast(stage) {
+  }) : cast = StageCast(stage),
+       _shown = shown ?? (() => true) {
     celebrations = StageCelebrations(stage: stage, cast: cast, gate: desktop.mischief, displays: displays, cursor: cursor, clock: clock);
+    final home = this.home;
+    if (home != null) {
+      pet = StagePet(stage: stage, cast: cast, sprites: StageSprites(stage), world: desktop.world, settings: desktop.settings, dark: dark ?? () => false);
+      buddy = CursorBuddy(
+        pet: pet!,
+        home: home,
+        gate: desktop.mischief,
+        rhythm: desktop.rhythm,
+        displays: displays,
+        cursor: cursor,
+        time: desktop.world.now,
+        shown: _shown,
+        reacting: () => desktop.world.reacting,
+        asleep: () => desktop.world.asleep,
+        onPet: () => desktop.interact('pet'),
+        onMenu: onMenu,
+      );
+    }
   }
 
   final MochiDesktop desktop;
@@ -48,6 +76,16 @@ class MischiefStage extends ChangeNotifier {
   /// X10.
   late final StageCelebrations celebrations;
 
+  /// Where Mochi lives when it isn't out (the taskbar stroll), and Mochi out on the stage (null without a home: tests
+  /// of the celebrations alone).
+  final PetHome? home;
+  StagePet? pet;
+
+  /// X4.
+  CursorBuddy? buddy;
+
+  final bool Function() _shown;
+
   final List<StreamSubscription<Object?>> _subscriptions = [];
   final List<Timer> _demoTimers = [];
   bool _started = false;
@@ -63,6 +101,7 @@ class MischiefStage extends ChangeNotifier {
     _subscriptions
       ..add(desktop.world.celebrated.listen(_celebrated))
       ..add(desktop.streaks.reached.listen((_) => celebrations.celebrate(CelebrationKind.fireworks)));
+    buddy?.start();
     for (final MapEntry(key: kind, value: every) in demo.entries) {
       _demoTimers.add(
         Timer.periodic(every, (_) {
@@ -85,10 +124,14 @@ class MischiefStage extends ChangeNotifier {
   /// Settings' "Try it": a preview of [kind] now.
   bool preview(CelebrationKind kind) => celebrations.celebrate(kind, preview: true);
 
+  /// The app's window changed form (Mochi's window or the popover opened, or the pet is back): Mochi comes home or may
+  /// go out again.
+  void surfaceChanged() => buddy?.consider();
+
   /// What's on the stage, for the perf meter (null: nothing).
   String? perfState() {
     if (celebrations.running) return 'celebration (${celebrations.playing!.name})';
-    return null;
+    return buddy?.perfState();
   }
 
   /// A development switch: `MOCHI_DESKTOP_MISCHIEF_DEMO=confetti:20,fireworks:45`.
@@ -112,6 +155,9 @@ class MischiefStage extends ChangeNotifier {
     for (final timer in _demoTimers) {
       timer.cancel();
     }
+    buddy?.stop();
+    pet?.dispose();
+    pet?.sprites.dispose();
     celebrations.dispose();
     stage.dispose();
     super.dispose();

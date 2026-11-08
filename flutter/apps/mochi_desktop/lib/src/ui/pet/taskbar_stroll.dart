@@ -41,6 +41,10 @@
 //   the work area: Mochi's taskbar presence pauses while it's open (the popover shows it in the room), and when it
 //   closes Mochi is back on the very spot it left, and carries on from there.
 //
+// - Mochi out on the desktop (Mischief: the cursor buddy, roaming the screens; ui/stage/): the native stage draws it
+//   ([out]), so here it's away: Patch stays at his desk if he's on the taskbar (the window shows only him), otherwise
+//   the window hides until Mochi comes back, where the stage left it ([comeBack]).
+//
 // Every change to the window, the main window's included, goes through `show` and one queue here, so a pet placement
 // never interleaves with the main window opening.
 //
@@ -112,7 +116,28 @@ class DuoLayout {
   int get hashCode => Object.hash(home, originX);
 }
 
-class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
+/// Where Mochi lives when it isn't out on the desktop: Mischief's extras take it out from here and bring it back
+/// (TaskbarStroll; a fake in tests).
+abstract interface class PetHome implements Listenable {
+  /// Mochi is out on the desktop (drawn by the native stage).
+  bool get out;
+
+  /// Mochi can go out from here now: it shows on the taskbar or the desktop (not in its window or the popover), and
+  /// nobody is dragging it.
+  bool get canGoOut;
+
+  /// Where Mochi stands on the screen now: its feet (physical pixels), the display's scale, which way it faces and how
+  /// big it's drawn (logical pixels per art unit). Null when it isn't showing.
+  ({int x, int y, double scale, double facing, double unit})? departure();
+
+  /// Mochi leaves (the stage draws it from now on).
+  void goOut();
+
+  /// Mochi is back, with its feet at [x] (physical pixels; on the taskbar, the nearest free spot) or where it left.
+  void comeBack({int? x});
+}
+
+class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implements PetHome {
   TaskbarStroll({
     required this.shell,
     required this.taskbar,
@@ -218,6 +243,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   bool _dragging = false;
   bool _parking = false;
   bool _fullscreen = false;
+  bool _out = false;
   bool _resizing = false;
   bool _observing = false;
   bool _disposed = false;
@@ -686,6 +712,78 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   /// Roaming is on and there's a taskbar and a window to move.
   bool get _canRoam => settings.roamTaskbar && taskbar.available && shell.petWindow != null;
 
+  // MARK: Out on the desktop (Mischief)
+
+  @override
+  bool get out => _out;
+
+  @override
+  bool get canGoOut =>
+      !_out &&
+      !_dragging &&
+      !_paused &&
+      _surface == Surface.pet &&
+      shell.petWindow != null &&
+      (_placement == PetPlacement.taskbar || _placement == PetPlacement.standing);
+
+  @override
+  ({int x, int y, double scale, double facing, double unit})? departure() {
+    final stage = _stage;
+    final frame = _frame;
+    if (onTaskbar && stage != null && frame != null && stroller.isPlaced) {
+      final sample = stroller.sample(_clock());
+      final feet = stage.boxBottom - (box.height * SurfaceSizes.taskbarFeet * stage.scale).round();
+      return (x: (sample.x * stage.scale).round(), y: feet, scale: stage.scale, facing: sample.facing, unit: unit);
+    }
+    if (_placement == PetPlacement.standing) {
+      final window = shell.petWindow?.frame();
+      if (window == null) return null;
+      final list = displays.list();
+      final scale = list.isEmpty ? 1.0 : PetPlacing.displayOf(list, window)!.scale;
+      final box = settings.petSize.stage;
+      final feet = window.bottom - (box * SurfaceSizes.standingFeet * scale).round();
+      return (x: window.left + window.width ~/ 2, y: feet, scale: scale, facing: 1.0, unit: box * SurfaceSizes.standingFill / 66);
+    }
+    return null;
+  }
+
+  @override
+  void goOut() {
+    if (_out) return;
+    _out = true;
+    log?.call('out on the desktop');
+    // Its plan holds while it's away (it carries on from where it comes back).
+    if (onTaskbar && stroller.isPlaced) stroller.react(_clock(), double.infinity);
+    _halt();
+    unawaited(_enqueue(_place));
+    _notify();
+  }
+
+  @override
+  void comeBack({int? x}) {
+    if (!_out) return;
+    _out = false;
+    log?.call('back from the desktop at $x');
+    final stage = _stage;
+    final home = _home;
+    if (x != null && stage != null) {
+      final logical = x / stage.scale;
+      if (onTaskbar && home != null) {
+        // Back beside Patch, in its little stretch by his desk.
+        stroller.place([StrollLine(home.minX, home.petHome)], now: _clock(), x: logical.clamp(home.minX, home.petHome), mode: _mode, idleSeconds: _idleSeconds, home: home.petHome);
+      } else if (onTaskbar) {
+        stroller.place(_zones(stage), now: _clock(), x: logical, mode: _mode, idleSeconds: _idleSeconds);
+      } else {
+        _resumeX = logical;
+      }
+    } else if (onTaskbar && stroller.isPlaced) {
+      stroller.resume(_clock());
+    }
+    unawaited(_enqueue(_place));
+    _notify();
+    if (onTaskbar) _tick();
+  }
+
   ({TaskbarStage? stage, RoamBlock? block}) _evaluate() {
     if (!settings.roamTaskbar) return (stage: null, block: RoamBlock.turnedOff);
     if (!taskbar.available || shell.petWindow == null) return (stage: null, block: RoamBlock.unsupported);
@@ -707,7 +805,9 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     _patchWanted = patch;
     _watchMoments();
     if (changed || stage != _stage) log?.call('place: $stage block=$block buttons=${_buttons?.length} fullscreen=$_fullscreen');
-    if (_fullscreen) {
+    // Mochi out on the desktop with nobody left here (no Patch at his desk on the taskbar): the window hides.
+    final away = _out && !(patch && stage != null);
+    if (_fullscreen || away) {
       if (_placement != PetPlacement.hidden) {
         _leaveTaskbar();
         _placement = PetPlacement.hidden;
@@ -963,7 +1063,8 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
   double get _idleSeconds => _idle().inMilliseconds / 1000;
 
   void _tick() {
-    if (_disposed || _surface != Surface.pet || _placement != PetPlacement.taskbar || _dragging || _paused) {
+    // Out on the desktop, Mochi's stroll here waits (Patch, if he's here, carries on in his own frames).
+    if (_disposed || _surface != Surface.pet || _placement != PetPlacement.taskbar || _dragging || _paused || _out) {
       _halt();
       return;
     }
@@ -1078,8 +1179,8 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver {
     final frame = _frame;
     if (!onTaskbar || stage == null || frame == null) return const [];
     final home = _home;
-    if (home == null) return [stage.body(frame)];
-    return [stage.bodyAt(stroller.sample(_clock()).x), if (companion?.visible ?? false) stage.companionBody(home)];
+    if (home == null) return _out ? const [] : [stage.body(frame)];
+    return [if (!_out) stage.bodyAt(stroller.sample(_clock()).x), if (companion?.visible ?? false) stage.companionBody(home)];
   }
 
   void _setClickThrough(bool through) {

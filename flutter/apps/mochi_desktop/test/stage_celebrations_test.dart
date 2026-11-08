@@ -176,9 +176,9 @@ void main() {
       for (final shot in stage.showing.values) {
         expect(shot.left, greaterThanOrEqualTo(1920 - 80), reason: 'on the side display');
       }
-      // Its pieces are drawn at 1.5: 16 logical pixels across, 24 and a bit physical.
+      // Its pieces are drawn at 1.5: 24 logical pixels across, 36 and a bit physical.
       final sprite = stage.sprites.values.first;
-      expect(sprite.width, greaterThanOrEqualTo(24));
+      expect(sprite.width, greaterThanOrEqualTo(36));
       await done(tester);
     });
 
