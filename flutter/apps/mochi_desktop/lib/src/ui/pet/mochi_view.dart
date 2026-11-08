@@ -14,6 +14,7 @@ import 'companion_director.dart';
 import 'pet_director.dart';
 import 'pose_sprites.dart';
 import 'stroller.dart';
+import '../../platform/taskbar.dart' show HomeStage;
 import 'taskbar_stroll.dart' show DuoLayout;
 
 /// Mochi, alive: drawn by mochi_art's renderer from Mochi's world ([world]: what it does, its moments and its poses,
@@ -52,6 +53,7 @@ class MochiView extends StatefulWidget {
     this.sprites = true,
     this.time,
     this.purr,
+    this.season,
   });
 
   /// Mochi's world: what Mochi (and Patch) do, and their poses.
@@ -111,6 +113,10 @@ class MochiView extends StatefulWidget {
 
   /// Press and hold Mochi (W21): while it purrs, little purr lines tremble at its sides.
   final PurrSession? purr;
+
+  /// Today's holiday (W20): on the taskbar with Patch, a little decoration stands beside his desk (the Mac's beside the
+  /// bed in the menu bar), as Settings › Fun › Holidays says.
+  final SeasonalEvent? Function()? season;
 
   /// Loops are played on a grid (seconds) when [sprites] are on, so their poses repeat exactly as a loop comes round:
   /// 15 a second when Mochi is drawn at most that often, and 30 when it walks or plays a moment (24–25 frames a
@@ -334,6 +340,7 @@ class MochiViewState extends State<MochiView> {
             window: MediaQuery.sizeOf(context),
             quantum: () => MochiView.quantum(_fps),
             purr: widget.purr,
+            season: widget.season,
           ),
           size: Size.infinite,
         ),
@@ -377,7 +384,11 @@ class _MochiPainter extends CustomPainter {
     this.window,
     this.quantum,
     this.purr,
+    this.season,
   }) : super(repaint: clock);
+
+  /// Today's holiday, for the decoration beside Patch's desk.
+  final SeasonalEvent? Function()? season;
 
   /// While Mochi purrs, its purr lines are drawn with it (and it isn't a picture).
   final PurrSession? purr;
@@ -546,6 +557,11 @@ class _MochiPainter extends CustomPainter {
         );
       }
     }
+    // The holiday's little decoration on the floor, just left of Patch's desk.
+    final occasion = season?.call();
+    if (occasion != null && SeasonRenderContext.decorateMenuBar) {
+      SeasonArt.menuBarAccent(occasion, g, Offset(layout.local(home.deskX - (HomeStage.deskHalf + 2) * k), baseline), k * 2.4, dark: dark);
+    }
     final PetPose pet;
     final double x;
     var repeats = false;
@@ -612,5 +628,6 @@ class _MochiPainter extends CustomPainter {
       old.sprites != sprites ||
       old.ratio != ratio ||
       old.window != window ||
-      old.purr != purr;
+      old.purr != purr ||
+      old.season != season;
 }

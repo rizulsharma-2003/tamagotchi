@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_world/mochi_world.dart' show AchievementID, Chattiness, FocusSettings, ProgressState, RecapSettings;
+import 'package:mochi_world/mochi_world.dart' as w show SeasonCalendar;
 
 import '../../core/desktop_settings.dart';
 import '../../core/hotkeys.dart';
@@ -681,22 +682,17 @@ class FunPane extends StatelessWidget {
 
   final SettingsHost host;
 
+  /// What's on now and what's next (the Mac's status line): "Diwali until 10 November. Next: Halloween from 24 October.
+  /// Mochi's birthday is 8 November, the day you met."
   String _status(DateTime now) {
     final settings = host.desktop.settings;
-    if (!settings.holidays) return 'Decorations are off.';
-    final pet = host.pet;
-    final seasonal = settings.seasonal;
-    final parts = <String>[];
-    final event = SeasonCalendar.event(now, seasonal, mochiBirthday: settings.adoptedAt);
-    if (event != null) {
-      final until = SeasonCalendar.lastDay(event, now, seasonal, mochiBirthday: settings.adoptedAt);
-      final name = SeasonCalendar.title(event, petName: pet);
-      final today = until == null || (until.year == now.year && until.month == now.month && until.day == now.day);
-      parts.add(today ? '$name today.' : '$name until ${dayAndMonth(until)}.');
-    }
-    final next = SeasonCalendar.nextEvent(now, seasonal, mochiBirthday: settings.adoptedAt);
-    if (next != null) parts.add('Next: ${SeasonCalendar.title(next.event, petName: pet)} from ${dayAndMonth(next.starts)}.');
-    return parts.isEmpty ? 'No holidays coming up.' : parts.join(' ');
+    return w.SeasonCalendar.statusLine(
+      now,
+      settings: settings.worldSeasonal,
+      adopted: settings.adoptedAt,
+      petName: host.pet,
+      formatDay: dayAndMonth,
+    );
   }
 
   @override
@@ -718,13 +714,22 @@ class FunPane extends StatelessWidget {
           title: 'Holidays',
           footer:
               'Halloween, Diwali, Christmas, New Year, Valentine’s Day, your birthday and $pet’s (the day $pet came to '
-              'this PC, ${dayAndMonth(settings.adoptedAt)}). Mochi’s window greets the day, and $pet wears a costume '
-              'when you haven’t chosen something to wear.',
+              'this PC, ${dayAndMonth(settings.adoptedAt)}). $pet and ${host.companion} greet each occasion once and '
+              'wear a costume when you haven’t chosen something to wear, and treats are seasonal: candy, laddoos, '
+              'gingerbread, cake and heart cookies.',
           children: [
             ToggleRow(
-              title: 'Celebrate holidays with decorations and costumes',
+              title: 'Celebrate holidays with decorations, costumes and treats',
               value: enabled,
               onChanged: (value) => settings.holidays = value,
+            ),
+            ToggleRow(
+              title: 'A little decoration beside ${host.companion}’s desk on the taskbar',
+              subtitle: settings.companionVisibility == CompanionVisibility.never || !settings.companionOnTaskbar
+                  ? 'It stands by ${host.companion}’s desk, so it shows while ${host.companion} keeps $pet company on the taskbar.'
+                  : null,
+              value: settings.decorateTaskbar && enabled,
+              onChanged: enabled ? (value) => settings.decorateTaskbar = value : null,
             ),
             MenuRow<int>(
               label: 'Your birthday',

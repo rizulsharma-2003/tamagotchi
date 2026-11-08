@@ -345,6 +345,7 @@ class _PetSurfaceState extends State<PetSurface> {
                             rhythm: widget.desktop.rhythm,
                             badge: widget.desktop.reactions.badge?.level,
                             purr: widget.desktop.purr,
+                          season: () => widget.desktop.holidays.event,
                           ),
                         ),
                       ),

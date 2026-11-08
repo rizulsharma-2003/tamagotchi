@@ -11,12 +11,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_desktop/src/core/desktop_world.dart';
 import 'package:mochi_desktop/src/core/games.dart';
 import 'package:mochi_desktop/src/ui/recap/recap_card.dart';
 import 'package:mochi_desktop/src/ui/app.dart';
+import 'package:mochi_desktop/src/core/desktop_settings.dart' show CompanionVisibility;
+import 'package:mochi_desktop/src/platform/taskbar.dart';
+import 'package:mochi_desktop/src/ui/pet/companion_director.dart';
 import 'package:mochi_desktop/src/ui/pet/mochi_view.dart';
+import 'package:mochi_desktop/src/ui/pet/stroller.dart';
+import 'package:mochi_desktop/src/ui/pet/taskbar_stroll.dart';
 import 'package:mochi_desktop/src/ui/shell.dart';
 import 'package:mochi_world/mochi_world.dart' as w;
 
@@ -267,6 +273,72 @@ void main() {
       await tester.pump(const Duration(seconds: 8));
     });
   }
+
+  for (final day in [DateTime(2026, 11, 8), DateTime(2026, 10, 30), DateTime(2026, 12, 20)]) {
+    testWidgets('W20 the taskbar strip on ${day.month}/${day.day}: Patch’s desk decorated, both in costume (2×)', (tester) async {
+      final t = TestDesktop.make(clock: () => DateTime(day.year, day.month, day.day, 12), worldStore: friends(), settings: {'lifeStageSeen': 2});
+      const ratio = 2.0;
+      final companion = CompanionDirector(t.desktop.world);
+      t.desktop.settings.companionVisibility = CompanionVisibility.always;
+      const unit = 40 * SurfaceSizes.taskbarFill / 66;
+      final stage = TaskbarStage(bar: const PixelRect(0, 1032, 1920, 1080), scale: 1, zones: const [(minX: 190.0, maxX: 680.0)]);
+      final home = stage.home(unit: unit, near: 400)!;
+      final width = stage.homeWidth(home);
+      final frame = stage.homeFrame(home, Size(width, stage.box.height));
+      final layout = DuoLayout(home: home, originX: frame.left.toDouble());
+      final size = Size(width, stage.box.height);
+      tester.view.devicePixelRatio = ratio;
+      tester.view.physicalSize = size * ratio;
+      addTearDown(tester.view.reset);
+      final now = DateTime(day.year, day.month, day.day, 12);
+      final sample = StrollSample(x: home.petHome, facing: 1, animation: PetAnimation.sit, animationTime: 2, activity: StrollActivity.company);
+      await tester.pumpWidget(
+        MediaQuery(
+          data: MediaQueryData(size: size, devicePixelRatio: ratio),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: ColoredBox(
+              color: const Color(0xFF202020),
+              child: MochiView(
+                world: t.desktop.world,
+                sessions: t.desktop.sessions,
+                lastActivity: () => t.desktop.sessions.now,
+                fill: SurfaceSizes.taskbarFill,
+                feet: SurfaceSizes.taskbarFeet,
+                detail: RenderDetail.tiny,
+                stroll: () => sample,
+                companion: companion,
+                duo: () => layout,
+                burst: true,
+                theme: OfficeTheme.cozyDesk,
+                accessory: t.desktop.settings.wornByPet(now),
+                companionAccessory: t.desktop.settings.wornByCompanion(now),
+                deskAccessory: Accessory.plant,
+                season: () => t.desktop.holidays.event,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 6));
+      t.desktop.world.tick();
+      await tester.pump(const Duration(milliseconds: 100));
+      await save(tester, 'w20-taskbar-${t.desktop.holidays.event?.name ?? 'none'}', size * ratio);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 8));
+      companion.dispose();
+      await t.dispose();
+    });
+  }
+
+  testWidgets('W20 Settings › Fun › Holidays', (tester) async {
+    await app(tester, size: SurfaceSizes.settings, page: MainPage.settings, pane: SettingsTab.fun);
+    await tester.ensureVisible(find.text('Holidays'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await save(tester, 'w20-settings-holidays', SurfaceSizes.settings);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 1));
+  });
 
   testWidgets('W14 games at 2× text', (tester) async {
     await app(tester, size: SurfaceSizes.games, page: MainPage.games, scale: 2);

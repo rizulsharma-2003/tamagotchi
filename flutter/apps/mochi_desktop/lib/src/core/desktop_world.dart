@@ -337,7 +337,15 @@ class DesktopWorld extends ChangeNotifier {
     if (world.windowVisible == visible) return;
     world.setWindowVisible(visible);
     speech.windowVisible = visible;
+    if (visible) {
+      for (final shown in List.of(windowShown)) {
+        shown();
+      }
+    }
   }
+
+  /// Run when Mochi's window or popover opens (a holiday's note waits for it).
+  final List<void Function()> windowShown = [];
 
   /// A feature's moment (a game, the focus buddy, the recap, a holiday): its note, line, animations, sound and
   /// notification, as the Mac's controllers show them (sounds only with sound on and outside quiet mode and hours).

@@ -12,6 +12,7 @@ import 'core/desktop_world.dart';
 import 'core/fresh_lines.dart';
 import 'core/focus.dart';
 import 'core/games.dart';
+import 'core/holidays.dart';
 import 'core/json_store.dart';
 import 'core/hook_setup.dart';
 import 'core/hotkeys.dart';
@@ -104,6 +105,7 @@ class MochiDesktop {
     final store = stores ?? (_) => MemoryJsonStore();
     focus = DesktopFocus(settings: settings, world: world, rhythm: rhythm, store: store('focus-log.json'));
     reactions.focusing = () => focus.focusing;
+    holidays = DesktopHolidays(settings: settings, world: world, store: store('seasons.json'), clock: clock);
     purr = PurrSession(settings: settings, sounds: sounds, rhythm: rhythm, pet: () => interact('pet'), time: world.now, clock: clock);
     recap = DesktopRecap(settings: settings, world: world, focus: focus, toasts: this.toasts, store: store('journal.json'), clock: clock);
     this.hotkeys = Hotkeys(
@@ -277,6 +279,9 @@ class MochiDesktop {
   /// Press and hold Mochi to keep it purring (W21).
   late final PurrSession purr;
 
+  /// Holidays (W20): the occasion showing, its greeting once, the treat, the candles and the taskbar's decoration.
+  late final DesktopHolidays holidays;
+
   /// The global shortcuts (Settings › Desktop Pet and Assistant).
   late final Hotkeys hotkeys;
 
@@ -360,6 +365,7 @@ class MochiDesktop {
     rhythm.start();
     world.start();
     recap.start();
+    holidays.start();
     await toasts.start((target) {
       if (!_opens.isClosed) _opens.add(target);
     });
@@ -480,6 +486,7 @@ class MochiDesktop {
     motion.dispose();
     games.dispose();
     purr.dispose();
+    holidays.dispose();
     recap.dispose();
     focus.dispose();
     world.dispose();
