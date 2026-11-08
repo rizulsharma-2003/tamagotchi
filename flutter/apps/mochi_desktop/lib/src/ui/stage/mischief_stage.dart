@@ -15,6 +15,8 @@
 //   adventure only one has Mochi out at a time, and an adventure you asked for takes Mochi from the roamer.
 // - X11 holiday takeover (holiday_takeover.dart): on Diwali lights, at Christmas snow along the top of the window you're
 //   using; at Halloween pumpkins on the taskbar.
+// - X12 weather and time moods (core/moods.dart): the morning coffee with Patch; the umbrella while it rains (drawn by the
+//   pet's own view on the taskbar, not here).
 // - W26 Mochi on the taskbar while Mochi's window is open (stage_stand.dart): the stroll goes on, drawn by the stage.
 //
 // Development: `MOCHI_DESKTOP_MISCHIEF_DEMO` ("confetti:20,fireworks:45") repeats a preview every so many seconds
@@ -25,9 +27,11 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:mochi_world/mochi_world.dart' as w;
 
 import '../../core/json_store.dart';
+import '../../core/moods.dart';
 import '../../core/mischief.dart';
 import '../../core/pet_cues.dart';
 import '../../core/sessions.dart' show SessionPhase;
@@ -69,6 +73,9 @@ class MischiefStage extends ChangeNotifier {
     this.adventureDemo,
     this.taskbar,
     this.takeoverOccasion,
+    bool Function()? patchOnTaskbar,
+    http.Client Function()? weatherClient,
+    bool? weather,
   }) : cast = StageCast(stage),
        _shown = shown ?? (() => true) {
     celebrations = StageCelebrations(stage: stage, cast: cast, gate: desktop.mischief, displays: displays, cursor: cursor, clock: clock);
@@ -83,6 +90,15 @@ class MischiefStage extends ChangeNotifier {
       onOpen: onOpen,
       clock: () => desktop.sessions.now,
       seconds: clock,
+    );
+    moods = DesktopMoods(
+      settings: desktop.settings,
+      world: desktop.world,
+      rhythm: desktop.rhythm,
+      gate: desktop.mischief,
+      patchOnTaskbar: patchOnTaskbar ?? (() => false),
+      client: weatherClient,
+      forced: weather,
     );
     takeover = HolidayTakeover(
       stage: stage,
@@ -211,6 +227,9 @@ class MischiefStage extends ChangeNotifier {
   /// X11.
   late final HolidayTakeover takeover;
 
+  /// X12: the morning coffee with Patch, and the umbrella when it rains ([DesktopMoods.umbrella]).
+  late final DesktopMoods moods;
+
   /// Minutes in a row at the PC (for the stretch break), and whether this is gone.
   int _activeMinutes = 0;
   bool _disposed = false;
@@ -238,6 +257,7 @@ class MischiefStage extends ChangeNotifier {
       ..add(desktop.cues.listen(_cue));
     notes.start();
     takeover.start();
+    moods.start();
     desktop.world.everyMinute(_minute);
     roamer?.start();
     adventure?.start();
@@ -337,6 +357,13 @@ class MischiefStage extends ChangeNotifier {
     return demo;
   }
 
+  /// A development switch: `MOCHI_DESKTOP_WEATHER=rain|clear` forces the weather (and skips the network).
+  static bool? weatherFrom(String? value) => switch ((value ?? '').trim().toLowerCase()) {
+    'rain' => true,
+    'clear' => false,
+    _ => null,
+  };
+
   /// A development switch: `MOCHI_DESKTOP_TAKEOVER=diwali|christmas|halloween` forces that occasion's takeover.
   static w.SeasonalEvent? takeoverFrom(String? value) {
     final name = (value ?? '').trim().toLowerCase();
@@ -365,6 +392,7 @@ class MischiefStage extends ChangeNotifier {
     pet?.dispose();
     pet?.sprites.dispose();
     takeover.dispose();
+    moods.dispose();
     celebrations.dispose();
     stage.dispose();
     super.dispose();

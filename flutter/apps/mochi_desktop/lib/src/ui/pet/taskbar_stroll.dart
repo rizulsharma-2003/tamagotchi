@@ -223,6 +223,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     this.displays = const NoDisplays(),
     Duration Function()? idle,
     double Function()? clock,
+    DateTime Function()? wallClock,
     math.Random? random,
     StrollTuning tuning = const StrollTuning(),
     this.frameInterval = const Duration(milliseconds: 40),
@@ -235,8 +236,11 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
   }) : _drawn = drawn ?? _nextFrame,
        _idle = idle ?? (() => Duration.zero),
        _clock = clock ?? _monotonic(),
+       _wall = wallClock ?? DateTime.now,
        stroller = Stroller(random: random, tuning: tuning),
        _roaming = settings.roamTaskbar {
+    // Late at night (X12): the Mac's quiet-hours reshuffle of what Mochi chooses, asked as each stretch is planned.
+    stroller.lateWhen(() => LateNight.at(settings, _wall()));
     _cues = cues.listen(_cue);
     _celebrations = companion?.host.celebrated.listen((_) => _celebrated());
     settings.addListener(_settingsChanged);
@@ -313,6 +317,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
 
   final Duration Function() _idle;
   final double Function() _clock;
+  final DateTime Function() _wall;
   late final StreamSubscription<PetCue> _cues;
   StreamSubscription<Object?>? _celebrations;
 

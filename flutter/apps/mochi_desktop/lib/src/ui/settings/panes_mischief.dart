@@ -7,6 +7,7 @@ import 'package:mochi_world/mochi_world.dart' as w;
 
 import '../../core/mischief.dart';
 import '../stage/celebrations.dart' show CelebrationKind;
+import 'mischief_weather_rows.dart';
 import 'settings_kit.dart';
 
 class MischiefPane extends StatelessWidget {
@@ -51,7 +52,10 @@ class MischiefPane extends StatelessWidget {
             SettingsGroup(
               title: 'Extras',
               children: [
-                for (final extra in MischiefExtra.available) _ExtraRow(extra: extra, host: host, everything: all),
+                for (final extra in MischiefExtra.available) ...[
+                  _ExtraRow(extra: extra, host: host, everything: all),
+                  if (extra == MischiefExtra.moods) WeatherRows(host: host),
+                ],
               ],
             ),
             if (stage != null && supported)

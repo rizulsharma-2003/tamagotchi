@@ -129,6 +129,62 @@ class MischiefSettings {
   int get hashCode => Object.hash(enabled, Object.hashAll([for (final extra in MischiefExtra.values) on(extra)]));
 }
 
+/// Settings › Mischief › Weather and time moods › Local weather (X12): off at first. The user types a city; only its display
+/// name and its position rounded to a tenth of a degree (about 10 km) are kept, and only that position is ever sent (to
+/// Open-Meteo, for the weather there).
+@immutable
+class LocalWeatherSettings {
+  const LocalWeatherSettings({this.enabled = false, this.city, this.latitude, this.longitude});
+
+  /// The switch: off at first.
+  final bool enabled;
+
+  /// The city's display name ("Pune, IN") and its position, rounded to 1 decimal (null: no city yet).
+  final String? city;
+  final double? latitude;
+  final double? longitude;
+
+  /// A coordinate rounded to 1 decimal.
+  static double round1(double value) => (value * 10).round() / 10;
+
+  /// A city is set.
+  bool get hasCity => city != null && latitude != null && longitude != null;
+
+  /// On, with a city.
+  bool get ready => enabled && hasCity;
+
+  LocalWeatherSettings copyWith({bool? enabled}) =>
+      LocalWeatherSettings(enabled: enabled ?? this.enabled, city: city, latitude: latitude, longitude: longitude);
+
+  /// This switch with another city (its position is rounded here).
+  LocalWeatherSettings withCity(String name, double latitude, double longitude) =>
+      LocalWeatherSettings(enabled: enabled, city: name, latitude: round1(latitude), longitude: round1(longitude));
+
+  /// The city forgotten.
+  LocalWeatherSettings withoutCity() => LocalWeatherSettings(enabled: enabled);
+
+  Map<String, Object?> toJson() => {'enabled': enabled, if (hasCity) ...{'city': city, 'lat': latitude, 'lon': longitude}};
+
+  static LocalWeatherSettings fromJson(Object? json) {
+    if (json is! Map) return const LocalWeatherSettings();
+    final city = json['city'], lat = json['lat'], lon = json['lon'];
+    final valid = city is String && city.isNotEmpty && city.length <= 80 && lat is num && lon is num && lat.abs() <= 90 && lon.abs() <= 180;
+    return LocalWeatherSettings(
+      enabled: json['enabled'] == true,
+      city: valid ? city : null,
+      latitude: valid ? round1(lat.toDouble()) : null,
+      longitude: valid ? round1(lon.toDouble()) : null,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is LocalWeatherSettings && other.enabled == enabled && other.city == city && other.latitude == latitude && other.longitude == longitude;
+
+  @override
+  int get hashCode => Object.hash(enabled, city, latitude, longitude);
+}
+
 /// Why an extra isn't running right now, in the order the gate asks.
 enum MischiefPause {
   /// No native stage here (the macOS development build).

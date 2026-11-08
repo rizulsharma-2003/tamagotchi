@@ -172,6 +172,8 @@ class DesktopAppState extends State<DesktopApp> {
     adventureDemo: MischiefStage.adventureDemoFrom(Platform.environment['MOCHI_DESKTOP_ADVENTURE_DEMO']),
     taskbar: () => _stroll.taskbarStage,
     takeoverOccasion: MischiefStage.takeoverFrom(Platform.environment['MOCHI_DESKTOP_TAKEOVER']),
+    patchOnTaskbar: () => _stroll.home != null,
+    weather: MischiefStage.weatherFrom(Platform.environment['MOCHI_DESKTOP_WEATHER']),
   );
 
   /// The Windows extras on the native stage (tests).
@@ -849,6 +851,7 @@ class DesktopAppState extends State<DesktopApp> {
                 onOpenPopover: openPopover,
                 companion: _companion,
                 exploreLabel: exploreLabel,
+                umbrella: _mischief.moods.umbrella,
               ),
             ),
             if (_warmingUp) _PopoverWarmUp(panel: _popoverPanel(false), onDone: _warmedUp),
