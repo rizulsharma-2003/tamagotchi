@@ -216,8 +216,12 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
-      expect(state.settingsNavigation.tab, SettingsTab.claude, reason: 'across the group boundary');
+      expect(state.settingsNavigation.tab, SettingsTab.claude, reason: 'across the group boundary (past Mischief, Windows only)');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(state.settingsNavigation.tab, SettingsTab.mischief);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pump(const Duration(milliseconds: 300));
       expect(state.settingsNavigation.tab, SettingsTab.fun);

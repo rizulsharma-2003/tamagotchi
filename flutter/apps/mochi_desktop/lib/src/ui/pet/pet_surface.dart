@@ -251,9 +251,11 @@ class _PetSurfaceState extends State<PetSurface> {
     final duo = widget.stroll.onTaskbar ? widget.stroll.duo : null;
     final companion = widget.companion;
     final world = needsYou || _bubble != null ? null : _worldLine(patchShown: duo != null && (companion?.visible ?? false));
-    final bubble = needsYou ? _needsYou(patch: duo != null) : _bubble ?? world?.text;
     // Patch's own lines rise over his desk.
     final overPatch = world?.patch ?? false;
+    // Out on the desktop, Mochi's own lines wait (Patch still says his).
+    final away = widget.stroll.out;
+    final bubble = away && !overPatch ? null : (needsYou ? _needsYou(patch: duo != null) : _bubble ?? world?.text);
     if ((bubble != null) != _bubbleShown) {
       _bubbleShown = bubble != null;
       // The taskbar window makes room for it (after this frame: never during a build).
@@ -323,6 +325,7 @@ class _PetSurfaceState extends State<PetSurface> {
                             border: _focused ? Border.all(color: p.focus, width: 2) : null,
                           ),
                           child: MochiView(
+                            petAway: away,
                             world: widget.desktop.world,
                             sessions: widget.desktop.sessions,
                             lastActivity: widget.lastActivity,

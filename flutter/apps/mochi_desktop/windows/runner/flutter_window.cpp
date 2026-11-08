@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "native_stage.h"
 #include "toasts.h"
 #include "utils.h"
 
@@ -108,6 +109,8 @@ bool FlutterWindow::OnCreate() {
           &flutter::StandardMethodCodec::GetInstance());
   system_channel_->SetMethodCallHandler(
       [this](const auto& call, auto result) { HandleSystemCall(call, std::move(result)); });
+  // `mochi/stage`: Mochi's native stage (native_stage.h), windows of its own anywhere on any display.
+  stage_ = std::make_unique<mochi_stage::Stage>(flutter_controller_->engine()->messenger());
   // Windows sends the display's state right away, and again whenever it changes.
   display_notification_ = ::RegisterPowerSettingNotification(GetHandle(), &kConsoleDisplayState, DEVICE_NOTIFY_WINDOW_HANDLE);
   session_notifications_ = ::WTSRegisterSessionNotification(GetHandle(), NOTIFY_FOR_THIS_SESSION) != FALSE;
@@ -123,6 +126,7 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   mochi_toasts::Stop();
+  stage_ = nullptr;
   if (display_notification_ != nullptr) {
     ::UnregisterPowerSettingNotification(display_notification_);
     display_notification_ = nullptr;
@@ -178,6 +182,17 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
         SendSystem("power", flutter::EncodableValue("suspend"));
       } else if (wparam == PBT_APMRESUMEAUTOMATIC || wparam == PBT_APMRESUMESUSPEND) {
         SendSystem("power", flutter::EncodableValue("resume"));
+      }
+      break;
+    case WM_DISPLAYCHANGE:
+      // A display came or went, or changed its resolution: the stage's actors may be off screen now.
+      if (stage_) {
+        stage_->DisplaysChanged();
+      }
+      break;
+    case WM_SETTINGCHANGE:
+      if (wparam == SPI_SETWORKAREA && stage_) {
+        stage_->DisplaysChanged();
       }
       break;
     case WM_WTSSESSION_CHANGE:

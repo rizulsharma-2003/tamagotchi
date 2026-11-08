@@ -79,7 +79,11 @@ class DesktopRecap extends ChangeNotifier {
       _dirty = true;
       notifyListeners();
     }
+    afterRecord?.call(event);
   }
+
+  /// Told every real event after the journal has it (the streak's fireworks: core/streaks.dart).
+  void Function(w.CompanionEvent event)? afterRecord;
 
   /// From when on the history is complete (anything earlier is unknown, not "nothing happened").
   DateTime historyStart([DateTime? now]) => journal.historyStart(now: now ?? _clock(), launchedAt: launchedAt);

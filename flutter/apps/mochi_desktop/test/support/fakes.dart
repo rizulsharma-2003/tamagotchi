@@ -683,6 +683,8 @@ class TestDesktop {
     int? worldSeed = 0x5EED5,
     MemoryWorldStore? worldStore,
     Map<String, Object?> files = const {},
+    bool stage = true,
+    bool Function()? fullScreen,
   }) {
     final stores = {for (final entry in files.entries) entry.key: MemoryJsonStore(entry.value)};
     final temp = Directory.systemTemp.createTempSync('mochi_desktop_test');
@@ -740,6 +742,8 @@ class TestDesktop {
       stores: (file) => stores.putIfAbsent(file, MemoryJsonStore.new),
       uptime: uptime ?? testSeconds,
       worldSeed: worldSeed,
+      stage: stage,
+      fullScreen: fullScreen,
     );
     return TestDesktop._(temp, desktop, sockets, api, claude, vault, document, start, toastService, sound, usage, hotkeys, store, stores);
   }
