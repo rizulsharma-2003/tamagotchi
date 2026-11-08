@@ -110,6 +110,7 @@ void main() {
 
   Future<void> done(WidgetTester tester) async {
     mischief.buddy?.stop();
+    mischief.roamer?.stop();
     t.desktop.mischief.stop();
     await tester.pump();
   }

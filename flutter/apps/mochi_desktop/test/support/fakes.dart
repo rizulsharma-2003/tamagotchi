@@ -803,6 +803,9 @@ class FakeDisplays implements Displays {
 
   List<DisplayArea> displays;
 
+  /// The display the foreground window is on (X8), or null.
+  DisplayArea? front;
+
   /// A 1920×1080 main display at 100% with a 48-pixel taskbar, and a 2560×1440 one at 150% to its right.
   static const DisplayArea main1080 = DisplayArea(
     key: r'\\.\DISPLAY1 1920x1080',
@@ -820,4 +823,7 @@ class FakeDisplays implements Displays {
 
   @override
   List<DisplayArea> list() => List.of(displays);
+
+  @override
+  DisplayArea? foreground() => front;
 }
