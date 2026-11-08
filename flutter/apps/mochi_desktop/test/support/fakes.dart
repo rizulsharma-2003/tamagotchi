@@ -841,6 +841,9 @@ class FakeWindowFrames implements WindowFrames {
 
   List<WindowFrame> windows;
 
+  /// Windows that are minimised (still there, but not on screen: neither listed nor read).
+  final Set<int> minimised = {};
+
   /// How many times the whole list was read, and how many times one window was.
   int lists = 0;
   int reads = 0;
@@ -848,12 +851,16 @@ class FakeWindowFrames implements WindowFrames {
   @override
   List<WindowFrame> list() {
     lists++;
-    return List.of(windows);
+    return [
+      for (final window in windows)
+        if (!minimised.contains(window.hwnd)) window,
+    ];
   }
 
   @override
   WindowFrame? frame(int hwnd) {
     reads++;
+    if (minimised.contains(hwnd)) return null;
     return windows.where((window) => window.hwnd == hwnd).firstOrNull;
   }
 }

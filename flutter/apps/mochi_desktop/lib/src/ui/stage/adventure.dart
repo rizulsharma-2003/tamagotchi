@@ -29,6 +29,18 @@
 //   first); a frame is sent only when the picture or the place changes; the actor is topmost.
 // - Home is PetHome.comeBack(x:): the hop out of the top of the screen ends with Mochi on the taskbar where it left.
 //
+// With the Title-bar walker (docs/SPRINT_2.md X1, Mischief) on, a window Mochi stands on is followed:
+// - While Mochi stands on a window's top, that one window's frame is read (about 8 a second while it is still, every
+//   frame while it moves; nothing at all with the switch off or while the screen is unseen): Mochi never moves, raises or
+//   focuses a window.
+// - Dragged (same size), the window takes Mochi with it: its feet stay glued to the same spot on the top edge, in a
+//   holding-on pose (the sit loop: low, gripping, with wide eyes and paws out). When the window has been still a moment, it
+//   looks at the windows again and carries on from where it is. Resized: if the top edge still holds Mochi's spot it
+//   rides, else it falls.
+// - The window gone, minimised, hidden, maximised, or snapped (its size jumps in one read), dragged so high that Mochi's head
+//   would leave the display, or onto another display: Mochi falls to the surface below and carries on.
+// With the switch off, the regular survey only drops Mochi when its ledge goes, as on the Mac.
+//
 // Not done yet (known gaps): Mochi's speech bubbles don't show while it's out (the plan's lines are skipped), and
 // the carry swings around Mochi's feet rather than its scruff.
 //
@@ -147,6 +159,43 @@ class _Outing {
 
   /// The windows at the last survey, front to back (what a ledge's window number points into).
   List<WindowFrame> windows = const [];
+
+  /// The stretch of taskbar Mochi may come home to (planner x).
+  w.AdventureSpan bar = const w.AdventureSpan(0, 0);
+
+  /// The window Mochi stands on, as last read (Title-bar walker), and Mochi riding it.
+  _Stand? stand;
+  _Ride? ride;
+}
+
+/// The window Mochi stands on, as it was at the last read.
+class _Stand {
+  _Stand(this.hwnd, this.frame, this.readAt);
+
+  final int hwnd;
+  WindowFrame frame;
+  double readAt;
+}
+
+/// Mochi riding a window that is being moved or resized.
+class _Ride {
+  _Ride({required this.hwnd, required this.frame, required this.x, required this.y, required this.facing, required this.since}) {
+    last = (x, y);
+    changedAt = since;
+  }
+
+  final int hwnd;
+
+  /// The window as last read, and where Mochi's feet are (physical pixels).
+  WindowFrame frame;
+  double x, y;
+  final double facing;
+  final double since;
+
+  /// When the window last changed, and where Mochi last stood on the display.
+  double changedAt = 0;
+  (double, double) last = (0, 0);
+  double readAt = double.negativeInfinity;
 }
 
 class DesktopAdventure extends ChangeNotifier {
@@ -254,6 +303,9 @@ class DesktopAdventure extends ChangeNotifier {
   /// Mochi is hanging from the pointer.
   bool get carried => _outing?.carry != null;
 
+  /// Mochi is riding a window that is being moved (Title-bar walker).
+  bool get riding => _outing?.ride != null;
+
   /// The adventure's plan (tests).
   w.AdventurePlan? get plan => _outing?.plan;
 
@@ -315,6 +367,8 @@ class DesktopAdventure extends ChangeNotifier {
       _finish(null);
       return true;
     }
+    final ride = outing.ride;
+    if (ride != null) _replan(outing, outing.space.point(ride.x, ride.y));
     final plan = outing.plan;
     if (plan == null || outing.hurrying) return true;
     outing.plan = w.AdventurePlanner.hurryHome(plan, at: time(), terrain: outing.terrain, metrics: outing.metrics);
@@ -400,6 +454,7 @@ class DesktopAdventure extends ChangeNotifier {
     );
     _outing = outing;
     outing.windows = frames;
+    outing.bar = bar;
     _pointer = null;
     _pressedAt = null;
     _lifted = false;
@@ -481,9 +536,14 @@ class DesktopAdventure extends ChangeNotifier {
       _schedule(moveEvery);
       return;
     }
+    if (outing.ride != null) {
+      _rideTick(outing, outing.ride!, now);
+      return;
+    }
     final plan = outing.plan;
     if (plan == null) return;
     final sample = plan.sample(now);
+    if (_followWindow(outing, sample, now)) return;
     final top = outing.terrain.bounds.maxY;
     if (sample.finished || (sample.phase == w.AdventurePhase.returning && sample.isAirborne && sample.point.y > top + outing.metrics.height * 0.15)) {
       _finish(plan.homeX);
@@ -615,9 +675,13 @@ class DesktopAdventure extends ChangeNotifier {
       _homeNow();
       return;
     }
-    outing.windows = frames;
     final terrain = space.terrain([for (final frame in frames) frame.frame], outing.metrics);
     if (terrain == outing.terrain) return;
+    // Title-bar walker: the window Mochi stands on changed. The next frame follows it (Mochi rides along, or falls) and takes
+    // the new windows up then; here it would only be dropped.
+    final stand = outing.stand;
+    if (outing.plan != null && stand != null && gate.may(MischiefExtra.titleBars) && windows.frame(stand.hwnd) != stand.frame) return;
+    outing.windows = frames;
     outing.terrain = terrain;
     final plan = outing.plan;
     if (plan == null) return;
@@ -664,6 +728,184 @@ class DesktopAdventure extends ChangeNotifier {
     home.comeBack(x: x ?? outing.homeFeet?.$1);
     _watchForSpontaneity();
     notifyListeners();
+  }
+
+  // ---- the Title-bar walker (X1) ----
+
+  /// How often the window Mochi stands on is read while it is still (per second); while it moves, every frame.
+  static const double standReadRate = 8;
+
+  /// The window has been still this long: Mochi stops riding and carries on from where it is.
+  static const double settleAfter = 0.35;
+
+  /// A size that changes by this much in one read (or [snapJump] logical pixels) is a snap or a maximise, not a drag on an
+  /// edge.
+  static const double snapShare = 0.18;
+  static const double snapJump = 96;
+
+  /// While Mochi stands on a window's top (and the Title-bar walker may run), reads that one window's frame. True when it
+  /// took over this frame (Mochi rides, or falls).
+  bool _followWindow(_Outing outing, w.AdventureSample sample, double now) {
+    if (outing.hurrying || !gate.may(MischiefExtra.titleBars)) {
+      outing.stand = null;
+      return false;
+    }
+    final ledge = !sample.isAirborne && sample.move != w.AdventureMove.climb ? outing.terrain.ledge(sample.point, tolerance: 2) : null;
+    final index = ledge?.window ?? -1;
+    if (ledge == null || index < 0 || index >= outing.windows.length) {
+      outing.stand = null;
+      return false;
+    }
+    final hwnd = outing.windows[index].hwnd;
+    final stand = outing.stand;
+    if (stand == null || stand.hwnd != hwnd) {
+      final read = windows.frame(hwnd);
+      outing.stand = read == null ? null : _Stand(hwnd, read, now);
+      return false;
+    }
+    if (now - stand.readAt < 1 / standReadRate - 0.005) return false;
+    stand.readAt = now;
+    final read = windows.frame(hwnd);
+    final feet = outing.space.feet(sample.point);
+    if (read == null) {
+      _fallOff(outing, outing.space.point(feet.$1, feet.$2), facing: sample.facing);
+      return true;
+    }
+    if (read == stand.frame) return false;
+    // It changed under Mochi: ride along (or fall off).
+    final ride = _Ride(hwnd: hwnd, frame: stand.frame, x: feet.$1.toDouble(), y: feet.$2.toDouble(), facing: sample.facing, since: now);
+    outing.stand = null;
+    outing.ride = ride;
+    outing.plan = null;
+    if (!_rideTo(outing, ride, read, now)) return true;
+    _drawRide(outing, ride, now);
+    _schedule(moveEvery);
+    return true;
+  }
+
+  /// A frame of the ride: reads the window again (every frame while it moves, eight a second while it is still), follows it,
+  /// and carries on from where Mochi is once it has been still a moment.
+  void _rideTick(_Outing outing, _Ride ride, double now) {
+    if (!gate.may(MischiefExtra.titleBars)) {
+      _fallOff(outing, outing.space.point(ride.last.$1, ride.last.$2));
+      return;
+    }
+    final moving = now - ride.changedAt < settleAfter;
+    if (moving || now - ride.readAt >= 1 / standReadRate - 0.005) {
+      ride.readAt = now;
+      final read = windows.frame(ride.hwnd);
+      if (read == null) {
+        _fallOff(outing, outing.space.point(ride.last.$1, ride.last.$2));
+        return;
+      }
+      if (read != ride.frame) {
+        if (!_rideTo(outing, ride, read, now)) return;
+      } else if (!moving) {
+        // Still for a moment: look at the windows again and carry on from here.
+        _settle(outing, ride);
+        return;
+      }
+    }
+    _drawRide(outing, ride, now);
+    _schedule(now - ride.changedAt < settleAfter ? moveEvery : holdEvery);
+  }
+
+  /// Moves the ride to the window's new frame [read]: true when Mochi still rides it, false when it fell off (it is falling
+  /// already).
+  bool _rideTo(_Outing outing, _Ride ride, WindowFrame read, double now) {
+    final space = outing.space;
+    final before = ride.frame.frame, after = read.frame;
+    final scale = space.scale;
+    final snapped =
+        read.zoomed != ride.frame.zoomed ||
+        (after.width - before.width).abs() >= math.max(snapJump * scale, snapShare * before.width) ||
+        (after.height - before.height).abs() >= math.max(snapJump * scale, snapShare * before.height);
+    var x = ride.x, y = ride.y;
+    if (after.width == before.width && after.height == before.height) {
+      // Dragged: the feet stay where they were on the top edge.
+      x += after.left - before.left;
+      y += after.top - before.top;
+    } else {
+      // Resized: the top edge is where Mochi stands; its spot has to be still on it.
+      y = after.top.toDouble();
+      final margin = outing.metrics.halfWidth * 0.5 * scale;
+      if (x < after.left + margin || x > after.right - margin) {
+        _fallOff(outing, space.point(ride.last.$1, ride.last.$2));
+        return false;
+      }
+    }
+    final point = space.point(x, y);
+    final bounds = space.bounds;
+    final onDisplay = space.monitor.contains(x.round(), math.min(y, space.monitor.bottom - 1.0).round()) && point.y <= bounds.maxY - outing.metrics.height;
+    if (snapped || !onDisplay || read.zoomed) {
+      _fallOff(outing, space.point(ride.last.$1, ride.last.$2));
+      return false;
+    }
+    ride
+      ..frame = read
+      ..x = x
+      ..y = y
+      ..last = (x, y)
+      ..changedAt = now;
+    return true;
+  }
+
+  /// Mochi holds on: sitting low on the title bar with wide eyes and its paws out, its feet where the window carries them.
+  void _drawRide(_Outing outing, _Ride ride, double now) {
+    final space = outing.space;
+    pet.draw(
+      time: now,
+      motion: StrollSample(x: 0, facing: ride.facing, animation: PetAnimation.sit, animationTime: now, activity: StrollActivity.rest),
+      feet: (ride.x.round(), ride.y.round()),
+      ratio: space.scale,
+      unit: unit,
+      quantum: 1 / 15,
+      accent: holdOn,
+    );
+    if (_ticks % 60 == 0) pet.raise();
+  }
+
+  /// The holding-on pose: the sit loop, with wide eyes, ears back and paws out to grip.
+  @visibleForTesting
+  static void holdOn(PetPose pose) {
+    pose.eyes = PetEyes.wide;
+    pose.earPerk = -0.3;
+    pose.leftArm = 0.45;
+    pose.rightArm = 0.45;
+    pose.shadow = 0.5;
+  }
+
+  /// The window has been still a moment: survey the windows again and carry on from where Mochi is.
+  void _settle(_Outing outing, _Ride ride) {
+    _replan(outing, outing.space.point(ride.x, ride.y));
+  }
+
+  /// The window went (closed, minimised, maximised, snapped, dragged off): Mochi falls from where it stood to the surface
+  /// below, and carries on from there.
+  void _fallOff(_Outing outing, w.AdventurePoint from, {double? facing}) => _replan(outing, from, facing: facing);
+
+  /// A new route from [from], over the windows as they are now: from a window top that is still there it lands (a little
+  /// squash), from one that went it falls first.
+  void _replan(_Outing outing, w.AdventurePoint from, {double? facing}) {
+    final space = outing.space;
+    facing ??= outing.ride?.facing ?? 1;
+    outing.ride = null;
+    outing.stand = null;
+    outing.windows = windows.list();
+    outing.terrain = space.terrain([for (final frame in outing.windows) frame.frame], outing.metrics);
+    outing.seed += 0x9E37;
+    outing.hurrying = false;
+    outing.plan = w.AdventurePlanner.plan(
+      from: from,
+      at: time(),
+      terrain: outing.terrain,
+      bar: outing.bar,
+      seed: outing.seed,
+      metrics: outing.metrics,
+      length: (25, 45),
+      facing: facing,
+    );
+    _schedule(moveEvery);
   }
 
   // ---- the carry ----
@@ -732,7 +974,10 @@ class DesktopAdventure extends ChangeNotifier {
     final bounds = space.bounds;
     final homeX = outing.homeFeet == null ? scruff.x : space.point(outing.homeFeet!.$1, outing.homeFeet!.$2).x;
     final bar = w.AdventureSpan(math.max(bounds.minX + outing.metrics.halfWidth, homeX - 60), math.min(bounds.maxX - outing.metrics.halfWidth, homeX + 60));
-    outing.terrain = space.terrain([for (final frame in windows.list()) frame.frame], outing.metrics);
+    outing.windows = windows.list();
+    outing.terrain = space.terrain([for (final frame in outing.windows) frame.frame], outing.metrics);
+    outing.bar = bar;
+    outing.stand = null;
     outing.plan = w.AdventurePlanner.plan(
       from: feet,
       at: time(),
@@ -766,10 +1011,13 @@ class DesktopAdventure extends ChangeNotifier {
           return;
         }
         final far = ((at.$1 - pressed.$1).abs() + (at.$2 - pressed.$2).abs()) > liftAfter * outing.space.scale;
-        if (_lifted || !far || outing.plan == null) return;
+        if (_lifted || !far || (outing.plan == null && outing.ride == null)) return;
         _lifted = true;
-        outing.carry = _Carry(startedAt: time(), facing: outing.plan!.sample(time()).facing, lastX: at.$1.toDouble(), lastTime: time());
+        final facing = outing.ride?.facing ?? outing.plan!.sample(time()).facing;
+        outing.carry = _Carry(startedAt: time(), facing: facing, lastX: at.$1.toDouble(), lastTime: time());
         outing.plan = null;
+        outing.ride = null;
+        outing.stand = null;
         _pointer = at;
         _tick();
       case StagePointerKind.up:
@@ -818,6 +1066,7 @@ class DesktopAdventure extends ChangeNotifier {
     final outing = _outing;
     if (outing == null) return null;
     if (outing.carry != null) return 'adventure (carried)';
+    if (outing.ride != null) return 'adventure (riding a window)';
     final plan = outing.plan;
     if (plan == null) return 'adventure';
     if (outing.hurrying) return 'adventure (heading home)';

@@ -36,7 +36,14 @@ enum MischiefExtra {
   stickyNotes('Sticky notes', 'Mochi leaves little notes on your desktop, like “Claude finished the tests ✓”.', moves: false),
 
   /// X8: Mochi walks between your displays.
-  roamScreens('Roams your screens', 'Mochi walks from one display to the next and follows you to the one you’re using.', moves: true);
+  roamScreens('Roams your screens', 'Mochi walks from one display to the next and follows you to the one you’re using.', moves: true),
+
+  /// X1: Mochi rides your windows' title bars (on top of the adventures, W19).
+  titleBars(
+    'Title-bar walker',
+    'Mochi rides your windows’ title bars: it holds on when you drag a window and hops off when you snap or minimise it.',
+    moves: true,
+  );
 
   const MischiefExtra(this.title, this.detail, {required this.moves});
 
