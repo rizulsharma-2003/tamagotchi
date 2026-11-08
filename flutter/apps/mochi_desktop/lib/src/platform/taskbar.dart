@@ -8,6 +8,10 @@
 // Mochi only walks in the taskbar's empty stretches: between the widgets tile and the centred buttons, and between the
 // buttons and the tray. They come from the buttons UI Automation finds on the taskbar or, if it can't, from an
 // estimate (the tray's own window, Explorer's alignment and widgets settings, a generous middle band for the buttons).
+//
+// The same UI Automation call also says which elements are the taskbar's landmarks (X6, Mischief: the widgets tile,
+// the Start button and the clock), by their AutomationId and ClassName; never by their names (localised, and they can
+// hold personal text). Each may be missing: widgets off, an older Windows, UI Automation failing.
 
 import 'dart:io';
 import 'dart:math' as math;
@@ -45,6 +49,71 @@ class PixelRect {
 
   @override
   String toString() => 'PixelRect($left, $top, $right, $bottom)';
+}
+
+/// One element UI Automation found on the taskbar: where it is and what kind it says it is (never its name).
+@immutable
+class TaskbarElement {
+  const TaskbarElement(this.rect, {this.automationId = '', this.className = ''});
+
+  final PixelRect rect;
+  final String automationId;
+  final String className;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TaskbarElement && other.rect == rect && other.automationId == automationId && other.className == className;
+
+  @override
+  int get hashCode => Object.hash(rect, automationId, className);
+}
+
+/// The taskbar's landmarks (X6) as UI Automation placed them (physical pixels); each null when it isn't there.
+@immutable
+class TaskbarLandmarks {
+  const TaskbarLandmarks({this.clock, this.start, this.widgets});
+
+  static const TaskbarLandmarks none = TaskbarLandmarks();
+
+  /// The AutomationIds and ClassNames Windows 11 gives them (measured on a Windows 11 PC): the widgets tile and the Start
+  /// button have AutomationIds of their own; the clock's (`SystemTrayIcon`) is shared with the other tray icons, so it's
+  /// the right-most `SystemTray.OmniButton` (the clock and notification button; the Show Desktop sliver beyond it has a
+  /// class of its own).
+  static const String widgetsId = 'WidgetsButton';
+  static const String startId = 'StartButton';
+  static const String clockClass = 'SystemTray.OmniButton';
+
+  /// The landmarks among [elements]: whole buttons only (not empty, and not a container as wide as the taskbar).
+  static TaskbarLandmarks of(Iterable<TaskbarElement> elements) {
+    PixelRect? clock, start, widgets;
+    for (final element in elements) {
+      final rect = element.rect;
+      if (rect.isEmpty || rect.width < 8 || rect.width > 1000 || rect.height < 16) continue;
+      if (element.automationId == widgetsId) {
+        widgets ??= rect;
+      } else if (element.automationId == startId) {
+        start ??= rect;
+      } else if (element.className == clockClass && (clock == null || rect.left > clock.left)) {
+        clock = rect;
+      }
+    }
+    return TaskbarLandmarks(clock: clock, start: start, widgets: widgets);
+  }
+
+  final PixelRect? clock;
+  final PixelRect? start;
+  final PixelRect? widgets;
+
+  bool get isEmpty => clock == null && start == null && widgets == null;
+
+  @override
+  bool operator ==(Object other) => other is TaskbarLandmarks && other.clock == clock && other.start == start && other.widgets == widgets;
+
+  @override
+  int get hashCode => Object.hash(clock, start, widgets);
+
+  @override
+  String toString() => 'TaskbarLandmarks(clock: $clock, start: $start, widgets: $widgets)';
 }
 
 /// The screen edge the taskbar is docked to.
@@ -118,6 +187,10 @@ abstract interface class TaskbarInfo {
   /// Where the taskbar's buttons are (UI Automation, off the UI thread), or null if they can't be found.
   Future<List<PixelRect>?> buttons();
 
+  /// The landmarks the last [buttons] call found among those elements (the same single UI Automation call; none before
+  /// it, or when it failed).
+  TaskbarLandmarks get landmarks;
+
   /// A cheap summary of what decides where the buttons are (the app windows that have one, the tray's size): while
   /// it's the same, measuring them again would find the same. Null: can't tell (measure).
   Object? fingerprint();
@@ -187,6 +260,9 @@ class NoTaskbar implements TaskbarInfo {
 
   @override
   Future<List<PixelRect>?> buttons() async => null;
+
+  @override
+  TaskbarLandmarks get landmarks => TaskbarLandmarks.none;
 
   @override
   Object? fingerprint() => null;
@@ -431,13 +507,15 @@ class TaskbarStage {
 
   /// Mochi's body in a window at [frame]: the part that takes clicks (the rest lets them through to the taskbar). Sunk
   /// down into the taskbar (Peekaboo: [sink] 0 standing to 1 hidden), only what still shows above the window's bottom edge
-  /// ([shows] logical pixels at most when hidden) takes clicks.
-  PixelRect body(PixelRect frame, {double sink = 0, double? shows}) {
+  /// ([shows] logical pixels at most when hidden) takes clicks. Lifted off the taskbar ([lift] logical pixels: hanging
+  /// from the clock, perched on the widgets tile), the body is that much higher in the window.
+  PixelRect body(PixelRect frame, {double sink = 0, double? shows, double lift = 0}) {
     var height = (box.height * scale).round();
     if (sink > 0 && shows != null) height = (height + (math.min(height.toDouble(), shows * scale) - height) * sink.clamp(0.0, 1.0)).round();
     final width = (box.height * 0.95 * scale).round();
     final centre = frame.left + frame.width ~/ 2;
-    return PixelRect(centre - width ~/ 2, frame.bottom - height, centre + width ~/ 2, frame.bottom);
+    final up = (lift * scale).round();
+    return PixelRect(centre - width ~/ 2, frame.bottom - height - up, centre + width ~/ 2, frame.bottom - up);
   }
 
   /// [frame]'s top-left in logical pixels (window_manager's coordinates on this screen).

@@ -50,6 +50,13 @@ enum MischiefExtra {
     'Peekaboo',
     'Mochi hides behind the window you’re using and peeks out, and hides in the taskbar while you’re away, popping up when you’re back.',
     moves: true,
+  ),
+
+  /// X6: Mochi visits the taskbar's landmarks (the clock, the Start button, the widgets tile).
+  landmarks(
+    'Landmarks',
+    'Mochi visits the taskbar’s landmarks: it swings on the clock, bats at the Start button and perches on the widgets tile.',
+    moves: true,
   );
 
   const MischiefExtra(this.title, this.detail, {required this.moves});

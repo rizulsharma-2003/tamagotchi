@@ -400,6 +400,10 @@ class FakeTaskbar implements TaskbarInfo {
 
   /// What UI Automation finds (null: nothing, so the zones are estimated).
   List<PixelRect>? measured;
+
+  /// The landmarks that same call found (X6; none: UI Automation didn't say).
+  @override
+  TaskbarLandmarks landmarks = TaskbarLandmarks.none;
   bool busy = false;
   bool inFront = false;
   (int, int)? pointer;

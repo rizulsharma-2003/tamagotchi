@@ -155,6 +155,9 @@ class MochiView extends StatefulWidget {
     if (sink > 0 && sink < 1) {
       // Sinking into the taskbar or coming back up (Peekaboo).
       rate = 25;
+    } else if (roam?.style == StrollStyle.hang && !(roam?.travelling ?? false)) {
+      // Hanging from the clock (X6): a little more than a calm loop, so the swing is smooth.
+      rate = 12;
     } else if (sink >= 1 && !(roam?.oneShot ?? false)) {
       // Hidden, with only its ears and eyes showing: one picture, no frames (the stroll wakes the view for a look around).
       rate = 0;
@@ -533,8 +536,10 @@ class _MochiPainter extends CustomPainter {
     // bottom edge, which cuts it off. Each lowered frame is drawn from the art (the pictures are for standing poses).
     final sink = roam?.sink ?? 0;
     final bodyHeight = PetRenderer.bodyHeight * scale;
-    final feetAt = sink == 0 ? baseline : baseline + sink * (bodyHeight * (1 - Stroller.peekShows) + (size.height - baseline));
-    _pet(canvas, size, pose, Offset(size.width / 2, feetAt), scale, across: true, repeats: frame.repeats && !purring && sink == 0);
+    // Perched on a landmark or leaping to one (X6): raised off the taskbar's floor (drawn from the art, like a lowered one).
+    final lift = roam?.lift ?? 0;
+    final feetAt = (sink == 0 ? baseline : baseline + sink * (bodyHeight * (1 - Stroller.peekShows) + (size.height - baseline))) - lift;
+    _pet(canvas, size, pose, Offset(size.width / 2, feetAt), scale, across: true, repeats: frame.repeats && !purring && sink == 0 && lift == 0);
     final g = GContext(canvas);
     // The toys in play (a ball, a butterfly…), where they are on the taskbar relative to Mochi in the middle of the window.
     for (final toy in roam?.props ?? const <StrollPropSample>[]) {

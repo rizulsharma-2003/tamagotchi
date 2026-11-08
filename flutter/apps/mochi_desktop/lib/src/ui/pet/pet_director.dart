@@ -168,6 +168,18 @@ class PetDirector {
           ..earPerk = math.max(pose.earPerk, 0.85)
           ..lookX = 0.85 * roam.facing
           ..lookY = -0.05;
+      case StrollStyle.hang:
+        // Holding on to the clock's edge with both paws, swinging gently (a slow sway about its feet, a hair of tail).
+        final t = roam.animationTime;
+        pose
+          ..leftArm = 1
+          ..rightArm = 1
+          ..eyes = PetEyes.open
+          ..earPerk = math.max(pose.earPerk, 0.2)
+          ..lookX = 0.25 * math.sin(t * 1.1)
+          ..lookY = -0.05
+          ..rotation = 0.09 * math.sin(t * 2.2)
+          ..tailWag = 0.5 * math.sin(t * 2.2 + 1);
       case StrollStyle.plain:
         break;
     }
