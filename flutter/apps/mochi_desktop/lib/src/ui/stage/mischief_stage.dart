@@ -8,6 +8,8 @@
 // - X8 roaming screens (screen_roamer.dart): Mochi walks to the next display and follows you to the one you work on.
 // - X9 sticky notes (sticky_notes.dart): green tests; Claude finishing or needing you while you're away from the PC; a
 //   stretch break after the best part of an hour at it; a streak milestone.
+// - X3 Peekaboo (stage_behind.dart): out on the stage, Mochi sits just below the window you're using and peeks out from
+//   behind it (the taskbar's hide-while-you're-away is in ui/pet/taskbar_stroll.dart).
 // - W19 desktop adventures (adventure.dart): the Mac's explore-the-desktop, on the same stage and the same StagePet. It's
 //   a Mac feature, so it isn't behind the Mischief switches (only the rules every extra keeps); of the roamer and the
 //   adventure only one has Mochi out at a time, and an adventure you asked for takes Mochi from the roamer.
@@ -28,12 +30,14 @@ import '../../core/pet_cues.dart';
 import '../../core/sessions.dart' show SessionPhase;
 import '../../desktop.dart';
 import '../../platform/displays.dart';
+import '../../platform/foreground_window.dart';
 import '../../platform/native_stage.dart';
 import '../../platform/window_frames.dart';
 import '../pet/taskbar_stroll.dart' show PetHome;
 import 'adventure.dart';
 import 'celebrations.dart';
 import 'screen_roamer.dart';
+import 'stage_behind.dart';
 import 'stage_cast.dart';
 import 'stage_pet.dart';
 import 'stage_sprites.dart';
@@ -55,6 +59,7 @@ class MischiefStage extends ChangeNotifier {
     math.Random? random,
     this.demo = const {},
     this.frames = const NoWindowFrames(),
+    this.foreground = const NoForegroundWindow(),
     this.adventureDemo,
   }) : cast = StageCast(stage),
        _shown = shown ?? (() => true) {
@@ -73,7 +78,15 @@ class MischiefStage extends ChangeNotifier {
     );
     final home = this.home;
     if (home != null) {
-      pet = StagePet(stage: stage, cast: cast, sprites: StageSprites(stage), world: desktop.world, settings: desktop.settings, dark: dark ?? () => false);
+      pet = StagePet(
+        stage: stage,
+        cast: cast,
+        sprites: StageSprites(stage),
+        world: desktop.world,
+        settings: desktop.settings,
+        dark: dark ?? () => false,
+        behind: StageBehind(stage: stage, gate: desktop.mischief, rhythm: desktop.rhythm, foreground: foreground),
+      );
       roamer = ScreenRoamer(
         pet: pet!,
         home: home,
@@ -131,8 +144,10 @@ class MischiefStage extends ChangeNotifier {
   /// Development: previews to repeat, every so often.
   final Map<CelebrationKind, Duration> demo;
 
-  /// Where other apps' windows are (W19, X1), and the development switch that sets Mochi off every so often.
+  /// Where other apps' windows are (W19, X1), the window with the focus (X3), and the development switch that sets
+  /// Mochi off every so often.
   final WindowFrames frames;
+  final ForegroundWindows foreground;
   final Duration? adventureDemo;
 
   /// What every extra's actors last showed.

@@ -54,11 +54,15 @@ class MochiView extends StatefulWidget {
     this.time,
     this.purr,
     this.season,
+    this.roamBeat,
     this.petAway = false,
   });
 
   /// Mochi is out on the desktop (the native stage draws it): only Patch is drawn here.
   final bool petAway;
+
+  /// The stroll says when to look again while no frames run (Mochi hiding in the taskbar, one still picture: Peekaboo).
+  final Listenable? roamBeat;
 
   /// Mochi's world: what Mochi (and Patch) do, and their poses.
   final DesktopWorld world;
@@ -147,7 +151,14 @@ class MochiView extends StatefulWidget {
 
   static double _petRate({required PetMood mood, StrollSample? roam, bool oneShot = false, bool small = false}) {
     final double rate;
-    if ((roam?.travelling ?? false) || (roam?.props.isNotEmpty ?? false)) {
+    final sink = roam?.sink ?? 0;
+    if (sink > 0 && sink < 1) {
+      // Sinking into the taskbar or coming back up (Peekaboo).
+      rate = 25;
+    } else if (sink >= 1 && !(roam?.oneShot ?? false)) {
+      // Hidden, with only its ears and eyes showing: one picture, no frames (the stroll wakes the view for a look around).
+      rate = 0;
+    } else if ((roam?.travelling ?? false) || (roam?.props.isNotEmpty ?? false)) {
       // Walking, or a toy in play (the ball rolls, the butterfly flutters): the walk's frame rate.
       rate = 25;
     } else if (oneShot || (roam?.oneShot ?? false)) {
@@ -186,6 +197,7 @@ class MochiViewState extends State<MochiView> {
     _watchMood();
     widget.companion?.addListener(_frame);
     widget.purr?.addListener(_frame);
+    widget.roamBeat?.addListener(_frame);
     _follow();
   }
 
@@ -212,6 +224,10 @@ class MochiViewState extends State<MochiView> {
     if (old.purr != widget.purr) {
       old.purr?.removeListener(_frame);
       widget.purr?.addListener(_frame);
+    }
+    if (old.roamBeat != widget.roamBeat) {
+      old.roamBeat?.removeListener(_frame);
+      widget.roamBeat?.addListener(_frame);
     }
     if (old.petAway != widget.petAway) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _frame() : null);
   }
@@ -307,6 +323,7 @@ class MochiViewState extends State<MochiView> {
     widget.rhythm?.removeListener(_rhythmChanged);
     widget.companion?.removeListener(_frame);
     widget.purr?.removeListener(_frame);
+    widget.roamBeat?.removeListener(_frame);
     widget.world.removeListener(_worldChanged);
     _moodTimer?.cancel();
     _frames?.cancel();
@@ -512,14 +529,19 @@ class _MochiPainter extends CustomPainter {
     final frame = director.pose(clock.value, roam: roam, quantum: sprites == null ? null : quantum?.call());
     final purring = _purring;
     final pose = purring ? PurrSession.decorate(frame.pose, clock.value, calm: calm) : frame.pose;
-    _pet(canvas, size, pose, Offset(size.width / 2, baseline), scale, across: true, repeats: frame.repeats && !purring);
+    // Hiding in the taskbar (Peekaboo): Mochi sinks until only the top of it (ears and eyes) shows above the window's
+    // bottom edge, which cuts it off. Each lowered frame is drawn from the art (the pictures are for standing poses).
+    final sink = roam?.sink ?? 0;
+    final bodyHeight = PetRenderer.bodyHeight * scale;
+    final feetAt = sink == 0 ? baseline : baseline + sink * (bodyHeight * (1 - Stroller.peekShows) + (size.height - baseline));
+    _pet(canvas, size, pose, Offset(size.width / 2, feetAt), scale, across: true, repeats: frame.repeats && !purring && sink == 0);
     final g = GContext(canvas);
     // The toys in play (a ball, a butterfly…), where they are on the taskbar relative to Mochi in the middle of the window.
     for (final toy in roam?.props ?? const <StrollPropSample>[]) {
       final prop = SceneProp(toy.kind, scale: toy.scale, opacity: toy.opacity, rotation: toy.rotation, variant: toy.variant);
       EffectRenderer.drawProp(prop, g, Offset(size.width / 2 + toy.x - roam!.x, baseline - toy.y), scale, dark);
     }
-    _paintBadge(canvas, Offset(size.width / 2, baseline), PetRenderer.bodyHeight * scale);
+    _paintBadge(canvas, Offset(size.width / 2, feetAt), PetRenderer.bodyHeight * scale);
     final elapsed = burst ? patch?.burstAt(clock.value) : null;
     if (elapsed != null) {
       CelebrationArt.draw(

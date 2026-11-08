@@ -43,6 +43,13 @@ enum MischiefExtra {
     'Title-bar walker',
     'Mochi rides your windows’ title bars: it holds on when you drag a window and hops off when you snap or minimise it.',
     moves: true,
+  ),
+
+  /// X3: Mochi hides behind the window you're using (out on the desktop) and in the taskbar while you're away.
+  peekaboo(
+    'Peekaboo',
+    'Mochi hides behind the window you’re using and peeks out, and hides in the taskbar while you’re away, popping up when you’re back.',
+    moves: true,
   );
 
   const MischiefExtra(this.title, this.detail, {required this.moves});

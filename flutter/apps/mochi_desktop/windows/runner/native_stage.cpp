@@ -49,6 +49,19 @@ int IntField(const flutter::EncodableMap& map, const char* name) {
   return 0;
 }
 
+// An integer that Dart's codec sent as an int32 or as an int64 (a window handle can be either).
+bool Int64Of(const flutter::EncodableValue& value, int64_t* out) {
+  if (const auto* narrow = std::get_if<int32_t>(&value)) {
+    *out = *narrow;
+    return true;
+  }
+  if (const auto* wide = std::get_if<int64_t>(&value)) {
+    *out = *wide;
+    return true;
+  }
+  return false;
+}
+
 // An Int32List argument (Dart's Int32List), or a plain list of ints.
 std::vector<int32_t> Ints(const flutter::EncodableValue* value) {
   if (value == nullptr) {
@@ -150,6 +163,17 @@ void Stage::HandleCall(const flutter::MethodCall<flutter::EncodableValue>& call,
   if (method == "raise") {
     for (const int id : Ints(arguments)) {
       Raise(id);
+    }
+    result->Success();
+    return;
+  }
+  if (method == "below") {
+    // [actor, hwnd]: the actor goes just below that window (Peekaboo).
+    const auto* list = arguments == nullptr ? nullptr : std::get_if<flutter::EncodableList>(arguments);
+    int64_t actor = 0;
+    int64_t handle = 0;
+    if (list != nullptr && list->size() == 2 && Int64Of((*list)[0], &actor) && Int64Of((*list)[1], &handle)) {
+      Below(static_cast<int>(actor), reinterpret_cast<HWND>(static_cast<intptr_t>(handle)));
     }
     result->Success();
     return;
@@ -354,6 +378,14 @@ void Stage::Raise(int id) {
   }
   ::SetWindowPos(found->second.window, (found->second.flags & kTopmost) ? HWND_TOPMOST : HWND_TOP, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+}
+
+void Stage::Below(int id, HWND above) {
+  const auto found = actors_.find(id);
+  if (found == actors_.end() || above == nullptr) {
+    return;
+  }
+  ::SetWindowPos(found->second.window, above, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
 
 void Stage::Clear() {

@@ -54,6 +54,14 @@
 //   it, so clicks, drags and the menu work as ever (the stroller's `follow`). It rides on the pointer check above (the
 //   same read, no new timer), and its frames are the walk's: none while it sits or the screen can't be seen.
 //
+// - Peekaboo (Mischief's X3): with Mochi free to wander alone and the PC idle for two minutes (PcRhythm), Mochi walks to a
+//   free spot and sinks down into the taskbar until only its ears and eyes show above the window's bottom edge, looking
+//   around now and then (the stroller's `hide`; the view draws it lower and the window's edge cuts it off, and only the
+//   part that shows takes clicks, so a click on it opens the popover as ever). Input again (the pointer moving, or the
+//   rhythm's next reading) pops it up with a happy bounce, once per away stretch. It rides on the pointer check above (no
+//   new timer), and while it sits hidden there are no frames: the view draws one picture and the stroll only wakes it
+//   (`beat`) for each look around. Anything else brings it up first (every cut of the plan does).
+//
 // - Mochi out on the desktop (Mischief: roaming the screens; ui/stage/): the native stage draws it
 //   ([out]), so here it's away: Patch stays at his desk if he's on the taskbar (the window shows only him), otherwise
 //   the window hides until Mochi comes back, where the stage left it ([comeBack]).
@@ -69,6 +77,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
+import 'package:mochi_art/mochi_art.dart' show PetRenderer;
 
 import '../../core/desktop_settings.dart';
 import '../../core/mischief.dart';
@@ -233,6 +242,11 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
   /// How often the window goes back over the taskbar (seconds), besides at once when the taskbar was clicked.
   static const double raisePeriod = 0.5;
 
+  /// Peekaboo: Mochi hides after this long without input (seconds), and is back when the rhythm reads less than
+  /// [backBelow] (the pointer moving says so sooner).
+  static const double hideAfter = 120;
+  static const double backBelow = 10;
+
   /// How often the pointer is checked while it's near Mochi or Patch: a click that comes right after the pointer
   /// gets there still reaches them (the Mac polls faster near the bar too).
   static const Duration nearPointerInterval = Duration(milliseconds: 33);
@@ -278,6 +292,11 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
   double? _homeNear;
   Object? _heldFor;
   int _checks = 0;
+  bool _hidThisAway = false;
+
+  /// The view looks again when this changes: the stroll's own beat for the times Mochi is a still picture (hidden in the
+  /// taskbar, Peekaboo) and the plan moves on.
+  final ValueNotifier<int> beat = ValueNotifier(0);
   Timer? _frameTimer;
   Timer? _wakeTimer;
   Timer? _pointerTimer;
@@ -1117,6 +1136,8 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     _makeRoom(now);
     _step(now);
     _schedule(now);
+    // A hidden Mochi is one picture with no frames: the view is told when the plan moves on (a look around, coming up).
+    if (stroller.hiding || stroller.sinkAt(now) > 0) beat.value++;
   }
 
   /// The window grows around Mochi for a toy about to show and shrinks when it's gone (queued with the other changes to
@@ -1183,6 +1204,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     _taskbarWasInFront = inFront;
     final cursor = taskbar.cursor();
     _follow(stage, cursor);
+    _peek(cursor);
     _setClickThrough(!(_dragging || (cursor != null && _overBody(stage, frame, cursor.$1, cursor.$2))));
     // Faster while the pointer is near them, the usual pace otherwise.
     final margin = (nearMargin * stage.scale).round();
@@ -1222,6 +1244,31 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     if (changed) _tick();
   }
 
+  /// Peekaboo: hides Mochi in the taskbar once you've been away for [hideAfter] (at most once per away stretch), and
+  /// brings it up when you're back, or when Mischief says no. Only while Mochi is free to wander alone.
+  void _peek((int, int)? cursor) {
+    final now = _clock();
+    final allowed = mischief?.may(MischiefExtra.peekaboo) ?? false;
+    final idle = rhythm?.activity?.idleSeconds;
+    if (idle != null && idle < 30) _hidThisAway = false;
+    if (stroller.hiding) {
+      if (!allowed) {
+        // The switch went off (or a rule says to keep still): up the normal way.
+        stroller.resume(now);
+        _tick();
+      } else if ((cursor != null && _lastCursor != null && cursor != _lastCursor) || (idle != null && idle < backBelow)) {
+        stroller.popUp(now);
+        _tick();
+      }
+      return;
+    }
+    if (!allowed || _hidThisAway || idle == null || idle < hideAfter || _mode != StrollMode.free || _dragging || _out) return;
+    if (stroller.hide(now)) {
+      _hidThisAway = true;
+      _tick();
+    }
+  }
+
   /// The pointer's usual pace (tests).
   static const Duration pointerIntervalDefault = Duration(milliseconds: 100);
 
@@ -1248,7 +1295,12 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     final frame = _frame;
     if (!onTaskbar || stage == null || frame == null) return const [];
     final home = _home;
-    if (home == null) return _out ? const [] : [stage.body(frame)];
+    if (home == null) {
+      if (_out) return const [];
+      // Hidden in the taskbar (Peekaboo), only what still shows takes clicks.
+      final sink = stroller.sinkAt(_clock());
+      return [stage.body(frame, sink: sink, shows: sink > 0 ? Stroller.peekShows * PetRenderer.bodyHeight * unit : null)];
+    }
     return [if (!_out) stage.bodyAt(stroller.sample(_clock()).x), if (companion?.visible ?? false) stage.companionBody(home)];
   }
 
@@ -1527,6 +1579,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     companion?.removeListener(_companionChanged);
     companion?.host.removeListener(_holdForWorld);
     rhythm?.removeListener(_rhythmChanged);
+    beat.dispose();
     super.dispose();
   }
 }

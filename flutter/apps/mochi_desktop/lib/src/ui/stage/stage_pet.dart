@@ -2,7 +2,8 @@
 // taskbar. Its pose comes from Mochi's world through the pet's director (world_poses.dart: the world's moments play
 // over whatever it's doing, loops come round on the ring), and each pose is drawn once into a picture at the display's
 // scale (stage_sprites.dart) and reused every time it comes round. A frame is sent only when the picture or the place
-// changes; a fade (a hop) changes only the window's opacity.
+// changes; a fade (a hop) changes only the window's opacity. The actor is topmost, unless Peekaboo (stage_behind.dart)
+// has it hide behind the window you're using.
 
 import 'dart:async';
 import 'dart:convert';
@@ -16,12 +17,20 @@ import '../../platform/native_stage.dart';
 import '../pet/mochi_view.dart' show ArtReach;
 import '../pet/pet_director.dart';
 import '../pet/stroller.dart' show StrollSample;
+import 'stage_behind.dart';
 import 'stage_cast.dart';
 import 'stage_sprites.dart';
 
 class StagePet {
-  StagePet({required this.stage, required this.cast, required this.sprites, required this.world, required this.settings, this.dark = _never})
-    : actor = stage.newActor(),
+  StagePet({
+    required this.stage,
+    required this.cast,
+    required this.sprites,
+    required this.world,
+    required this.settings,
+    this.dark = _never,
+    this.behind,
+  }) : actor = stage.newActor(),
       director = PetDirector(world);
 
   final NativeStage stage;
@@ -32,6 +41,9 @@ class StagePet {
 
   /// Mochi is drawn for a dark background (the app's theme, as on the taskbar).
   final bool Function() dark;
+
+  /// Peekaboo: it hides behind the foreground window while Mochi is out (null: always topmost).
+  final StageBehind? behind;
 
   /// Its window on the stage.
   final int actor;
@@ -108,6 +120,7 @@ class StagePet {
       _wanted = null;
       _sprite = ready;
       _place();
+      behind?.start(this);
       return true;
     }
     _wanted = key;
@@ -133,7 +146,10 @@ class StagePet {
           }),
     );
     // Meanwhile the picture it has goes along.
-    if (_sprite != null) _place();
+    if (_sprite != null) {
+      _place();
+      behind?.start(this);
+    }
     return false;
   }
 
@@ -141,12 +157,18 @@ class StagePet {
     final sprite = _sprite;
     final feet = _feet;
     if (sprite == null || feet == null) return;
-    cast.place(sprite.at(actor, feet.$1, feet.$2, alpha: _alpha, clickThrough: _through, hand: !_through));
+    final fresh = !shown;
+    cast.place(sprite.at(actor, feet.$1, feet.$2, alpha: _alpha, clickThrough: _through, hand: !_through, topmost: behind?.topmost ?? true));
     cast.flush();
+    if (fresh) behind?.placed();
   }
+
+  /// Shows the picture again as it is, with the actor's stacking as it should be now (Peekaboo switched on or off).
+  void replace() => _place();
 
   /// Mochi leaves the stage (its window stays, hidden, for next time).
   void hide() {
+    behind?.stop();
     _feet = null;
     _wanted = null;
     cast
@@ -154,9 +176,9 @@ class StagePet {
       ..flush();
   }
 
-  /// Puts Mochi back above other always-on-top windows.
+  /// Puts Mochi back above other always-on-top windows (not while it hides behind the window you're using).
   void raise() {
-    if (shown) stage.raise([actor]);
+    if (shown && (behind?.topmost ?? true)) stage.raise([actor]);
   }
 
   void dispose() {

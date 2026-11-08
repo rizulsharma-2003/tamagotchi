@@ -12,7 +12,8 @@
 //   updates it with UpdateLayeredWindow: a new picture copies only that sprite's pixels, a move copies none.
 // - Windows hit-tests each actor per pixel: clicks on its transparent pixels go to whatever is under it, and clicks
 //   and drags on the character come back here ([pointer]). An actor can let every click through instead (confetti).
-// - Actors never take the focus, aren't in the taskbar or Alt+Tab, and are topmost only when asked.
+// - Actors never take the focus, aren't in the taskbar or Alt+Tab, and are topmost only when asked. With Peekaboo (X3)
+//   Mochi's actor isn't topmost: [NativeStage.below] puts it just below the foreground window.
 // - Nothing runs in the runner on its own: no frames are sent while nothing changes, and none while the screen can't
 //   be seen (the callers stop with PcRhythm.unseen).
 //
@@ -164,6 +165,11 @@ abstract class NativeStage {
   /// Puts actors back above other windows (another always-on-top window may have come over them).
   void raise(List<int> actors);
 
+  /// Puts [actor]'s window just below the window [hwnd] in the stack (Peekaboo, X3): [hwnd] covers it, and it peeks out
+  /// from behind its edges. The actor must have been shown without [StageShot.topmost]: a window placed after a
+  /// non-topmost one loses its topmost status.
+  void below(int actor, int hwnd);
+
   /// Takes everything down: every actor and every picture.
   void clear();
 
@@ -272,6 +278,9 @@ class ChannelNativeStage extends NativeStage {
   }
 
   @override
+  void below(int actor, int hwnd) => _send('below', [actor, hwnd]);
+
+  @override
   void clear() => _send('clear');
 
   @override
@@ -320,6 +329,9 @@ class NoNativeStage extends NativeStage {
 
   @override
   void raise(List<int> actors) {}
+
+  @override
+  void below(int actor, int hwnd) {}
 
   @override
   void clear() {}

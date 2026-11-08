@@ -429,9 +429,12 @@ class TaskbarStage {
     return PixelRect.ltwh((x * scale - width / 2).round(), boxBottom - height, width, height);
   }
 
-  /// Mochi's body in a window at [frame]: the part that takes clicks (the rest lets them through to the taskbar).
-  PixelRect body(PixelRect frame) {
-    final height = (box.height * scale).round();
+  /// Mochi's body in a window at [frame]: the part that takes clicks (the rest lets them through to the taskbar). Sunk
+  /// down into the taskbar (Peekaboo: [sink] 0 standing to 1 hidden), only what still shows above the window's bottom edge
+  /// ([shows] logical pixels at most when hidden) takes clicks.
+  PixelRect body(PixelRect frame, {double sink = 0, double? shows}) {
+    var height = (box.height * scale).round();
+    if (sink > 0 && shows != null) height = (height + (math.min(height.toDouble(), shows * scale) - height) * sink.clamp(0.0, 1.0)).round();
     final width = (box.height * 0.95 * scale).round();
     final centre = frame.left + frame.width ~/ 2;
     return PixelRect(centre - width ~/ 2, frame.bottom - height, centre + width ~/ 2, frame.bottom);

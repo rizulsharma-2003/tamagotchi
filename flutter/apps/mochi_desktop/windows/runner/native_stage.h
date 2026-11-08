@@ -91,6 +91,7 @@ class Stage {
   void Hide(int id);
   void Remove(int id);
   void Raise(int id);
+  void Below(int id, HWND above);
   void Clear();
   Actor* Create(int id, int flags);
   void SendPointer(HWND window, int kind, LPARAM lparam);

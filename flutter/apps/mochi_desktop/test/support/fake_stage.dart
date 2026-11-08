@@ -21,7 +21,7 @@ class FakeNativeStage extends NativeStage {
   /// Actors whose windows exist (shown at least once, not removed).
   final Set<int> windows = {};
 
-  /// Every call, by name ("sprites", "drop", "show", "hide", "remove", "raise", "clear").
+  /// Every call, by name ("sprites", "drop", "show", "hide", "remove", "raise", "below", "clear").
   final List<String> calls = [];
 
   /// Every shot sent, in order.
@@ -83,6 +83,15 @@ class FakeNativeStage extends NativeStage {
 
   @override
   void raise(List<int> actors) => calls.add('raise');
+
+  /// Every [below] call: the actor and the window it was put under.
+  final List<(int, int)> belows = [];
+
+  @override
+  void below(int actor, int hwnd) {
+    calls.add('below');
+    belows.add((actor, hwnd));
+  }
 
   @override
   void clear() {

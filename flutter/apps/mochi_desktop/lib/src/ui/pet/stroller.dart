@@ -14,6 +14,12 @@
 //   mochi_art's EffectRenderer.drawProp), and the window grows around Mochi for them ([StrollPropTrack.reachX]).
 //   Each play stays inside the free stretch Mochi is in (so never over a button, and in "Plays in its spot" inside its
 //   room) and is skipped when the stretch is too short for it.
+// - Peekaboo (Mischief's X3, only with Mochi free to wander alone): after two minutes without input Mochi walks to a
+//   free spot and sinks down into the taskbar until only its ears and eyes show above the bottom of its window
+//   (`StrollSample.sink`; the view draws it lower and the window's edge cuts it off), looking around now and then. When
+//   you're back it pops up with a happy bounce (`popUp`), at most once per away stretch (the caller counts those);
+//   anything else (Claude needing you, a reaction, a nap, a drag, the switch going off) brings it up normally first
+//   (every cut of the plan rises before it carries on).
 // - Reactions paused (Settings › General): it sits where it is, as the Mac's paused Mochi rests, and never plays.
 // - Claude working: it mostly sits and watches, with a short potter now and then.
 // - Claude needs you: it stops where it is and faces you, waves, then sits watching you with a reminder wave a minute
@@ -74,7 +80,7 @@ enum StrollMode {
 }
 
 /// What Mochi is up to.
-enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react, company, follow, zoomies, butterfly, ball, yarn, leaf }
+enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react, company, follow, zoomies, butterfly, ball, yarn, leaf, hide }
 
 /// Small accents the pose gets on top of its animation.
 enum StrollStyle {
@@ -176,6 +182,8 @@ class StrollSegment {
     this.speed = 0,
     this.ease = 0,
     this.hop = false,
+    this.sinkFrom = 0,
+    this.sinkTo = 0,
   });
 
   final double start;
@@ -202,7 +210,18 @@ class StrollSegment {
   /// Mochi fades out at [fromX] and back in at [toX] (to another stretch of the taskbar, over the buttons).
   final bool hop;
 
+  /// How far down into the taskbar Mochi is at the start and the end of the segment (0 standing, 1 hidden: Peekaboo).
+  final double sinkFrom;
+  final double sinkTo;
+
   bool get travels => toX != fromX;
+
+  /// How far down Mochi is at [t]: eases from [sinkFrom] to [sinkTo] over the segment.
+  double sinkAt(double t) {
+    if (sinkFrom == sinkTo || t <= start) return sinkFrom;
+    if (t >= end) return sinkTo;
+    return sinkFrom + (sinkTo - sinkFrom) * Ease.smooth((t - start) / (end - start));
+  }
   double get odometerAtEnd => odometer + (toX - fromX).abs();
 
   /// Mochi's centre at [t].
@@ -245,6 +264,7 @@ class StrollSample {
     this.travelling = false,
     this.opacity = 1,
     this.props = const [],
+    this.sink = 0,
   });
 
   final double x;
@@ -264,6 +284,9 @@ class StrollSample {
 
   /// The toys in play right now (a ball, a butterfly…), where they are on the taskbar.
   final List<StrollPropSample> props;
+
+  /// How far Mochi has sunk down into the taskbar: 0 standing, 1 with only its ears and eyes showing (Peekaboo).
+  final double sink;
 }
 
 /// Where a toy is at one moment (x along the taskbar and y up from Mochi's feet, logical pixels).
@@ -438,8 +461,12 @@ class Stroller {
   double? _offSince;
   double _lastRetarget = double.negativeInfinity;
 
+  // Peekaboo: the plan is Mochi hiding (walking to its spot, sunk down, looking around).
+  bool _hiding = false;
+
   // The planner's pen: where the plan being written has got to.
   double _t = 0;
+  double _sink = 0;
   double _x = 0;
   double _facing = 1;
   double _odometer = 0;
@@ -450,6 +477,9 @@ class Stroller {
   List<StrollLine> get zones => _zones;
   StrollMode get mode => _mode;
   bool get isPlaced => _line != null && _segments.isNotEmpty;
+
+  /// The plan is Mochi hiding in the taskbar (Peekaboo), sunk down or on its way there.
+  bool get hiding => _hiding;
   List<StrollSegment> get segments => List.unmodifiable(_segments);
 
   /// Starts the stroll in [zones] at [x] (or carries on from where Mochi is), in [mode]. Carrying on from a spot
@@ -473,6 +503,7 @@ class Stroller {
     _segments.clear();
     _props.clear();
     _buddy = false;
+    _hiding = false;
     _holdUntil = double.negativeInfinity;
     _replan = false;
     final from = x ?? state?.x ?? _zones.first.minX;
@@ -520,6 +551,7 @@ class Stroller {
     _line = null;
     _home = null;
     _buddy = false;
+    _hiding = false;
     _segments.clear();
     _props.clear();
   }
@@ -598,7 +630,44 @@ class Stroller {
       travelling: segment.travels && t >= segment.start && t < segment.end,
       opacity: segment.opacityAt(t),
       props: _propsAt(t),
+      sink: segment.sinkAt(local),
     );
+  }
+
+  /// How far down Mochi is at [t] (0 standing; 1 hidden): what the window's clicks go by.
+  double sinkAt(double t) {
+    final segment = _segmentAt(t);
+    return segment == null ? 0 : segment.sinkAt(math.min(math.max(t, segment.start), segment.end));
+  }
+
+  /// How much of Mochi shows above the window's bottom edge once it has sunk right down: its ears and eyes (this part of
+  /// its body's height, `PetRenderer.bodyHeight`).
+  static const double peekShows = 0.5;
+
+  /// Peekaboo's hide: Mochi (free to wander alone) walks to a free spot and sinks down into the taskbar, looking around
+  /// now and then, until [popUp] or anything else cuts the plan. False when it can't (it isn't free, is beside Patch, is
+  /// keeping the pointer company or holds still for a moment, or is hiding already).
+  bool hide(double now) {
+    if (!isPlaced || _mode != StrollMode.free || _home != null || _buddy || _hiding || now < _holdUntil) return false;
+    _cut(now);
+    _hiding = true;
+    _activity = StrollActivity.hide;
+    final room = _roomyDirection();
+    _walk(_x + room * _uniform(30, 120));
+    _add(PetAnimation.sit, 1.4, sinkTo: 1);
+    _extend(now);
+    return true;
+  }
+
+  /// Peekaboo's return: up from the taskbar with a happy bounce, then the usual stroll. False when it wasn't hiding.
+  bool popUp(double now) {
+    if (!_hiding) return false;
+    _cut(now);
+    _activity = StrollActivity.settle;
+    _act(PetAnimation.happyBounce);
+    _open();
+    _extend(now);
+    return true;
   }
 
   List<StrollPropSample> _propsAt(double t) {
@@ -641,6 +710,12 @@ class Stroller {
     final last = _segments.isEmpty ? null : _segments.last;
     if (last != null && last.end.isFinite) next = math.min(next, math.max(now, last.end - lookahead / 2));
     if (_replan && _holdUntil.isFinite && _holdUntil > now) next = math.min(next, _holdUntil);
+    // A hidden Mochi looks around now and then: the view draws nothing in between, so it wakes for each change.
+    for (final segment in _segments) {
+      if ((segment.sinkFrom > 0 || segment.sinkTo > 0 || segment.activity == StrollActivity.hide) && segment.start > now) {
+        next = math.min(next, segment.start);
+      }
+    }
     // The window makes room for a toy a moment before it shows, and gives it back a moment after it has gone.
     for (final track in _props) {
       for (final edge in [track.start - StrollPropTrack.lead, track.end + StrollPropTrack.lead]) {
@@ -674,7 +749,8 @@ class Stroller {
   /// lets the cursor buddy run now. Only while Mochi is free to wander alone (not reacting, attending, asleep, still,
   /// working or beside Patch). Returns whether the plan changed (the caller then moves the window and times its frames).
   bool follow(double now, {required double? pointerX, required double bodyWidth, required bool allowed}) {
-    if (!isPlaced) return false;
+    // Hidden in the taskbar (Peekaboo), Mochi comes up when you're back (`popUp`), not as the pointer's company.
+    if (!isPlaced || _hiding) return false;
     final free = _mode == StrollMode.free && _home == null && now >= _holdUntil;
     if (!free || !allowed) {
       final was = _buddy;
@@ -773,8 +849,9 @@ class Stroller {
 
   // MARK: The plan
 
-  void _pen(double t, double x, double facing, double odometer) {
+  void _pen(double t, double x, double facing, double odometer, {double sink = 0}) {
     _t = t;
+    _sink = sink;
     _x = x;
     _facing = facing;
     _odometer = odometer;
@@ -803,20 +880,24 @@ class Stroller {
     return _segments.last;
   }
 
-  ({double x, double facing, double odometer}) _state(double t) {
+  ({double x, double facing, double odometer, double sink}) _state(double t) {
     final segment = _segmentAt(t);
-    if (segment == null) return (x: _line?.minX ?? 0, facing: 1, odometer: 0);
-    final x = segment.xAt(math.min(math.max(t, segment.start), segment.end));
-    return (x: x, facing: segment.facing, odometer: segment.odometer + (x - segment.fromX).abs());
+    if (segment == null) return (x: _line?.minX ?? 0, facing: 1, odometer: 0, sink: 0);
+    final at = math.min(math.max(t, segment.start), segment.end);
+    final x = segment.xAt(at);
+    return (x: x, facing: segment.facing, odometer: segment.odometer + (x - segment.fromX).abs(), sink: segment.sinkAt(at));
   }
 
-  /// Drops the plan from [now] on; the pen starts where Mochi is.
+  /// Drops the plan from [now] on; the pen starts where Mochi is. A Mochi that is sunk down (hiding) comes up first, so
+  /// whatever cuts the plan finds it standing.
   void _cut(double now) {
     final state = _state(now);
     _segments.clear();
+    _hiding = false;
     // A toy still in play goes with the plan.
     _props.removeWhere((track) => track.end > now);
-    _pen(now, state.x, state.facing, state.odometer);
+    _pen(now, state.x, state.facing, state.odometer, sink: state.sink);
+    if (state.sink > 0) _add(PetAnimation.sit, 0.3 + 0.5 * state.sink, sinkTo: 0);
   }
 
   void _restart(double now) {
@@ -835,7 +916,7 @@ class Stroller {
     for (var guard = 0; guard < 16 && _segments.isNotEmpty; guard++) {
       final last = _segments.last;
       if (!last.end.isFinite || last.end >= now + lookahead) break;
-      _pen(last.end, last.toX, last.facing, last.odometerAtEnd);
+      _pen(last.end, last.toX, last.facing, last.odometerAtEnd, sink: last.sinkTo);
       _chunk();
     }
   }
@@ -849,9 +930,11 @@ class Stroller {
     StrollStyle style = StrollStyle.plain,
     bool oneShot = false,
     bool hop = false,
+    double? sinkTo,
   }) {
     final to = toX ?? _x;
     final end = _t + duration;
+    final sunk = sinkTo ?? _sink;
     _segments.add(
       StrollSegment(
         start: _t,
@@ -867,11 +950,14 @@ class Stroller {
         speed: speed,
         ease: ease,
         hop: hop,
+        sinkFrom: _sink,
+        sinkTo: sunk,
       ),
     );
     if (!hop) _odometer += (to - _x).abs();
     _x = to;
     _t = end;
+    _sink = sunk;
   }
 
   void _hold(PetAnimation animation, double duration, {StrollStyle style = StrollStyle.plain}) {
@@ -1047,8 +1133,16 @@ class Stroller {
 
   /// The next stretch of the mode.
   void _chunk() {
+    if (_hiding) return _chunkHidden();
     if (_home != null) return _chunkBesidePatch();
     _chunkAlone();
+  }
+
+  /// Hidden: a long still hold (one picture), then a look around (ears and eyes), again and again.
+  void _chunkHidden() {
+    _activity = StrollActivity.hide;
+    _add(PetAnimation.sit, _uniform(8, 20));
+    _act(PetAnimation.lookAround);
   }
 
   void _chunkAlone() {
