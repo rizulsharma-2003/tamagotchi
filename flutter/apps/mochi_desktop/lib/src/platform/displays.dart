@@ -53,6 +53,10 @@ class DisplayArea {
 abstract interface class Displays {
   /// Every display now (empty where they can't be read).
   List<DisplayArea> list();
+
+  /// The display the foreground window is on (X8: Mochi follows where you work), or null when there's none or it can't
+  /// be told. One cheap call; read every few seconds at most.
+  DisplayArea? foreground();
 }
 
 class NoDisplays implements Displays {
@@ -60,6 +64,9 @@ class NoDisplays implements Displays {
 
   @override
   List<DisplayArea> list() => const [];
+
+  @override
+  DisplayArea? foreground() => null;
 }
 
 Displays systemDisplays() => Platform.isWindows ? Win32Displays() : const NoDisplays();
@@ -148,30 +155,45 @@ class Win32Displays implements Displays {
     }
   }
 
+  @override
+  DisplayArea? foreground() {
+    try {
+      final window = GetForegroundWindow();
+      if (window == 0) return null;
+      final monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONULL);
+      return monitor == 0 ? null : _read(monitor);
+    } on Object {
+      return null;
+    }
+  }
+
   static int _monitor(int monitor, int dc, Pointer rect, int data) {
+    final display = _read(monitor);
+    if (display != null) _found.add(display);
+    return 1;
+  }
+
+  static DisplayArea? _read(int monitor) {
     final info = calloc<MONITORINFOEX>();
     final dpiX = calloc<Uint32>();
     final dpiY = calloc<Uint32>();
     try {
       info.ref.monitorInfo.cbSize = sizeOf<MONITORINFOEX>();
-      if (GetMonitorInfo(monitor, info.cast()) == 0) return 1;
+      if (GetMonitorInfo(monitor, info.cast()) == 0) return null;
       final m = info.ref.monitorInfo.rcMonitor, w = info.ref.monitorInfo.rcWork;
       final scale = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, dpiX, dpiY) == S_OK && dpiX.value > 0 ? dpiX.value / 96 : 1.0;
       final whole = PixelRect(m.left, m.top, m.right, m.bottom);
-      _found.add(
-        DisplayArea(
-          key: '${info.ref.szDevice} ${whole.width}x${whole.height}',
-          monitor: whole,
-          workArea: PixelRect(w.left, w.top, w.right, w.bottom),
-          scale: scale,
-          primary: info.ref.monitorInfo.dwFlags & MONITORINFOF_PRIMARY != 0,
-        ),
+      return DisplayArea(
+        key: '${info.ref.szDevice} ${whole.width}x${whole.height}',
+        monitor: whole,
+        workArea: PixelRect(w.left, w.top, w.right, w.bottom),
+        scale: scale,
+        primary: info.ref.monitorInfo.dwFlags & MONITORINFOF_PRIMARY != 0,
       );
     } finally {
       calloc.free(info);
       calloc.free(dpiX);
       calloc.free(dpiY);
     }
-    return 1;
   }
 }

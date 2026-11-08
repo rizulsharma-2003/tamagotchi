@@ -241,7 +241,7 @@ void main() {
     testWidgets('the master switch is off at first and the extras wait for it; each says what it does', (tester) async {
       await open(tester);
       expect(find.text('Let Mochi make mischief'), findsOneWidget);
-      expect(find.text(MischiefExtra.roamScreens.title), findsNothing, reason: 'not built yet: no dead switch');
+      expect(find.text(MischiefExtra.roamScreens.title), findsOneWidget);
       for (final extra in MischiefExtra.available) {
         expect(find.text(extra.title), findsOneWidget);
         expect(find.text(extra.detail), findsOneWidget);
