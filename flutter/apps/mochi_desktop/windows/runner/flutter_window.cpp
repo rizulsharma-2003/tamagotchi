@@ -62,6 +62,13 @@ int SessionLocked() {
   return locked;
 }
 
+// X5: a desktop icon answer that says why there is none (for the stroll-debug log).
+flutter::EncodableValue IconsError(const char* why) {
+  flutter::EncodableMap error;
+  error[flutter::EncodableValue("error")] = flutter::EncodableValue(std::string(why));
+  return flutter::EncodableValue(error);
+}
+
 // A string argument that stays as UTF-8 (the icon ids are 16 hex characters).
 std::string RawStringArgument(const flutter::EncodableMap& arguments, const char* name) {
   const auto found = arguments.find(flutter::EncodableValue(name));
@@ -142,7 +149,7 @@ void FlutterWindow::OnDestroy() {
   mochi_media::Stop();
   mochi_icons::Stop();
   if (icons_result_) {
-    icons_result_->Success();
+    icons_result_->Success(IconsError("closing"));
     icons_result_ = nullptr;
   }
   stage_ = nullptr;
@@ -335,7 +342,7 @@ void FlutterWindow::HandleSystemCall(const flutter::MethodCall<flutter::Encodabl
 void FlutterWindow::AskIcons(bool move, const flutter::EncodableMap* arguments,
                              std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   if (icons_result_) {
-    icons_result_->Success();
+    icons_result_->Success(IconsError("replaced"));
     icons_result_ = nullptr;
   }
   uint32_t seq = 0;
@@ -349,7 +356,7 @@ void FlutterWindow::AskIcons(bool move, const flutter::EncodableMap* arguments,
     }
   }
   if (seq == 0) {
-    result->Success();
+    result->Success(IconsError(move ? "no move asked" : "worker not started"));
     return;
   }
   icons_seq_ = seq;
