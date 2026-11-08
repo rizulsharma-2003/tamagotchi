@@ -50,10 +50,10 @@ import 'update/updater.dart';
 
 /// This app's version, shown on the other devices and in Settings (pubspec.yaml's `version`, before the `+`;
 /// scripts/release-windows.sh sets both).
-const String appVersion = '0.2.6';
+const String appVersion = '0.2.7';
 
 /// The build number (pubspec.yaml's `version`, after the `+`): it decides which copy is newer when updating.
-const int appBuild = 8;
+const int appBuild = 9;
 
 /// Everything Mochi for Windows does, wired together: hook events from the bridge into the sessions, the sessions into
 /// Mochi's moods and the phones, phone commands into Ask Mochi. The windows and the tray only show it.
