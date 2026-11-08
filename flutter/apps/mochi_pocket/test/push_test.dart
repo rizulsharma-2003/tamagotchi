@@ -56,7 +56,11 @@ void main() {
       final data = alertPush('a2', inner);
       final mochi = (jsonDecode(data['mochi']! as String) as Map).cast<String, Object?>();
       final box = mochi['box']! as String;
-      mochi['box'] = '${box.substring(0, box.length - 2)}${box.endsWith('A') ? 'B' : 'A'}A';
+      // Flip a bit inside the ciphertext. (Editing the base64 text's last characters could leave the bytes unchanged:
+      // the final character's spare bits are ignored when decoding.)
+      final bytes = base64Url.decode(base64Url.normalize(box));
+      bytes[bytes.length ~/ 2] ^= 0x01;
+      mochi['box'] = base64Url.encode(bytes).replaceAll('=', '');
       expect(await handle({...data, 'mochi': jsonEncode(mochi)}), PushOutcome.fallback);
       expect(notifier.shown.single.title, 'Mochi');
       expect(notifier.shown.single.body, 'Mochi has news');
