@@ -4,7 +4,7 @@
 //
 // - X10 full-screen celebrations: confetti for G2's big wins (graduation, a milestone, green tests or build: real,
 //   live events only), fireworks for streak milestones (core/streaks.dart).
-// - X4 the cursor buddy: Mochi out with your pointer (cursor_buddy.dart), from the taskbar or the desktop ([home]).
+// - X4 the cursor buddy lives on the taskbar now (ui/pet/taskbar_stroll.dart), not here.
 // - X8 roaming screens (screen_roamer.dart): Mochi walks to the next display and follows you to the one you work on.
 // - X9 sticky notes (sticky_notes.dart): green tests; Claude finishing or needing you while you're away from the PC; a
 //   stretch break after the best part of an hour at it; a streak milestone.
@@ -26,7 +26,6 @@ import '../../platform/displays.dart';
 import '../../platform/native_stage.dart';
 import '../pet/taskbar_stroll.dart' show PetHome;
 import 'celebrations.dart';
-import 'cursor_buddy.dart';
 import 'screen_roamer.dart';
 import 'stage_cast.dart';
 import 'stage_pet.dart';
@@ -42,7 +41,6 @@ class MischiefStage extends ChangeNotifier {
     this.home,
     bool Function()? shown,
     bool Function()? dark,
-    void Function(int x, int y)? onMenu,
     void Function()? onOpen,
     JsonStore? notesStore,
     double Function()? clock,
@@ -66,20 +64,6 @@ class MischiefStage extends ChangeNotifier {
     final home = this.home;
     if (home != null) {
       pet = StagePet(stage: stage, cast: cast, sprites: StageSprites(stage), world: desktop.world, settings: desktop.settings, dark: dark ?? () => false);
-      buddy = CursorBuddy(
-        pet: pet!,
-        home: home,
-        gate: desktop.mischief,
-        rhythm: desktop.rhythm,
-        displays: displays,
-        cursor: cursor,
-        time: desktop.world.now,
-        shown: _shown,
-        reacting: () => desktop.world.reacting,
-        asleep: () => desktop.world.asleep,
-        onPet: () => desktop.interact('pet'),
-        onMenu: onMenu,
-      );
       roamer = ScreenRoamer(
         pet: pet!,
         home: home,
@@ -114,9 +98,6 @@ class MischiefStage extends ChangeNotifier {
   final PetHome? home;
   StagePet? pet;
 
-  /// X4.
-  CursorBuddy? buddy;
-
   /// X8.
   ScreenRoamer? roamer;
 
@@ -150,7 +131,6 @@ class MischiefStage extends ChangeNotifier {
       ..add(desktop.cues.listen(_cue));
     notes.start();
     desktop.world.everyMinute(_minute);
-    buddy?.start();
     roamer?.start();
     for (final MapEntry(key: kind, value: every) in demo.entries) {
       _demoTimers.add(
@@ -222,14 +202,13 @@ class MischiefStage extends ChangeNotifier {
   /// The app's window changed form (Mochi's window or the popover opened, or the pet is back): Mochi comes home or may
   /// go out again.
   void surfaceChanged() {
-    buddy?.consider();
     roamer?.consider();
   }
 
   /// What's on the stage, for the perf meter (null: nothing).
   String? perfState() {
     if (celebrations.running) return 'celebration (${celebrations.playing!.name})';
-    return buddy?.perfState() ?? roamer?.perfState() ?? (notes.notes.isEmpty || notes.hidden ? null : 'notes up (${notes.notes.length})');
+    return roamer?.perfState() ?? (notes.notes.isEmpty || notes.hidden ? null : 'notes up (${notes.notes.length})');
   }
 
   /// A development switch: `MOCHI_DESKTOP_MISCHIEF_DEMO=confetti:20,fireworks:45`.
@@ -255,7 +234,6 @@ class MischiefStage extends ChangeNotifier {
     for (final timer in _demoTimers) {
       timer.cancel();
     }
-    buddy?.stop();
     roamer?.stop();
     pet?.dispose();
     pet?.sprites.dispose();

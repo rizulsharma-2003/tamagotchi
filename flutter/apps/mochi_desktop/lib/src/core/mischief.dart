@@ -29,8 +29,8 @@ enum MischiefExtra {
     moves: true,
   ),
 
-  /// X4: Mochi follows your pointer around.
-  cursorBuddy('Cursor buddy', 'Mochi chases your pointer, pounces beside it and sits by it while you’re idle.', moves: true),
+  /// X4: Mochi keeps your pointer company on the taskbar.
+  cursorBuddy('Cursor buddy', 'When your pointer is on the taskbar, Mochi trots over and sits beside it.', moves: true),
 
   /// X9: little notes on the desktop.
   stickyNotes('Sticky notes', 'Mochi leaves little notes on your desktop, like “Claude finished the tests ✓”.', moves: false),

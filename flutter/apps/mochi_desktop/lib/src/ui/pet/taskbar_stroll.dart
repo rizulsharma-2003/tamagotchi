@@ -41,7 +41,13 @@
 //   the work area: Mochi's taskbar presence pauses while it's open (the popover shows it in the room), and when it
 //   closes Mochi is back on the very spot it left, and carries on from there.
 //
-// - Mochi out on the desktop (Mischief: the cursor buddy, roaming the screens; ui/stage/): the native stage draws it
+// - The cursor buddy (Mischief's X4; it changed on the user's feedback, 2026-11-08): never off the taskbar. While the
+//   pointer is over the main display's taskbar and Mochi is free to wander, it keeps the pointer company: it trots to
+//   the free spot nearest it and sits beside it, never under it, and holds still, facing you, when the pointer comes to
+//   it, so clicks, drags and the menu work as ever (the stroller's `follow`). It rides on the pointer check above (the
+//   same read, no new timer), and its frames are the walk's: none while it sits or the screen can't be seen.
+//
+// - Mochi out on the desktop (Mischief: roaming the screens; ui/stage/): the native stage draws it
 //   ([out]), so here it's away: Patch stays at his desk if he's on the taskbar (the window shows only him), otherwise
 //   the window hides until Mochi comes back, where the stage left it ([comeBack]).
 //
@@ -58,6 +64,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../core/desktop_settings.dart';
+import '../../core/mischief.dart';
 import '../../core/pc_rhythm.dart';
 import '../../platform/displays.dart';
 import '../../core/pet_cues.dart';
@@ -146,6 +153,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     required Stream<PetCue> cues,
     this.companion,
     this.rhythm,
+    this.mischief,
     this.displays = const NoDisplays(),
     Duration Function()? idle,
     double Function()? clock,
@@ -187,6 +195,9 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
 
   /// The PC's rhythm: while nobody can see the screen, nothing runs (null: always seen).
   final PcRhythm? rhythm;
+
+  /// What Mischief allows now (the cursor buddy asks it; null: no extras, as in tests of the stroll alone).
+  final MischiefGate? mischief;
 
   /// The displays, for the desktop pet's place on each (none: placed through window_manager, the macOS build).
   final Displays displays;
@@ -1127,6 +1138,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     }
     _taskbarWasInFront = inFront;
     final cursor = taskbar.cursor();
+    _follow(stage, cursor);
     _setClickThrough(!(_dragging || (cursor != null && _overBody(stage, frame, cursor.$1, cursor.$2))));
     // Faster while the pointer is near them, the usual pace otherwise.
     final margin = (nearMargin * stage.scale).round();
@@ -1151,6 +1163,19 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
       }
       _pointerEvery = interval;
     }
+  }
+
+  /// The cursor buddy: the pointer's x on the main display's taskbar (or none) goes to the stroll, which decides what
+  /// Mochi does about it. Only when Mischief allows it.
+  void _follow(TaskbarStage stage, (int, int)? cursor) {
+    final onBar = cursor != null && stage.bar.contains(cursor.$1, cursor.$2);
+    final changed = stroller.follow(
+      _clock(),
+      pointerX: onBar ? cursor.$1 / stage.scale : null,
+      bodyWidth: stage.box.height * 0.95,
+      allowed: mischief?.may(MischiefExtra.cursorBuddy) ?? false,
+    );
+    if (changed) _tick();
   }
 
   /// The pointer's usual pace (tests).

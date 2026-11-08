@@ -13,6 +13,12 @@
 // - A long quiet stretch (Mochi's napping mood): a yawn, and it sleeps where it is.
 // - Animation effects off: it stays where it is, expressions only.
 // - A pet, a game, a finished turn: it holds still while that plays (facing you for news), then carries on.
+// - The cursor buddy (Mischief's X4, only with Mochi free to wander): while the pointer is on the taskbar Mochi turns
+//   to it, trots (or runs, if far) to the free spot nearest it and sits beside it, never under it (at least a body
+//   away, so whatever is under the pointer stays clickable), hopping between stretches as a stroll does. When the pointer
+//   stops, a pounce or a sit facing it. A pointer coming to Mochi (within a body and a half) stops it at once, facing
+//   you, holding still: it never moves away from one that's coming to it, so it can be clicked. The pointer leaving the
+//   taskbar, Mochi watches a moment and carries on strolling (`follow`).
 // - Patch around (a home: his desk is to the right of it, ui/pet/companion_director.dart): Mochi keeps him company as
 //   on the Mac (`RoamMode.companion`, `.working`): it sits with him, potters a little way off and comes back, watches
 //   him work, waves from beside him when Claude needs you and naps there. For a moment together (a high five, a coffee
@@ -55,7 +61,7 @@ enum StrollMode {
 }
 
 /// What Mochi is up to.
-enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react, company }
+enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react, company, follow }
 
 /// Small accents the pose gets on top of its animation.
 enum StrollStyle {
@@ -232,6 +238,8 @@ class StrollSample {
   final double opacity;
 }
 
+enum _BuddyHold { none, attentive, sit }
+
 /// Plans and replays Mochi's stroll.
 class Stroller {
   Stroller({math.Random? random, this.tuning = const StrollTuning()}) : _random = random ?? math.Random();
@@ -256,6 +264,16 @@ class Stroller {
   /// A reaction (or a drag) holds Mochi still until then; a mode change waits for it.
   double _holdUntil = double.negativeInfinity;
   bool _replan = false;
+
+  // The cursor buddy: whether the plan is Mochi keeping the pointer company, where it's going (null: it's holding still
+  // there) and what it does there.
+  bool _buddy = false;
+  double? _buddyTarget;
+  _BuddyHold _buddyHold = _BuddyHold.none;
+  double? _lastPointer;
+  double _pointerMovedAt = 0;
+  double? _offSince;
+  double _lastRetarget = double.negativeInfinity;
 
   // The planner's pen: where the plan being written has got to.
   double _t = 0;
@@ -290,6 +308,7 @@ class Stroller {
     if (mode != null) _mode = mode;
     _idle = idleSeconds;
     _segments.clear();
+    _buddy = false;
     _holdUntil = double.negativeInfinity;
     _replan = false;
     final from = x ?? state?.x ?? _zones.first.minX;
@@ -336,6 +355,7 @@ class Stroller {
     _zones = const [];
     _line = null;
     _home = null;
+    _buddy = false;
     _segments.clear();
   }
 
@@ -346,6 +366,7 @@ class Stroller {
     if (mode != _mode) {
       _mode = mode;
       _replan = true;
+      _buddy = false;
     }
     if (_replan && now >= _holdUntil) {
       _replan = false;
@@ -359,6 +380,7 @@ class Stroller {
   /// if [attentive]; then it carries on.
   void react(double now, double duration, {bool attentive = false}) {
     if (!isPlaced) return;
+    _buddy = false;
     _cut(now);
     _activity = StrollActivity.react;
     _holdUntil = now + duration;
@@ -375,6 +397,7 @@ class Stroller {
   /// Ends a hold early (a drag that left Mochi where it was).
   void resume(double now) {
     if (!isPlaced) return;
+    _buddy = false;
     _holdUntil = double.negativeInfinity;
     _replan = false;
     _restart(now);
@@ -430,6 +453,127 @@ class Stroller {
     if (_replan && _holdUntil.isFinite && _holdUntil > now) next = math.min(next, _holdUntil);
     return next.isFinite ? next : null;
   }
+
+
+  // MARK: The cursor buddy
+
+  /// The pointer is this close to Mochi (body widths) and it holds still, facing you.
+  static const double buddyNear = 1.5;
+
+  /// Where Mochi sits beside the pointer (body widths from it), and the least it ever stands from it.
+  static const double buddyBeside = 1.25;
+  static const double buddyLeast = 1.0;
+
+  /// The pointer is still after this long (seconds): a pounce or a sit; and Mochi watches this long after the pointer
+  /// left the taskbar before it carries on strolling.
+  static const double buddyStill = 0.6;
+  static const double buddyWatch = 1.5;
+
+  /// The pace of a run to the pointer when it's far (more than [buddyFar] body widths); a trot otherwise.
+  static const double buddyRun = 160;
+  static const double buddyFar = 8;
+
+  /// The pointer's company (called each time the pointer is read, about 10 times a second): [pointerX] is the pointer's
+  /// x on the taskbar in logical pixels (null: it isn't on the taskbar), [bodyWidth] Mochi's, [allowed] whether Mischief
+  /// lets the cursor buddy run now. Only while Mochi is free to wander alone (not reacting, attending, asleep, still,
+  /// working or beside Patch). Returns whether the plan changed (the caller then moves the window and times its frames).
+  bool follow(double now, {required double? pointerX, required double bodyWidth, required bool allowed}) {
+    if (!isPlaced) return false;
+    final free = _mode == StrollMode.free && _home == null && now >= _holdUntil;
+    if (!free || !allowed) {
+      final was = _buddy;
+      _buddy = false;
+      // Mischief said no while Mochi was keeping the pointer company: back to the stroll at once.
+      return was && free && _endBuddy(now);
+    }
+    if (pointerX == null) {
+      if (!_buddy) return false;
+      _offSince ??= now;
+      return now - _offSince! >= buddyWatch && _endBuddy(now);
+    }
+    _offSince = null;
+    final last = _lastPointer;
+    if (last == null || (pointerX - last).abs() > 1.5) {
+      _lastPointer = pointerX;
+      _pointerMovedAt = now;
+    }
+    final here = _state(now).x;
+    final still = now - _pointerMovedAt >= buddyStill;
+    // A pointer coming to Mochi: stop at once, never move away from it.
+    if ((pointerX - here).abs() <= buddyNear * bodyWidth) return _settle(now, pointerX, still);
+    final spot = _buddySpot(pointerX, bodyWidth, here);
+    if (spot == null) return false;
+    if ((spot - here).abs() < 2) return _settle(now, pointerX, still);
+    final target = _buddyTarget;
+    if (_buddy && target != null && ((spot - target).abs() < bodyWidth * 0.5 || now - _lastRetarget < 0.4)) return false;
+    // Off to the spot beside the pointer: turn to it, trot (run if far), and sit there.
+    _cut(now);
+    _buddy = true;
+    _buddyTarget = spot;
+    _buddyHold = _BuddyHold.none;
+    _lastRetarget = now;
+    _activity = StrollActivity.follow;
+    if (_zoneAt(spot) != _line) {
+      _hopTo(spot);
+    } else {
+      final far = (spot - _x).abs() > buddyFar * bodyWidth;
+      // A re-aim on the move doesn't start from a standstill again.
+      _walk(spot, speed: far ? buddyRun : tuning.trotSpeed, easeIn: target == null ? null : 0.12);
+    }
+    _facing = pointerX >= _x ? 1.0 : -1.0;
+    _holdForever(PetAnimation.sit);
+    _extend(now);
+    return true;
+  }
+
+  /// Holds still beside (or near) the pointer: facing you while it moves about close by, a pounce or a sit facing it
+  /// once it stops.
+  bool _settle(double now, double pointerX, bool still) {
+    final want = still ? _BuddyHold.sit : _BuddyHold.attentive;
+    if (_buddy && _buddyTarget == null && _buddyHold == want) return false;
+    _cut(now);
+    _buddy = true;
+    _buddyTarget = null;
+    _buddyHold = want;
+    _activity = StrollActivity.follow;
+    if (want == _BuddyHold.attentive) {
+      _holdForever(PetAnimation.idle, style: StrollStyle.attentive);
+    } else {
+      final direction = pointerX >= _x ? 1.0 : -1.0;
+      if (direction != _facing) _turn(direction);
+      if (_chance(0.5)) _act(PetAnimation.pounce);
+      _holdForever(PetAnimation.sit);
+    }
+    _extend(now);
+    return true;
+  }
+
+  /// The free spot nearest the pointer on the side Mochi is on, at least a body from it: never under the pointer, never
+  /// outside the free stretches. Null: no such spot (Mochi stays where it is).
+  double? _buddySpot(double pointerX, double bodyWidth, double here) {
+    final side = here <= pointerX ? -1.0 : 1.0;
+    for (final away in const [buddyBeside, 2.5, 5.0]) {
+      for (final direction in [side, -side]) {
+        final spot = nearest(pointerX + direction * away * bodyWidth);
+        if ((spot - pointerX).abs() >= buddyLeast * bodyWidth) return spot;
+      }
+    }
+    return null;
+  }
+
+  /// Back to the usual stroll from where Mochi is.
+  bool _endBuddy(double now) {
+    _buddy = false;
+    _buddyTarget = null;
+    _buddyHold = _BuddyHold.none;
+    _offSince = null;
+    _restart(now);
+    _extend(now);
+    return true;
+  }
+
+  /// Mochi is keeping the pointer company (tests).
+  bool get buddying => _buddy;
 
   // MARK: The plan
 
@@ -547,14 +691,14 @@ class Stroller {
   }
 
   /// Walks (or trots) to [target], kept on the line; turns round first if it's behind.
-  void _walk(double target, {double? speed}) {
+  void _walk(double target, {double? speed, double? easeIn}) {
     final goal = _line!.clamp(target);
     final distance = (goal - _x).abs();
     if (distance < 1) return;
     final direction = goal > _x ? 1.0 : -1.0;
     if (direction != _facing) _turn(direction);
     final pace = speed ?? tuning.walkSpeed;
-    final ease = math.min(tuning.ease, distance / pace);
+    final ease = math.min(easeIn ?? tuning.ease, distance / pace);
     _add(
       pace >= tuning.trotSpeed ? PetAnimation.run : PetAnimation.walk,
       distance / pace + ease,
