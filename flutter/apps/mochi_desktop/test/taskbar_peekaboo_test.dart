@@ -12,7 +12,6 @@ import 'package:flutter/material.dart' show Offset, Size, SizedBox;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_art/mochi_art.dart' show PetAnimation;
 import 'package:mochi_art/pose_tracks.dart' show PoseLibrary;
-import 'package:mochi_art/pose_tracks.dart' show PoseLibrary;
 import 'package:mochi_desktop/src/core/mischief.dart';
 import 'package:mochi_desktop/src/core/pc_rhythm.dart';
 import 'package:mochi_desktop/src/ui/app.dart';
