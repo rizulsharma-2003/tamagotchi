@@ -11,6 +11,9 @@ abstract interface class JsonStore {
   /// What was saved (null: nothing yet, or unreadable).
   Object? read();
   void write(Object? json);
+
+  /// Removes what was saved (the file itself goes).
+  void delete();
 }
 
 class FileJsonStore implements JsonStore {
@@ -39,6 +42,16 @@ class FileJsonStore implements JsonStore {
       debugPrint('Mochi: ${path.split(Platform.pathSeparator).last} could not be saved (${error.runtimeType})');
     }
   }
+
+  @override
+  void delete() {
+    try {
+      final file = File(path);
+      if (file.existsSync()) file.deleteSync();
+    } on Object catch (error) {
+      debugPrint('Mochi: ${path.split(Platform.pathSeparator).last} could not be removed (${error.runtimeType})');
+    }
+  }
 }
 
 class MemoryJsonStore implements JsonStore {
@@ -56,5 +69,14 @@ class MemoryJsonStore implements JsonStore {
   void write(Object? json) {
     writes++;
     this.json = jsonDecode(jsonEncode(json));
+  }
+
+  /// How many times it was deleted (tests).
+  int deletes = 0;
+
+  @override
+  void delete() {
+    deletes++;
+    json = null;
   }
 }

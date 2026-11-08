@@ -43,6 +43,19 @@
 //   would leave the display, or onto another display: Mochi falls to the surface below and carries on.
 // With the switch off, the regular survey only drops Mochi when its ledge goes, as on the Mac.
 //
+// With Window nudges (docs/SPRINT_2.md X2, Mischief; off until you turn it on) Mochi's feet can move a window a very little,
+// and every window goes back exactly where it was (core/window_nudge.dart is the put-back contract):
+// - Wobble: landing on a window's top (a hop or a fall onto a ledge) makes that window dip 3 px and spring back, at most once
+//   per window per outing.
+// - Shove: standing still on a window's top (a pause or a sit while exploring; about one in four, at most once per outing,
+//   and only when the pause is long enough to see it through) Mochi shoves that window 8 px the way it faces and it
+//   slides back.
+// - Mochi's feet ride the window while it moves (its own landing or sitting pose; never the holding-on of a drag): the
+//   Title-bar walker is told what the nudge does to the window it follows ([WindowNudger.expects]) and so does not take
+//   it for a user dragging it, and the survey of the windows waits until the window is home.
+// - The window is never the one you are using, and any end of the adventure (home, hurried, a rule, the app quitting)
+//   sends a nudged window home at once.
+//
 // Not done yet (known gaps): Mochi's speech bubbles don't show while it's out (the plan's lines are skipped), and
 // the carry swings around Mochi's feet rather than its scruff.
 //
@@ -59,6 +72,7 @@ import 'package:mochi_world/mochi_world.dart' as w;
 import '../../core/desktop_settings.dart';
 import '../../core/mischief.dart';
 import '../../core/pc_rhythm.dart';
+import '../../core/window_nudge.dart';
 import '../../platform/displays.dart';
 import '../../platform/native_stage.dart';
 import '../../platform/taskbar.dart' show PixelRect;
@@ -168,6 +182,13 @@ class _Outing {
   /// The window Mochi stands on, as last read (Title-bar walker), and Mochi riding it.
   _Stand? stand;
   _Ride? ride;
+
+  /// Window nudges: the windows already wobbled this outing, the landing and the pause (segment starts) already considered,
+  /// and whether it has shoved a window.
+  final Set<int> wobbled = {};
+  double landed = double.negativeInfinity;
+  double paused = double.negativeInfinity;
+  bool shoved = false;
 }
 
 /// The window Mochi stands on, as it was at the last read.
@@ -221,8 +242,12 @@ class DesktopAdventure extends ChangeNotifier {
     this.onMenu,
     this.onPet,
     this.demo,
+    this.nudger,
+    this.nudgeForce,
+    math.Random? random,
     int? seed,
-  }) : scheduler = w.AdventureScheduler(seed: seed ?? world.seed, frequency: settings.adventure.spontaneous);
+  }) : scheduler = w.AdventureScheduler(seed: seed ?? world.seed, frequency: settings.adventure.spontaneous),
+       _dice = random ?? math.Random((seed ?? world.seed) ^ 0x2B2B);
 
   final StagePet pet;
   final PetHome home;
@@ -264,6 +289,18 @@ class DesktopAdventure extends ChangeNotifier {
 
   /// When it sets off by itself.
   final w.AdventureScheduler scheduler;
+
+  /// Window nudges (X2; null: none), the development switch that makes one motion happen every time, and the dice for the
+  /// shove.
+  final WindowNudger? nudger;
+  final NudgeForce? nudgeForce;
+  final math.Random _dice;
+
+  /// A pause is shoved about one time in this many.
+  static const int shoveOdds = 4;
+
+  /// A shove needs the pause to last this much longer than the shove itself (seconds), and to be just starting.
+  static const double shoveRoom = 0.2;
 
   static bool _never() => false;
   static (int, int)? _nobody() => null;
@@ -364,6 +401,7 @@ class DesktopAdventure extends ChangeNotifier {
   bool comeHome() {
     final outing = _outing;
     if (outing == null) return false;
+    nudger?.abort();
     if (outing.carry != null) {
       _finish(null);
       return true;
@@ -546,6 +584,7 @@ class DesktopAdventure extends ChangeNotifier {
     if (plan == null) return;
     final sample = plan.sample(now);
     if (_followWindow(outing, sample, now)) return;
+    _considerNudge(outing, sample, now);
     final top = outing.terrain.bounds.maxY;
     if (sample.finished || (sample.phase == w.AdventurePhase.returning && sample.isAirborne && sample.point.y > top + outing.metrics.height * 0.15)) {
       _finish(plan.homeX);
@@ -554,14 +593,14 @@ class DesktopAdventure extends ChangeNotifier {
     pet.draw(
       time: now,
       motion: _motion(sample, now),
-      feet: space.feet(sample.point),
+      feet: _nudged(outing, sample, space.feet(sample.point)),
       ratio: space.scale,
       unit: unit,
       quantum: 1 / 15,
       accent: (pose) => accent(pose, sample),
     );
     if (_ticks % 60 == 0) pet.raise();
-    final still = sample.move == w.AdventureMove.hold && (sample.style == w.AdventureStyle.plain);
+    final still = sample.move == w.AdventureMove.hold && (sample.style == w.AdventureStyle.plain) && nudger?.running != true;
     _schedule(still ? holdEvery : moveEvery);
   }
 
@@ -677,6 +716,8 @@ class DesktopAdventure extends ChangeNotifier {
       _homeNow();
       return;
     }
+    // A window under Mochi is being nudged (its own doing): the ground is looked at again once the window is home.
+    if (nudger?.running == true) return;
     final terrain = space.terrain([for (final frame in frames) frame.frame], outing.metrics);
     if (terrain == outing.terrain) return;
     // Title-bar walker: the window Mochi stands on changed. The next frame follows it (Mochi rides along, or falls) and takes
@@ -718,6 +759,7 @@ class DesktopAdventure extends ChangeNotifier {
     final outing = _outing;
     if (outing == null) return;
     _outing = null;
+    nudger?.abort();
     _pressedAt = null;
     _lifted = false;
     _stopFrames();
@@ -751,6 +793,61 @@ class DesktopAdventure extends ChangeNotifier {
   static const double snapShare = 0.18;
   static const double snapJump = 96;
 
+  // ---- Window nudges (X2) ----
+
+  /// The window whose top Mochi stands on at [sample] (its handle as of the last survey), or null.
+  int? _ledgeHwnd(_Outing outing, w.AdventureSample sample) {
+    if (sample.isAirborne || sample.move == w.AdventureMove.climb) return null;
+    final index = outing.terrain.ledge(sample.point, tolerance: 2)?.window ?? -1;
+    return index >= 0 && index < outing.windows.length ? outing.windows[index].hwnd : null;
+  }
+
+  /// Mochi's feet move with the window it stands on while that window is being nudged.
+  (int, int) _nudged(_Outing outing, w.AdventureSample sample, (int, int) feet) {
+    final nudger = this.nudger;
+    if (nudger == null || !nudger.running || _ledgeHwnd(outing, sample) != nudger.hwnd) return feet;
+    final offset = nudger.offset;
+    return (feet.$1 + offset.$1, feet.$2 + offset.$2);
+  }
+
+  /// Landing on a window's top (a wobble, once per window per outing), or a pause on it (a shove, about one in four, once
+  /// per outing): starts the nudge if the extra may run now and the window qualifies ([WindowNudger.start] asks both).
+  void _considerNudge(_Outing outing, w.AdventureSample sample, double now) {
+    final nudger = this.nudger;
+    final plan = outing.plan;
+    if (nudger == null || plan == null || nudger.running || outing.hurrying || sample.finished) return;
+    final force = nudgeForce;
+    if (force == NudgeForce.tug || !gate.may(MischiefExtra.windowNudges)) return;
+    final segment = plan.segment(now);
+    if (segment == null) return;
+    if (sample.move == w.AdventureMove.hold && sample.style == w.AdventureStyle.land) {
+      if (outing.landed == segment.start) return;
+      outing.landed = segment.start;
+      if (force == NudgeForce.shove) return;
+      final hwnd = _ledgeHwnd(outing, sample);
+      if (hwnd == null || (force == null && outing.wobbled.contains(hwnd))) return;
+      if (nudger.start(hwnd, NudgeKind.wobble, scale: outing.space.scale)) {
+        outing.wobbled.add(hwnd);
+        _schedule(moveEvery);
+      }
+      return;
+    }
+    if (force == NudgeForce.wobble || (outing.shoved && force == null)) return;
+    final pause = sample.animation == PetAnimation.sit || sample.animation == PetAnimation.sniff || sample.animation == PetAnimation.lookAround;
+    if (!pause || sample.move != w.AdventureMove.hold || sample.style != w.AdventureStyle.plain || sample.phase != w.AdventurePhase.exploring) return;
+    if (outing.paused == segment.start || sample.elapsed > 0.5) return;
+    outing.paused = segment.start;
+    // The pause has to outlast the shove (Mochi stays on the spot while the window slides) before it counts as one to roll for.
+    if (segment.end - now < NudgeMotion.shove().duration + shoveRoom) return;
+    if (force == null && _dice.nextInt(shoveOdds) != 0) return;
+    final hwnd = _ledgeHwnd(outing, sample);
+    if (hwnd == null) return;
+    if (nudger.start(hwnd, NudgeKind.shove, scale: outing.space.scale, facing: sample.facing)) {
+      outing.shoved = true;
+      _schedule(moveEvery);
+    }
+  }
+
   /// While Mochi stands on a window's top (and the Title-bar walker may run), reads that one window's frame. True when it
   /// took over this frame (Mochi rides, or falls).
   bool _followWindow(_Outing outing, w.AdventureSample sample, double now) {
@@ -766,6 +863,12 @@ class DesktopAdventure extends ChangeNotifier {
     }
     final hwnd = outing.windows[index].hwnd;
     final stand = outing.stand;
+    final nudging = nudger;
+    if (nudging != null && nudging.running && nudging.hwnd == hwnd && (stand == null || stand.hwnd != hwnd)) {
+      // A window already moved by a nudge is no baseline: it is looked at once it is home.
+      outing.stand = null;
+      return false;
+    }
     if (stand == null || stand.hwnd != hwnd) {
       final read = windows.frame(hwnd);
       outing.stand = read == null ? null : _Stand(hwnd, read, now);
@@ -780,6 +883,10 @@ class DesktopAdventure extends ChangeNotifier {
       return true;
     }
     if (read == stand.frame) return false;
+    // Mochi's own nudge moved it (the wobble, the shove, a tug): the frame the nudge makes is expected, not a drag.
+    if (nudging != null && read.hwnd == stand.frame.hwnd && read.zoomed == stand.frame.zoomed && nudging.expects(hwnd, stand.frame.frame, read.frame)) {
+      return false;
+    }
     // It changed under Mochi: ride along (or fall off).
     final ride = _Ride(hwnd: hwnd, frame: stand.frame, x: feet.$1.toDouble(), y: feet.$2.toDouble(), facing: sample.facing, since: now);
     outing.stand = null;

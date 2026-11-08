@@ -88,6 +88,7 @@ class MochiDesktop {
     MicReader? mic,
     ForegroundApps? foregroundApps,
     ReactsForce? reactsForce,
+    Stream<void>? sessionEnding,
   }) : _claude = claude,
        _locateClaude = locateClaude,
        startup = startup ?? const UnsupportedStartup(),
@@ -170,6 +171,29 @@ class MochiDesktop {
       resting: () => rhythm.resting,
       friendship: () => world.world.progress.friendshipLevel,
     );
+    // Windows ending the session (a log off or a shutdown): whatever Mochi moved goes back first (X2).
+    _ending = sessionEnding?.listen((_) => runExitHooks());
+  }
+
+  StreamSubscription<void>? _ending;
+
+  final List<void Function()> _exitHooks = [];
+
+  /// [hook] runs when the app quits or Windows ends the session: whatever must be put back before the process goes (the
+  /// window nudges, X2). It must be quick and synchronous.
+  void addExitHook(void Function() hook) => _exitHooks.add(hook);
+
+  void removeExitHook(void Function() hook) => _exitHooks.remove(hook);
+
+  /// Runs the exit hooks now (quitting, or the session ending).
+  void runExitHooks() {
+    for (final hook in List.of(_exitHooks)) {
+      try {
+        hook();
+      } on Object catch (error) {
+        debugPrint('Mochi: an exit hook failed (${error.runtimeType})');
+      }
+    }
   }
 
   /// The real app on this computer.
@@ -281,6 +305,8 @@ class MochiDesktop {
       mic: systemMic(),
       foregroundApps: systemForegroundApp(),
       reactsForce: ReactsForce.from(environment['MOCHI_DESKTOP_REACTS']),
+      // Windows ending the session puts back any window the nudges moved (X2).
+      sessionEnding: system?.sessionEnding,
     );
   }
 
@@ -529,6 +555,8 @@ class MochiDesktop {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    runExitHooks();
+    unawaited(_ending?.cancel());
     _prune?.cancel();
     _greeting?.cancel();
     updater.stop();

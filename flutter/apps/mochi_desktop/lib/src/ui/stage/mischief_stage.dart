@@ -17,11 +17,17 @@
 //   using; at Halloween pumpkins on the taskbar.
 // - X12 weather and time moods (core/moods.dart): the morning coffee with Patch; the umbrella while it rains (drawn by the
 //   pet's own view on the taskbar, not here).
+// - X2 window nudges (core/window_nudge.dart, with adventure.dart for the wobble and the shove): the terminal tug is here,
+//   when Claude needs you and you're at the PC. One WindowNudger runs them all, one nudge at a time; quitting puts a
+//   nudged window back (desktop.dispose reaches it, and so does dispose here).
 // - W26 Mochi on the taskbar while Mochi's window is open (stage_stand.dart): the stroll goes on, drawn by the stage.
 //
 // Development: `MOCHI_DESKTOP_MISCHIEF_DEMO` ("confetti:20,fireworks:45") repeats a preview every so many seconds
 // while the screen can be seen, for checking and measuring on a PC (with the `perf-debug` meter);
-// `MOCHI_DESKTOP_ADVENTURE_DEMO=60` sets Mochi off on an adventure every 60 seconds (at least 5) the same way.
+// `MOCHI_DESKTOP_ADVENTURE_DEMO=60` sets Mochi off on an adventure every 60 seconds (at least 5) the same way;
+// `MOCHI_DESKTOP_NUDGE=wobble|shove|tug` makes that nudge happen at every qualifying moment (with the adventure demo every
+// landing wobbles; `tug` shakes the front-most editor or terminal 10 seconds after start and every 60 seconds while the
+// screen can be seen). The gate and the window rules still apply.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -34,12 +40,14 @@ import '../../core/json_store.dart';
 import '../../core/moods.dart';
 import '../../core/mischief.dart';
 import '../../core/pet_cues.dart';
+import '../../core/reacts.dart' show EditorApps;
 import '../../core/sessions.dart' show SessionPhase;
+import '../../core/window_nudge.dart';
 import '../../desktop.dart';
 import '../../platform/displays.dart';
 import '../../platform/foreground_window.dart';
 import '../../platform/native_stage.dart';
-import '../../platform/taskbar.dart' show TaskbarStage;
+import '../../platform/taskbar.dart' show PixelRect, TaskbarStage;
 import '../../platform/window_frames.dart';
 import '../pet/taskbar_stroll.dart' show PetHome;
 import 'adventure.dart';
@@ -76,8 +84,24 @@ class MischiefStage extends ChangeNotifier {
     bool Function()? patchOnTaskbar,
     http.Client Function()? weatherClient,
     bool? weather,
+    WindowMover? mover,
+    JsonStore? nudgeStore,
+    this.nudgeForce,
+    void Function(String)? nudgeLog,
   }) : cast = StageCast(stage),
-       _shown = shown ?? (() => true) {
+       _shown = shown ?? (() => true),
+       _clock = clock {
+    nudger = WindowNudger(
+      mover: mover ?? const NoWindowMover(),
+      store: nudgeStore ?? MemoryJsonStore(),
+      allowed: () => desktop.mischief.may(MischiefExtra.windowNudges),
+      clock: clock ?? desktop.world.now,
+      log: nudgeLog,
+    );
+    _mover = mover ?? const NoWindowMover();
+    // The gate changing (a rule, a switch) sends a nudged window home at once; quitting does too.
+    desktop.mischief.addListener(nudger.recheck);
+    desktop.addExitHook(nudger.putBack);
     celebrations = StageCelebrations(stage: stage, cast: cast, gate: desktop.mischief, displays: displays, cursor: cursor, clock: clock);
     notes = StickyNotes(
       stage: stage,
@@ -163,6 +187,9 @@ class MischiefStage extends ChangeNotifier {
         onPet: () => desktop.interact('pet'),
         onMenu: onMenu,
         demo: adventureDemo,
+        nudger: nudger,
+        nudgeForce: nudgeForce,
+        random: random,
       );
     }
   }
@@ -179,6 +206,18 @@ class MischiefStage extends ChangeNotifier {
     final session = desktop.sessions.primary;
     return session != null && !session.isStale(desktop.sessions.now) && session.phase == SessionPhase.waitingForUser;
   }
+
+  /// X2: the one nudge that may run at a time, the development switch, and what Windows says about windows.
+  late final WindowNudger nudger;
+  final NudgeForce? nudgeForce;
+  late final WindowMover _mover;
+  final double Function()? _clock;
+
+  /// When the terminal last tugged (seconds on the nudger's clock); null: not yet this session.
+  double? _lastTug;
+
+  /// A tug at most this often (seconds).
+  static const double tugEvery = 120;
 
   final MochiDesktop desktop;
   final NativeStage stage;
@@ -251,6 +290,8 @@ class MischiefStage extends ChangeNotifier {
   void start() {
     if (_started) return;
     _started = true;
+    // A nudge cut short by a crash or a kill left its journal: that window goes home first.
+    nudger.recover();
     _subscriptions
       ..add(desktop.world.celebrated.listen(_celebrated))
       ..add(desktop.streaks.reached.listen(_streak))
@@ -261,6 +302,15 @@ class MischiefStage extends ChangeNotifier {
     desktop.world.everyMinute(_minute);
     roamer?.start();
     adventure?.start();
+    if (nudgeForce == NudgeForce.tug) {
+      // Development: the tug 10 seconds after start and every 60 seconds while the screen can be seen.
+      _demoTimers.add(
+        Timer(const Duration(seconds: 10), () {
+          _forcedTug();
+          _demoTimers.add(Timer.periodic(const Duration(seconds: 60), (_) => _forcedTug()));
+        }),
+      );
+    }
     for (final MapEntry(key: kind, value: every) in demo.entries) {
       _demoTimers.add(
         Timer.periodic(every, (_) {
@@ -290,6 +340,7 @@ class MischiefStage extends ChangeNotifier {
 
   /// Claude finished, or needs you, while you're away from the PC: a note for when you're back.
   void _cue(PetCue cue) {
+    if (cue == PetCue.needsYou) tug();
     if (desktop.rhythm.away != true) return;
     final project = desktop.sessions.primary?.project;
     switch (cue) {
@@ -300,6 +351,41 @@ class MischiefStage extends ChangeNotifier {
       default:
         break;
     }
+  }
+
+  /// Claude needs you and you're at the PC (not away): the front-most editor or terminal window that isn't the one you're
+  /// using gets a little shake, once per needs-you and at most once every two minutes. True when one did. Windows nudges
+  /// only; the Windows notification for "needs you" is untouched.
+  bool tug({bool force = false}) {
+    if (_disposed || nudger.running || !gate.may(MischiefExtra.windowNudges)) return false;
+    if (nudgeForce != null && nudgeForce != NudgeForce.tug && !force) return false;
+    if (!force) {
+      if (desktop.rhythm.away != false) return false;
+      final last = _lastTug;
+      if (last != null && _seconds() - last < tugEvery) return false;
+    }
+    for (final frame in frames.list()) {
+      if (nudger.qualify(frame.hwnd) != null || !EditorApps.matches(_mover.processName(frame.hwnd))) continue;
+      final started = nudger.start(frame.hwnd, NudgeKind.tug, scale: _scaleOf(frame.frame));
+      if (started) _lastTug = _seconds();
+      return started;
+    }
+    return false;
+  }
+
+  void _forcedTug() {
+    if (!desktop.rhythm.unseen) tug(force: true);
+  }
+
+  double _seconds() => (_clock ?? desktop.world.now)();
+
+  /// The scale of the display most of [window] is on.
+  double _scaleOf(PixelRect window) {
+    final x = (window.left + window.right) ~/ 2, y = (window.top + window.bottom) ~/ 2;
+    for (final display in displays.list()) {
+      if (display.monitor.contains(x, y)) return display.scale;
+    }
+    return 1;
   }
 
   /// Once a minute (only while the screen can be seen): the best part of an hour at the PC without a five-minute
@@ -357,6 +443,9 @@ class MischiefStage extends ChangeNotifier {
     return demo;
   }
 
+  /// A development switch: `MOCHI_DESKTOP_NUDGE=wobble|shove|tug`.
+  static NudgeForce? nudgeFrom(String? value) => NudgeForce.from(value);
+
   /// A development switch: `MOCHI_DESKTOP_WEATHER=rain|clear` forces the weather (and skips the network).
   static bool? weatherFrom(String? value) => switch ((value ?? '').trim().toLowerCase()) {
     'rain' => true,
@@ -378,7 +467,15 @@ class MischiefStage extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
+    try {
+      desktop.mischief.removeListener(nudger.recheck);
+    } on FlutterError {
+      // The gate went with the app (quitting disposes it first).
+    }
+    desktop.removeExitHook(nudger.putBack);
+    nudger.dispose();
     notes.dispose();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());

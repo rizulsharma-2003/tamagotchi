@@ -197,6 +197,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
         stage_->DisplaysChanged();
       }
       break;
+    case WM_QUERYENDSESSION:
+    case WM_ENDSESSION:
+      // Windows is ending the session: the window nudges (X2) put back any window they moved. This never holds up the
+      // shutdown; the message goes on to Flutter and the default handling as before.
+      SendSystem("sessionEnding", flutter::EncodableValue(true));
+      break;
     case WM_WTSSESSION_CHANGE:
       if (wparam == WTS_SESSION_LOCK || wparam == WTS_CONSOLE_DISCONNECT) {
         locked_ = 1;

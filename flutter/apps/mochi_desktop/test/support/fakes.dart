@@ -701,6 +701,7 @@ class TestDesktop {
     Map<String, Object?> files = const {},
     bool stage = true,
     bool Function()? fullScreen,
+    Stream<void>? sessionEnding,
   }) {
     final stores = {for (final entry in files.entries) entry.key: MemoryJsonStore(entry.value)};
     final temp = Directory.systemTemp.createTempSync('mochi_desktop_test');
@@ -760,6 +761,7 @@ class TestDesktop {
       worldSeed: worldSeed,
       stage: stage,
       fullScreen: fullScreen,
+      sessionEnding: sessionEnding,
     );
     return TestDesktop._(temp, desktop, sockets, api, claude, vault, document, start, toastService, sound, usage, hotkeys, store, stores);
   }

@@ -40,6 +40,9 @@ class PixelRect {
   bool contains(int x, int y) => x >= left && x < right && y >= top && y < bottom;
   bool overlaps(PixelRect other) => left < other.right && other.left < right && top < other.bottom && other.top < bottom;
 
+  /// This rectangle moved by [dx], [dy].
+  PixelRect shifted(int dx, int dy) => PixelRect(left + dx, top + dy, right + dx, bottom + dy);
+
   @override
   bool operator ==(Object other) =>
       other is PixelRect && other.left == left && other.top == top && other.right == right && other.bottom == bottom;

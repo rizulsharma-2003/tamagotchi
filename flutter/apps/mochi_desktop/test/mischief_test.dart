@@ -24,7 +24,7 @@ void main() {
       final settings = DesktopSettings(document);
       expect(settings.mischief.enabled, isFalse);
       for (final extra in MischiefExtra.values) {
-        expect(settings.mischief.on(extra), isTrue);
+        expect(settings.mischief.on(extra), extra != MischiefExtra.windowNudges, reason: 'only the window nudges wait for you');
         expect(settings.mischief.allows(extra), isFalse, reason: 'the master switch is off');
       }
       settings.mischief = settings.mischief.copyWith(enabled: true).withExtra(MischiefExtra.cursorBuddy, false);
@@ -40,6 +40,7 @@ void main() {
         'holidayTakeover': true,
         'moods': true,
         'reacts': true,
+        'windowNudges': false,
       });
       expect(document.json!['v'], 8);
       final again = DesktopSettings(MemorySettingsDocument(document.json));
@@ -101,7 +102,8 @@ void main() {
       motion.dispose();
     });
 
-    void allOn() => settings.mischief = const MischiefSettings(enabled: true);
+    // Every extra's own switch on (the window nudges are the one that waits for you).
+    void allOn() => settings.mischief = MischiefSettings(enabled: true, extras: {for (final extra in MischiefExtra.values) extra: true});
 
     test('only with the master switch and the extra’s own switch on', () {
       expect(gate.why(MischiefExtra.cursorBuddy), MischiefPause.off);
@@ -259,9 +261,20 @@ void main() {
       final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
       expect(switches.first.value, isFalse);
       expect(switches.skip(1).every((s) => s.onChanged == null), isTrue, reason: 'the extras wait for the master switch');
+      expect(find.text('Window nudges'), findsOneWidget, reason: 'X2');
       await tester.tap(toggle('Let Mochi make mischief'));
       await tester.pump();
       expect(t.desktop.settings.mischief.enabled, isTrue);
+      expect(t.desktop.settings.mischief.on(MischiefExtra.windowNudges), isFalse, reason: 'it moves your windows: you opt in');
+      final nudges = tester.widgetList<Switch>(find.byType(Switch)).last;
+      expect(nudges.value, isFalse);
+      await tester.ensureVisible(toggle('Window nudges'));
+      await tester.pump();
+      await tester.tap(toggle('Window nudges'));
+      await tester.pump();
+      expect(t.desktop.settings.mischief.on(MischiefExtra.windowNudges), isTrue);
+      await tester.ensureVisible(toggle(MischiefExtra.cursorBuddy.title));
+      await tester.pump();
       await tester.tap(toggle(MischiefExtra.cursorBuddy.title));
       await tester.pump();
       expect(t.desktop.settings.mischief.on(MischiefExtra.cursorBuddy), isFalse);
@@ -322,7 +335,7 @@ void main() {
     testWidgets('the screen reader hears each switch with what it does, and whether it’s on', (tester) async {
       final semantics = tester.ensureSemantics();
       await open(tester);
-      t.desktop.settings.mischief = const MischiefSettings(enabled: true);
+      t.desktop.settings.mischief = MischiefSettings(enabled: true, extras: {for (final extra in MischiefExtra.values) extra: true});
       await tester.pump();
       for (final extra in MischiefExtra.available) {
         final node = tester.getSemantics(find.bySemanticsLabel(RegExp('^${RegExp.escape(extra.title)}'))).getSemanticsData();

@@ -80,9 +80,19 @@ enum MischiefExtra {
     'Mochi bops along while music plays, goes quiet while your microphone is in use (a call) and perks up when you open your editor or terminal. '
         'It only sees whether media is playing, whether the microphone is in use and the app’s name, never what or who. It hides for full-screen games.',
     moves: true,
+  ),
+
+  /// X2: Mochi nudges, wobbles and tugs other apps' windows, and puts every one back (core/window_nudge.dart). It moves your
+  /// windows, so it is the one extra that is off until you turn it on.
+  windowNudges(
+    'Window nudges',
+    'Mochi gives a window a tiny nudge now and then, makes the one it lands on wobble, and tugs your terminal when Claude needs you. '
+        'Every window goes back exactly where it was. Never the window you’re using.',
+    moves: true,
+    defaultOn: false,
   );
 
-  const MischiefExtra(this.title, this.detail, {required this.moves});
+  const MischiefExtra(this.title, this.detail, {required this.moves, this.defaultOn = true});
 
   /// The extras that are built (Settings lists only these: no dead switches). All of them are.
   static List<MischiefExtra> get available => values;
@@ -94,6 +104,10 @@ enum MischiefExtra {
 
   /// It animates: it rests while Windows' animation effects are off.
   final bool moves;
+
+  /// Whether it is on when its own switch has never been touched (with Mischief itself on). Every extra but the window
+  /// nudges is.
+  final bool defaultOn;
 }
 
 /// The master switch and each extra's (Settings › Mischief), saved under `mischief`.
@@ -104,10 +118,11 @@ class MischiefSettings {
   /// The master switch: off at first.
   final bool enabled;
 
-  /// Each extra's own switch (missing: on, so turning Mischief on turns on everything you haven't turned off).
+  /// Each extra's own switch (missing: the extra's own default, which is on for all but the window nudges, so turning
+  /// Mischief on turns on everything you haven't turned off, and nothing that moves your windows).
   final Map<MischiefExtra, bool> extras;
 
-  bool on(MischiefExtra extra) => extras[extra] ?? true;
+  bool on(MischiefExtra extra) => extras[extra] ?? extra.defaultOn;
 
   /// [extra] may run as far as the switches go.
   bool allows(MischiefExtra extra) => enabled && on(extra);
