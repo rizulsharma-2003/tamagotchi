@@ -318,7 +318,8 @@ class CursorBuddy {
       feet: (_x.round(), _y.round()),
       ratio: here.scale,
       unit: unit,
-      quantum: moving || _mode == BuddyMode.pounce ? 1 / 30 : 1 / 15,
+      // Its poses change 15 times a second (half the pictures of a 30 a second walk) while it moves 30 times.
+      quantum: 1 / 15,
       clickThrough: moving,
     );
     // Back over other always-on-top windows now and then (the taskbar rises when it's clicked).

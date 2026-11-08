@@ -40,6 +40,9 @@ enum MischiefExtra {
 
   const MischiefExtra(this.title, this.detail, {required this.moves});
 
+  /// The extras that are built (Settings lists only these: no dead switches). X8 isn't yet.
+  static List<MischiefExtra> get available => [for (final extra in values) if (extra != roamScreens) extra];
+
   final String title;
 
   /// One line on what it does (Settings).

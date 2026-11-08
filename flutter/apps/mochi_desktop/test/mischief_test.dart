@@ -241,7 +241,8 @@ void main() {
     testWidgets('the master switch is off at first and the extras wait for it; each says what it does', (tester) async {
       await open(tester);
       expect(find.text('Let Mochi make mischief'), findsOneWidget);
-      for (final extra in MischiefExtra.values) {
+      expect(find.text(MischiefExtra.roamScreens.title), findsNothing, reason: 'not built yet: no dead switch');
+      for (final extra in MischiefExtra.available) {
         expect(find.text(extra.title), findsOneWidget);
         expect(find.text(extra.detail), findsOneWidget);
       }
@@ -313,7 +314,7 @@ void main() {
       await open(tester);
       t.desktop.settings.mischief = const MischiefSettings(enabled: true);
       await tester.pump();
-      for (final extra in MischiefExtra.values) {
+      for (final extra in MischiefExtra.available) {
         final node = tester.getSemantics(find.bySemanticsLabel(RegExp('^${RegExp.escape(extra.title)}'))).getSemanticsData();
         expect(node.label, contains(extra.detail));
         expect((node.flagsCollection.hasToggledState, node.flagsCollection.isToggled), (true, true));

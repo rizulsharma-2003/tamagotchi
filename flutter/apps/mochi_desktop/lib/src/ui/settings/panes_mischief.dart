@@ -50,7 +50,7 @@ class MischiefPane extends StatelessWidget {
             SettingsGroup(
               title: 'Extras',
               children: [
-                for (final extra in MischiefExtra.values) _ExtraRow(extra: extra, host: host, everything: all),
+                for (final extra in MischiefExtra.available) _ExtraRow(extra: extra, host: host, everything: all),
               ],
             ),
             if (stage != null && supported)

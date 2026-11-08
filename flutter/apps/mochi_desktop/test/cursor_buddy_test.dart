@@ -4,12 +4,13 @@
 // full-screen app or Mochi's window, at a run otherwise) to where it left from. And the taskbar's side of it: Mochi
 // away, Patch staying at his desk.
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_desktop/src/core/mischief.dart';
 import 'package:mochi_desktop/src/core/notifications.dart' show QuietHours;
 import 'package:mochi_desktop/src/core/pc_rhythm.dart';
 import 'package:mochi_desktop/src/platform/native_stage.dart';
+import 'package:mochi_desktop/src/ui/pet/mochi_view.dart';
 import 'package:mochi_desktop/src/ui/pet/taskbar_stroll.dart' show PetHome;
 import 'package:mochi_desktop/src/ui/stage/cursor_buddy.dart';
 import 'package:mochi_desktop/src/ui/stage/mischief_stage.dart';
@@ -253,6 +254,25 @@ void main() {
     expect(reads, greaterThan(10));
     expect(pointer, (900, 500), reason: 'nothing here can move it');
     expect(stage.calls.where((call) => call != 'show' && call != 'sprites' && call != 'hide' && call != 'raise' && call != 'drop'), isEmpty);
+    await done(tester);
+  });
+
+  testWidgets('while Mochi is out with nobody left on the taskbar, the pet’s own view draws nothing', (tester) async {
+    begin(on: false);
+    Widget view({required bool away}) => Directionality(
+      textDirection: TextDirection.ltr,
+      child: MochiView(world: t.desktop.world, sessions: t.desktop.sessions, lastActivity: () => now, petAway: away),
+    );
+    await tester.pumpWidget(view(away: false));
+    final state = tester.state<MochiViewState>(find.byType(MochiView));
+    expect(state.fps, greaterThan(0));
+    await tester.pumpWidget(view(away: true));
+    await tester.pump();
+    expect(state.fps, 0, reason: 'no frames for a Mochi drawn elsewhere');
+    await tester.pumpWidget(view(away: false));
+    await tester.pump();
+    expect(state.fps, greaterThan(0), reason: 'back');
+    await tester.pumpWidget(const SizedBox());
     await done(tester);
   });
 }

@@ -212,6 +212,7 @@ class MochiViewState extends State<MochiView> {
       old.purr?.removeListener(_frame);
       widget.purr?.addListener(_frame);
     }
+    if (old.petAway != widget.petAway) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _frame() : null);
   }
 
   /// What Patch needs drawn: on the taskbar beside Mochi, his loop and moments; elsewhere only a burst.
@@ -254,17 +255,24 @@ class MochiViewState extends State<MochiView> {
     }
     final time = _time;
     _clock.value = time;
-    final fps = MochiView.frameRate(
-      mood: _director.mood,
-      roam: widget.stroll?.call(),
-      oneShot: _director.playing || (widget.purr?.active ?? false),
-      calm: _calm,
-      companion: _companionRate(),
-      small: widget.detail == RenderDetail.tiny,
-    );
+    // Mochi out on the desktop (the native stage draws it): only Patch's frames here, if he's here; none otherwise.
+    final fps = widget.petAway
+        ? _companionRate()
+        : MochiView.frameRate(
+            mood: _director.mood,
+            roam: widget.stroll?.call(),
+            oneShot: _director.playing || (widget.purr?.active ?? false),
+            calm: _calm,
+            companion: _companionRate(),
+            small: widget.detail == RenderDetail.tiny,
+          );
     if (fps == _fps) return;
     _fps = fps;
     _frames?.cancel();
+    if (fps <= 0) {
+      _frames = null;
+      return;
+    }
     _frames = Timer.periodic(Duration(microseconds: (1e6 / fps).round()), (_) => _frame());
   }
 
