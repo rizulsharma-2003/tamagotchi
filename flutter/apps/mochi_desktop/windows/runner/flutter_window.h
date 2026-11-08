@@ -6,6 +6,7 @@
 #include <flutter/flutter_view_controller.h>
 #include <flutter/method_channel.h>
 
+#include <cstdint>
 #include <memory>
 
 #include "native_stage.h"
@@ -22,6 +23,10 @@ inline UINT MochiToastMessage() {
   static const UINT message = ::RegisterWindowMessageW(L"MochiToastActivated");
   return message;
 }
+
+// The window message desktop_icons.cpp's worker posts when it has an answer (X5); the UI thread completes the method
+// channel's pending result then.
+constexpr UINT kDesktopIconsDone = WM_APP + 5;
 
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
@@ -60,6 +65,14 @@ class FlutterWindow : public Win32Window {
   // The console display: 0 off, 1 on, 2 dimmed (-1 not known yet); the session: 1 locked, 0 not (-1 not known).
   int display_state_ = -1;
   int locked_ = -1;
+
+  // X5: the one pending `desktopIcons` / `moveDesktopIcon` result (completed on the UI thread when the worker answers),
+  // and the request it waits for.
+  std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> icons_result_;
+  uint32_t icons_seq_ = 0;
+  void AskIcons(bool move, const flutter::EncodableMap* arguments,
+                std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void AnswerIcons();
 
   void HandleSystemCall(const flutter::MethodCall<flutter::EncodableValue>& call,
                         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);

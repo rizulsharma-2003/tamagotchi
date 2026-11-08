@@ -90,6 +90,15 @@ enum MischiefExtra {
         'Every window goes back exactly where it was. Never the window you’re using.',
     moves: true,
     defaultOn: false,
+  ),
+
+  /// X5: on its adventures Mochi sits on a desktop icon, kicks it over a little and puts it back (core/icon_play.dart). It
+  /// moves your own icon layout, so like the window nudges it is off until you turn it on.
+  desktopIcons(
+    'Desktop icons',
+    'On its adventures, Mochi sits on a desktop icon, kicks it over a little and puts it back exactly where it was. Not with Auto arrange on.',
+    moves: true,
+    defaultOn: false,
   );
 
   const MischiefExtra(this.title, this.detail, {required this.moves, this.defaultOn = true});
@@ -105,8 +114,8 @@ enum MischiefExtra {
   /// It animates: it rests while Windows' animation effects are off.
   final bool moves;
 
-  /// Whether it is on when its own switch has never been touched (with Mischief itself on). Every extra but the window
-  /// nudges is.
+  /// Whether it is on when its own switch has never been touched (with Mischief itself on). Every extra but the two that
+  /// move your windows and icons (the window nudges, the desktop icons) is.
   final bool defaultOn;
 }
 
@@ -118,8 +127,8 @@ class MischiefSettings {
   /// The master switch: off at first.
   final bool enabled;
 
-  /// Each extra's own switch (missing: the extra's own default, which is on for all but the window nudges, so turning
-  /// Mischief on turns on everything you haven't turned off, and nothing that moves your windows).
+  /// Each extra's own switch (missing: the extra's own default, which is on for all but the window nudges and the desktop icons, so
+  /// turning Mischief on turns on everything you haven't turned off, and nothing that moves your windows or icons).
   final Map<MischiefExtra, bool> extras;
 
   bool on(MischiefExtra extra) => extras[extra] ?? extra.defaultOn;

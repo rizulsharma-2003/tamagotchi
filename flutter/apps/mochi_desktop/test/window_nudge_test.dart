@@ -595,11 +595,11 @@ void main() {
   });
 
   group('the Window nudges switch', () {
-    test('off by default even with Mischief on; every other extra still on', () {
+    test('off by default even with Mischief on; every other extra still on (but the desktop icons, X5, which move your icons)', () {
       const settings = MischiefSettings(enabled: true);
       expect(settings.on(MischiefExtra.windowNudges), isFalse);
       expect(settings.allows(MischiefExtra.windowNudges), isFalse);
-      for (final extra in MischiefExtra.values.where((e) => e != MischiefExtra.windowNudges)) {
+      for (final extra in MischiefExtra.values.where((e) => e != MischiefExtra.windowNudges && e != MischiefExtra.desktopIcons)) {
         expect(settings.on(extra), isTrue, reason: extra.name);
         expect(extra.defaultOn, isTrue);
       }
