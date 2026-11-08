@@ -9,6 +9,7 @@ import '../../desktop.dart';
 import 'companion_director.dart';
 import 'pet_director.dart';
 import 'purr_hold.dart';
+import 'room_editor.dart';
 import '../../core/purr.dart';
 import 'speech_bubble.dart';
 
@@ -71,6 +72,7 @@ class _RoomViewState extends State<RoomView> {
     super.initState();
     widget.desktop.sessions.addListener(_follow);
     widget.desktop.purr.addListener(_frame);
+    widget.desktop.room.addListener(_decorating);
     companion.addListener(_companionChanged);
     _moodTimer = Timer.periodic(const Duration(seconds: 5), (_) => _follow());
     _follow();
@@ -92,6 +94,11 @@ class _RoomViewState extends State<RoomView> {
       if (mounted) setState(() {});
     }
     _frame();
+  }
+
+  /// Decorating began or ended, or a piece was picked up (the scene leaves it out while it's carried).
+  void _decorating() {
+    if (mounted) setState(() {});
   }
 
   /// The world's news (a moment, Patch coming or going, a nap).
@@ -135,6 +142,7 @@ class _RoomViewState extends State<RoomView> {
   void dispose() {
     widget.desktop.sessions.removeListener(_follow);
     widget.desktop.purr.removeListener(_frame);
+    widget.desktop.room.removeListener(_decorating);
     companion.removeListener(_companionChanged);
     _moodTimer?.cancel();
     _frames?.cancel();
@@ -162,6 +170,7 @@ class _RoomViewState extends State<RoomView> {
       season: settings.holidayOn(now),
       reducedMotion: calm,
       petAway: widget.hidePet,
+      room: settings.room,
     );
     final dark = Theme.of(context).brightness == Brightness.dark;
     return LayoutBuilder(
@@ -258,6 +267,8 @@ class _RoomViewState extends State<RoomView> {
                     ),
                   ),
                 ),
+              // Decorating (W18): the tray and the pieces over the room; nobody is petted meanwhile.
+              if (widget.desktop.room.isEditing) Positioned.fill(child: RoomEditorOverlay(desktop: widget.desktop, layout: layout)),
             ],
           ),
         );

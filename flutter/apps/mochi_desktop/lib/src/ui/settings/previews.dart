@@ -63,6 +63,7 @@ class RoomPreview extends StatelessWidget {
       deskAccessory: settings.deskAccessory,
       season: holiday,
       reducedMotion: MediaQuery.disableAnimationsOf(context),
+      room: settings.room,
     );
     return Semantics(
       image: true,

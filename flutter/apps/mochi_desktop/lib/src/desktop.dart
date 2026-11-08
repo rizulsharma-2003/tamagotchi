@@ -20,6 +20,7 @@ import 'core/pc_rhythm.dart';
 import 'core/pet_cues.dart';
 import 'core/purr.dart';
 import 'core/recap.dart';
+import 'core/room.dart';
 import 'core/reactions.dart';
 import 'core/session_store.dart';
 import 'core/sessions.dart';
@@ -105,7 +106,8 @@ class MochiDesktop {
     final store = stores ?? (_) => MemoryJsonStore();
     focus = DesktopFocus(settings: settings, world: world, rhythm: rhythm, store: store('focus-log.json'));
     reactions.focusing = () => focus.focusing;
-    holidays = DesktopHolidays(settings: settings, world: world, store: store('seasons.json'), clock: clock);
+    room = RoomEditor(settings: settings, world: world);
+    holidays = DesktopHolidays(settings: settings, world: world, store: store('seasons.json'), clock: clock, decorating: () => room.isEditing);
     purr = PurrSession(settings: settings, sounds: sounds, rhythm: rhythm, pet: () => interact('pet'), time: world.now, clock: clock);
     recap = DesktopRecap(settings: settings, world: world, focus: focus, toasts: this.toasts, store: store('journal.json'), clock: clock);
     this.hotkeys = Hotkeys(
@@ -281,6 +283,9 @@ class MochiDesktop {
 
   /// Holidays (W20): the occasion showing, its greeting once, the treat, the candles and the taskbar's decoration.
   late final DesktopHolidays holidays;
+
+  /// Decorating Mochi's room (W18): the furniture's tray, dragging, and what's selected.
+  late final RoomEditor room;
 
   /// The global shortcuts (Settings › Desktop Pet and Assistant).
   late final Hotkeys hotkeys;
@@ -487,6 +492,7 @@ class MochiDesktop {
     games.dispose();
     purr.dispose();
     holidays.dispose();
+    room.dispose();
     recap.dispose();
     focus.dispose();
     world.dispose();

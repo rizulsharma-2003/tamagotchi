@@ -340,6 +340,62 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
+  /// A furnished room (the Mac's room:demo), with what the friendship has unlocked.
+  void furnish() {
+    final room = t.desktop.room;
+    for (final (id, x, y) in const [
+      ('rug', 0.47, 0.92),
+      ('bookshelf', 0.06, 0.87),
+      ('plant', 0.16, 0.89),
+      ('poster', 0.6, 0.3),
+      ('clock', 0.47, 0.3),
+      ('lamp', 0.95, 0.87),
+      ('photo', 0.37, 0.36),
+      ('fishBowl', 0.87, 0.9),
+    ]) {
+      room.add(FurnitureCatalog.kind(id)!, position: (x, y));
+    }
+  }
+
+  for (final theme in [ThemeMode.light, ThemeMode.dark]) {
+    testWidgets('W18 decorating, ${theme.name}', (tester) async {
+      t.desktop.settings.themeMode = theme;
+      furnish();
+      final state = await app(tester, size: SurfaceSizes.popover, surface: Surface.pet);
+      state.openPopover();
+      await frames(tester, const Duration(milliseconds: 900));
+      await save(tester, 'w18-popover-furnished-${theme.name}', SurfaceSizes.popover);
+      t.desktop.room.begin();
+      t.desktop.room.selection = t.desktop.settings.room.items[3].id;
+      await frames(tester, const Duration(milliseconds: 300));
+      await save(tester, 'w18-popover-decorating-${theme.name}', SurfaceSizes.popover);
+      t.desktop.room.end();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 8));
+      final window = await app(tester, size: SurfaceSizes.main);
+      window.openDecorate();
+      final room = t.desktop.room;
+      final shelf = t.desktop.settings.room.items[1];
+      room.lift(shelf, FurnitureCatalog.kind('bookshelf')!, anchor: const Offset(260, 236));
+      await frames(tester, const Duration(milliseconds: 300));
+      await save(tester, 'w18-window-dragging-${theme.name}', SurfaceSizes.main);
+      room.cancelDrag();
+      room.end();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 8));
+    });
+  }
+
+  testWidgets('W18 Settings › Fun › Room', (tester) async {
+    furnish();
+    await app(tester, size: SurfaceSizes.settings, page: MainPage.settings, pane: SettingsTab.fun);
+    await tester.ensureVisible(find.text('Clear Room'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await save(tester, 'w18-settings-room', SurfaceSizes.settings);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('W14 games at 2× text', (tester) async {
     await app(tester, size: SurfaceSizes.games, page: MainPage.games, scale: 2);
     await save(tester, 'w14-catch-ready-2x', SurfaceSizes.games);

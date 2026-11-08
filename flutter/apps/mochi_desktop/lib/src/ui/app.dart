@@ -359,6 +359,8 @@ class DesktopAppState extends State<DesktopApp> {
         openGames();
       case ShellAction.recap:
         openRecap();
+      case ShellAction.decorate:
+        openDecorate();
       // On the taskbar (roaming it, or playing in its spot) is where you'll see Mochi: the pet shows too.
       case ShellAction.roamTaskbar:
         desktop.settings
@@ -405,6 +407,8 @@ class DesktopAppState extends State<DesktopApp> {
     if (page != MainPage.home && page != MainPage.pairing && (_page != page || _surface != Surface.main)) {
       _settingsFromWindow = _surface == Surface.main && _page == MainPage.home;
     }
+    // Decorating happens in the room: leaving it for another page puts the tray away.
+    if (page != MainPage.home) desktop.room.end();
     widget.shell.mainSize = switch (page) {
       MainPage.settings => settingsSize(),
       MainPage.games => _fit(SurfaceSizes.games),
@@ -423,6 +427,13 @@ class DesktopAppState extends State<DesktopApp> {
 
   /// The Mac's "Today's Recap…": the card for today.
   void openRecap() => open(MainPage.recap);
+
+  /// The Mac's "Decorate the Room…" (W18): Mochi's window, with the room's tray out (the popover's Decorate decorates
+  /// the popover's room instead, as on the Mac).
+  void openDecorate() {
+    open(MainPage.home);
+    desktop.room.begin();
+  }
 
   /// Escape in Settings (or a fun feature's page): back to Mochi's window if it was opened from there, else back to
   /// the desktop.
@@ -567,6 +578,7 @@ class DesktopAppState extends State<DesktopApp> {
     } else {
       _focusSession = null;
     }
+    if (surface != Surface.main && surface != Surface.popover) desktop.room.end();
     // You're looking at Mochi: no badges from the world, and Mochi can say good morning.
     desktop.world.setWindowVisible(surface == Surface.main || surface == Surface.popover);
     setState(() => _surface = surface);
@@ -845,6 +857,7 @@ class _MainSurface extends StatelessWidget {
                   onRestartToUpdate: () => unawaited(state.restartToUpdate()),
                   onGames: state.openGames,
                   onRecap: state.openRecap,
+                  onDecorate: state.openDecorate,
                 ),
               ),
               MainPage.games => GamesScreen(desktop: desktop),

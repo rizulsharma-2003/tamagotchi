@@ -34,6 +34,7 @@ enum ShellAction {
   focus,
   games,
   recap,
+  decorate,
 
   /// Where Mochi lives (the Mac's menu-bar styles): roaming the taskbar, playing in its spot there, or as the classic
   /// tray icon.
@@ -242,6 +243,7 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
     MenuItem(key: ShellAction.focus.name, label: focusing ? 'Stop Focus' : 'Start Focus'),
     MenuItem(key: ShellAction.games.name, label: 'Games…'),
     MenuItem(key: ShellAction.recap.name, label: 'Today’s Recap…'),
+    MenuItem(key: ShellAction.decorate.name, label: 'Decorate the Room…'),
     MenuItem.separator(),
     // Where Mochi lives, as the Mac's status menu lists its styles.
     MenuItem.checkbox(key: ShellAction.roamTaskbar.name, label: DesktopStyle.roam.title, checked: style == DesktopStyle.roam),

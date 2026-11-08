@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart' show Accessory, AccessorySlot, OfficeTheme, PetColor, SeasonDecor, SeasonalEvent, Wearer;
-import 'package:mochi_world/mochi_world.dart' show Chattiness, FocusSettings, GameRecords, RecapSettings;
+import 'package:mochi_world/mochi_world.dart' show Chattiness, FocusSettings, GameRecords, RecapSettings, RoomLayout;
 import 'package:mochi_world/mochi_world.dart' as w show SeasonalSettings;
 
 import 'hotkeys.dart';
@@ -166,8 +166,8 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   /// animation, and Patch only for interesting moments); 6 Mochi's world (Sprint 2: talking in speech bubbles, how
   /// chatty, fresh lines from Claude Haiku, growing up and the last stage announced, under the Mac's keys `speech`,
   /// `lifeStages` and `lifeStageSeen`); 7 Mochi's life, part 2 (the mini-games' records, the focus buddy's settings and the evening recap's under the Mac's
-  /// keys `games`, `focus` and `recap`, the purr's sound under `hapticPurr`, and the decoration on the taskbar under
-  /// `seasonal.decorateMenuBar`).
+  /// keys `games`, `focus` and `recap`, the purr's sound under `hapticPurr`, the decoration on the taskbar under
+  /// `seasonal.decorateMenuBar`, and the room's furniture under `room`).
   /// `roamTaskbar` is still written (whether Mochi is on the taskbar) for an older Mochi reading the file.
   static const int version = 7;
 
@@ -245,6 +245,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   FocusSettings _focus = const FocusSettings();
   RecapSettings _recap = RecapSettings();
   bool _purrSound = true;
+  RoomLayout _room = RoomLayout();
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -350,6 +351,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _focus = FocusSettings.fromJson(json['focus']);
     _recap = RecapSettings.fromJson(json['recap']);
     _purrSound = flag('hapticPurr', true);
+    _room = RoomLayout.fromJson(json['room']).sanitized();
   }
 
   static int _minutes(Object? value, int fallback, int min, int max) => value is int ? value.clamp(min, max) : fallback;
@@ -715,6 +717,13 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   bool get purrSound => _purrSound;
   set purrSound(bool value) => _set(() => _purrSound = value);
 
+  /// The furniture in Mochi's room (the Mac's `room`). A copy: change it, then set it back to save it.
+  RoomLayout get room => _room.copy();
+  set room(RoomLayout value) {
+    if (jsonEncode(value.toJson()) == jsonEncode(_room.toJson())) return;
+    _set(() => _room = value.copy());
+  }
+
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
 
@@ -802,6 +811,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'focus': _focus.toJson(),
     'recap': _recap.toJson(),
     'hapticPurr': _purrSound,
+    'room': _room.toJson(),
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
 

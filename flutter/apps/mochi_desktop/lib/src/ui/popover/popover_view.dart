@@ -7,7 +7,7 @@
 // turn that just finished; its recent events (LATE for ones that came in while Mochi wasn't running); Pet, Play and
 // Treat; quick switches; and the way to Mochi's window, Ask Mochi and Settings.
 //
-// Under Pet, Play and Treat are the Mac's fun row (Games, Focus and Recap so far; the rest of the Mac's row joins it as each
+// Under Pet, Play and Treat are the Mac's fun row (Games, Focus, Recap and Decorate so far; the rest of the Mac's row joins it as each
 // is built for Windows, and nothing is shown dead), the running focus session and the friendship hearts. Its switches are the Windows ones: pause
 // reactions, the desktop pet, roaming the taskbar and Patch on the taskbar.
 
@@ -93,7 +93,15 @@ class PopoverView extends StatelessWidget {
               decoration: claySurface(p, radius: 14),
               clipBehavior: Clip.antiAlias,
               child: ListenableBuilder(
-                listenable: Listenable.merge([desktop.sessions, desktop.settings, desktop.hooks, desktop.bridgeProblem, companion, desktop.focus]),
+                listenable: Listenable.merge([
+                  desktop.sessions,
+                  desktop.settings,
+                  desktop.hooks,
+                  desktop.bridgeProblem,
+                  companion,
+                  desktop.focus,
+                  desktop.room,
+                ]),
                 builder: (context, _) => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -670,6 +678,14 @@ class _FunRow extends StatelessWidget {
           tint: const Color(0xFFE8663D),
           onTap: onRecap!,
         ),
+      _ControlButton(
+        title: 'Decorate',
+        label: desktop.room.isEditing ? 'Done decorating' : 'Decorate $pet’s room',
+        icon: Icons.chair_rounded,
+        tint: desktop.room.isEditing ? p.tint : p.warning,
+        selected: desktop.room.isEditing,
+        onTap: desktop.room.toggle,
+      ),
     ];
     if (buttons.isEmpty) return const SizedBox.shrink();
     return Row(
@@ -857,6 +873,7 @@ class _ControlButton extends StatelessWidget {
     required this.tint,
     required this.onTap,
     this.autofocus = false,
+    this.selected = false,
   });
 
   final String title;
@@ -866,6 +883,9 @@ class _ControlButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool autofocus;
 
+  /// Lit up while it's on (Decorate while decorating), as the Mac's highlighted chip.
+  final bool selected;
+
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
@@ -873,9 +893,13 @@ class _ControlButton extends StatelessWidget {
       onTap: onTap,
       semanticLabel: label,
       autofocus: autofocus,
+      selected: selected,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: Space.s),
-        decoration: BoxDecoration(color: p.sunken, borderRadius: BorderRadius.circular(Radii.inner)),
+        decoration: BoxDecoration(
+          color: selected ? p.tint.withValues(alpha: 0.14) : p.sunken,
+          borderRadius: BorderRadius.circular(Radii.inner),
+        ),
         child: Column(
           children: [
             Icon(icon, size: 18, color: tint),

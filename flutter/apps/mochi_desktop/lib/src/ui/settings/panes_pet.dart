@@ -14,6 +14,7 @@ import '../../core/pc_rhythm.dart';
 import '../../core/seasons.dart';
 import '../../platform/startup.dart';
 import '../../platform/taskbar.dart';
+import '../pet/room_editor.dart' show FurnitureIcon;
 import 'previews.dart';
 import 'settings_kit.dart';
 import 'settings_tabs.dart';
@@ -710,6 +711,7 @@ class FunPane extends StatelessWidget {
         _FocusGroup(host: host),
         _RecapGroup(host: host),
         _GamesGroup(host: host),
+        _RoomGroup(host: host),
         SettingsGroup(
           title: 'Holidays',
           footer:
@@ -758,7 +760,6 @@ class FunPane extends StatelessWidget {
           title: 'From the Mac',
           children: [
             SoonRow(title: 'Adventures', detail: '$pet heads out to explore your desktop and comes back with stories.'),
-            SoonRow(title: 'Room furniture', detail: 'Arrange furniture in $pet’s room.'),
           ],
         ),
       ],
@@ -910,6 +911,61 @@ class _RecapGroup extends StatelessWidget {
         ),
         if (open != null) ActionsRow(children: [FilledButton(onPressed: open, child: const Text('Open Recap…'))]),
       ],
+    );
+  }
+}
+
+/// Settings › Fun › Room (the Mac's RoomSettingsSection): what's placed (each can be put away), how much is unlocked,
+/// Decorate… and Clear Room.
+class _RoomGroup extends StatelessWidget {
+  const _RoomGroup({required this.host});
+
+  final SettingsHost host;
+
+  @override
+  Widget build(BuildContext context) {
+    final desktop = host.desktop;
+    return ListenableBuilder(
+      listenable: Listenable.merge([desktop.room, desktop.world]),
+      builder: (context, _) {
+        final room = desktop.settings.room;
+        final progress = desktop.world.world.progress;
+        final decorate = host.onDecorate;
+        return SettingsGroup(
+          title: 'Room',
+          footer: room.summary(progress),
+          children: [
+            if (room.items.isEmpty)
+              NoteRow(text: 'Nothing placed yet. Click Decorate in the popover or below, and drag furniture into the room.'),
+            for (final item in room.items)
+              if (FurnitureCatalog.kind(item.kind) case final kind?)
+                MergeSemantics(
+                  child: Padding(
+                    padding: rowPadding,
+                    child: Row(
+                      children: [
+                        ExcludeSemantics(child: FurnitureIcon(kind: kind)),
+                        const SizedBox(width: Space.s),
+                        Expanded(child: Text(kind.title, style: context.type.subheadline)),
+                        IconButton(
+                          tooltip: 'Remove ${kind.title}',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => desktop.room.remove(item.id),
+                          icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ActionsRow(
+              children: [
+                if (decorate != null) FilledButton(onPressed: decorate, child: const Text('Decorate…')),
+                OutlinedButton(onPressed: room.items.isEmpty ? null : desktop.room.clear, child: const Text('Clear Room')),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 }
