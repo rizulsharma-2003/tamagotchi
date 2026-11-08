@@ -7,10 +7,9 @@
 // turn that just finished; its recent events (LATE for ones that came in while Mochi wasn't running); Pet, Play and
 // Treat; quick switches; and the way to Mochi's window, Ask Mochi and Settings.
 //
-// What the Mac has here that Windows doesn't yet is left out rather than shown dead: the sound and quiet-mode
-// switches (Mochi for Windows makes no sounds and has no quiet hours), the friendship hearts (no friendship yet), and
-// the fun row (games, focus, recap, adventures). Its switches are the Windows ones: pause reactions, the desktop pet,
-// roaming the taskbar and Patch on the taskbar.
+// Under Pet, Play and Treat are the friendship hearts and the Mac's fun row (Games so far; the rest of the Mac's row
+// joins it as each is built for Windows, and nothing is shown dead). Its switches are the Windows ones: pause
+// reactions, the desktop pet, roaming the taskbar and Patch on the taskbar.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,6 +36,7 @@ class PopoverView extends StatelessWidget {
     required this.onAsk,
     required this.onSettings,
     required this.onSetUpClaude,
+    this.onGames,
     this.hidePet = false,
   });
 
@@ -52,6 +52,9 @@ class PopoverView extends StatelessWidget {
 
   /// Settings › Claude Code (connecting it).
   final VoidCallback onSetUpClaude;
+
+  /// The fun row: the Games window.
+  final VoidCallback? onGames;
 
   /// Mochi is leaping in or out: the room without it.
   final bool hidePet;
@@ -110,6 +113,8 @@ class PopoverView extends StatelessWidget {
                               Divider(height: Space.m, color: p.stroke),
                               const SizedBox(height: Space.xs),
                               _PetControls(desktop: desktop),
+                              const SizedBox(height: Space.s),
+                              _FunRow(desktop: desktop, onGames: onGames),
                               const SizedBox(height: Space.s),
                               _Friendship(desktop: desktop),
                               const SizedBox(height: Space.s),
@@ -611,6 +616,36 @@ class _PetControls extends StatelessWidget {
             onTap: desktop.markMilestone,
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// The Mac's fun row: the games (and, as each comes to Windows, the rest of the Mac's row).
+class _FunRow extends StatelessWidget {
+  const _FunRow({required this.desktop, this.onGames});
+
+  final MochiDesktop desktop;
+  final VoidCallback? onGames;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final pet = desktop.settings.petName;
+    final buttons = [
+      if (onGames != null)
+        _ControlButton(
+          title: 'Games',
+          label: 'Games: Catch the Treats and rock-paper-scissors with $pet',
+          icon: Icons.sports_esports_rounded,
+          tint: p.indigo,
+          onTap: onGames!,
+        ),
+    ];
+    if (buttons.isEmpty) return const SizedBox.shrink();
+    return Row(
+      children: [
+        for (final (index, button) in buttons.indexed) ...[if (index > 0) const SizedBox(width: Space.s), Expanded(child: button)],
       ],
     );
   }

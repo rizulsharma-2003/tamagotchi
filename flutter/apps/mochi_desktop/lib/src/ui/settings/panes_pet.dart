@@ -745,14 +745,53 @@ class FunPane extends StatelessWidget {
             ),
           ],
         ),
+        _GamesGroup(host: host),
         SettingsGroup(
           title: 'From the Mac',
           children: [
-            SoonRow(title: 'Games', detail: 'Catch and rock-paper-scissors with $pet.'),
             SoonRow(title: 'Adventures', detail: '$pet heads out to explore your desktop and comes back with stories.'),
             SoonRow(title: 'Focus sessions', detail: 'A focus timer $pet keeps you company through.'),
             SoonRow(title: 'Daily recap', detail: 'A card of what you and Claude did today.'),
             SoonRow(title: 'Room furniture', detail: 'Arrange furniture in $pet’s room.'),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Settings › Fun › Games (the Mac's GamesSettingsSection): the records, Play… and Reset Records….
+class _GamesGroup extends StatelessWidget {
+  const _GamesGroup({required this.host});
+
+  final SettingsHost host;
+
+  Future<void> _reset(BuildContext context) async {
+    final confirmed = await confirmAction(
+      context,
+      title: 'Reset all game records?',
+      message: 'High scores and win counts start over. This can’t be undone.',
+      confirm: 'Reset Records',
+      destructive: true,
+    );
+    if (confirmed) host.desktop.games.resetRecords();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final records = host.desktop.settings.games;
+    final play = host.onGames;
+    return SettingsGroup(
+      title: 'Games',
+      footer: 'Catch the Treats and rock-paper-scissors with ${host.pet}${host.desktop.games.companionPlays ? ' and ${host.companion}' : ''}. '
+          'Records stay on this PC.',
+      children: [
+        InfoRow(label: 'Catch the Treats', value: records.catchSummary),
+        InfoRow(label: 'Rock, paper, scissors', value: records.rpsSummary),
+        ActionsRow(
+          children: [
+            if (play != null) FilledButton(onPressed: play, child: const Text('Play…')),
+            OutlinedButton(onPressed: records.isEmpty ? null : () => _reset(context), child: const Text('Reset Records…')),
           ],
         ),
       ],

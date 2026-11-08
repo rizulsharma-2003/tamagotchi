@@ -24,6 +24,8 @@ import 'pet/pet_director.dart' show PetMood;
 import '../update/updater.dart';
 import 'pet/pet_surface.dart';
 import 'pet/taskbar_stroll.dart';
+import 'games/games_screen.dart';
+import '../core/games.dart' show GameTab;
 import 'popover/frame_meter.dart';
 import 'popover/popover_stage.dart';
 import 'popover/popover_view.dart';
@@ -37,7 +39,16 @@ import 'widgets/title_bar.dart';
 
 export 'screens/settings_screen.dart' show SettingsNavigation, SettingsTab;
 
-enum MainPage { home, pairing, settings }
+/// The main window's pages: Mochi's own (home, pairing), Settings, and the fun features' windows on the Mac (Games).
+enum MainPage {
+  home('Mochi'),
+  pairing('Pair a Phone'),
+  settings('Settings'),
+  games('Games');
+
+  const MainPage(this.title);
+  final String title;
+}
 
 /// Mochi for Windows: the desktop pet and the main window (one native window in two forms, see shell.dart), in Mochi's
 /// clay look, light, dark or following the system.
@@ -315,6 +326,8 @@ class DesktopAppState extends State<DesktopApp> {
         open(MainPage.pairing);
       case ShellAction.settings:
         open(MainPage.settings);
+      case ShellAction.games:
+        openGames();
       // On the taskbar (roaming it, or playing in its spot) is where you'll see Mochi: the pet shows too.
       case ShellAction.roamTaskbar:
         desktop.settings
@@ -351,21 +364,33 @@ class DesktopAppState extends State<DesktopApp> {
   /// Which Settings pane is open (kept while Settings is closed, so it opens where you left it).
   late final SettingsNavigation settingsNavigation = SettingsNavigation(widget.initialPane ?? SettingsTab.general);
 
-  /// Settings was opened from Mochi's window (Escape goes back to it), not from the tray or the pet.
+  /// Settings (or a fun feature's page) was opened from Mochi's window (Escape goes back to it), not from the tray, the
+  /// popover or the pet.
   bool _settingsFromWindow = false;
 
-  /// Shows [page] in the main window; Settings at its own, larger size, at [pane] if given.
+  /// Shows [page] in the main window; Settings and the games at their own sizes, Settings at [pane] if given.
   void open(MainPage page, {SettingsTab? pane}) {
     if (pane != null) settingsNavigation.tab = pane;
-    if (page == MainPage.settings && (_page != MainPage.settings || _surface != Surface.main)) {
-      _settingsFromWindow = _surface == Surface.main;
+    if (page != MainPage.home && page != MainPage.pairing && (_page != page || _surface != Surface.main)) {
+      _settingsFromWindow = _surface == Surface.main && _page == MainPage.home;
     }
-    widget.shell.mainSize = page == MainPage.settings ? settingsSize() : mainWindowSize();
+    widget.shell.mainSize = switch (page) {
+      MainPage.settings => settingsSize(),
+      MainPage.games => _fit(SurfaceSizes.games),
+      MainPage.home || MainPage.pairing => mainWindowSize(),
+    };
     setState(() => _page = page);
     _show(Surface.main);
   }
 
-  /// Escape in Settings: back to Mochi's window if Settings was opened from it, else back to the desktop.
+  /// The Mac's "Games…": the Games window, at [tab] if given.
+  void openGames([GameTab? tab]) {
+    desktop.games.show(tab);
+    open(MainPage.games);
+  }
+
+  /// Escape in Settings (or a fun feature's page): back to Mochi's window if it was opened from there, else back to
+  /// the desktop.
   void closeSettings() => _settingsFromWindow ? open(MainPage.home) : closeMain();
 
   /// Settings › Phones › Pair a Phone…: the pairing page, with a fresh code.
@@ -400,6 +425,7 @@ class DesktopAppState extends State<DesktopApp> {
     final size = await widget.shell.size();
     if (size == null || size.width < SurfaceSizes.mainMinimum.width - 1 || size.height < SurfaceSizes.mainMinimum.height - 1) return;
     widget.shell.mainSize = size;
+    if (_page == MainPage.games) return;
     if (_page == MainPage.settings) {
       if (desktop.settings.settingsWindowSize != size) desktop.settings.settingsWindowSize = size;
     } else if (desktop.settings.mainWindowSize != size) {
@@ -526,6 +552,7 @@ class DesktopAppState extends State<DesktopApp> {
     onAsk: openAsk,
     onSettings: () => open(MainPage.settings),
     onSetUpClaude: () => open(MainPage.settings, pane: SettingsTab.claude),
+    onGames: openGames,
   );
 
   /// The popover is drawn once out of sight soon after launch, on Windows (see [_PopoverWarmUp]).
@@ -733,11 +760,7 @@ class _MainSurface extends StatelessWidget {
     final desktop = state.desktop;
     final settingsPage = page == MainPage.settings;
     void back() => state.open(MainPage.home);
-    final title = switch (page) {
-      MainPage.home => 'Mochi',
-      MainPage.pairing => 'Pair a Phone',
-      MainPage.settings => 'Settings',
-    };
+    final title = page.title;
     final column = Material(
       type: MaterialType.transparency,
       child: Column(
@@ -747,7 +770,7 @@ class _MainSurface extends StatelessWidget {
             onDragStart: () => unawaited(state.widget.shell.startDragging()),
             onClose: state.closeMain,
             onBack: page == MainPage.home ? null : back,
-            onPair: page == MainPage.pairing || settingsPage ? null : () => state.open(MainPage.pairing),
+            onPair: page == MainPage.home ? () => state.open(MainPage.pairing) : null,
             onSettings: settingsPage ? null : () => state.open(MainPage.settings),
             trailing: settingsPage
                 ? _ClaudeStatusPill(desktop: desktop, onTap: () => state.settingsNavigation.tab = SettingsTab.claude)
@@ -781,8 +804,10 @@ class _MainSurface extends StatelessWidget {
                   library: state._library,
                   onInstall: () => unawaited(state.installMochi()),
                   onRestartToUpdate: () => unawaited(state.restartToUpdate()),
+                  onGames: state.openGames,
                 ),
               ),
+              MainPage.games => GamesScreen(desktop: desktop),
             },
           ),
         ],
@@ -792,7 +817,7 @@ class _MainSurface extends StatelessWidget {
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): switch (page) {
           MainPage.home => state.closeMain,
-          MainPage.settings => state.closeSettings,
+          MainPage.settings || MainPage.games => state.closeSettings,
           MainPage.pairing => back,
         },
         const SingleActivator(LogicalKeyboardKey.comma, control: true): () => state.open(MainPage.settings),

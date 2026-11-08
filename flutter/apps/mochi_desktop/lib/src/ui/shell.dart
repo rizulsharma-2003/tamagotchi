@@ -30,6 +30,9 @@ enum ShellAction {
   pair,
   settings,
 
+  /// The fun features (the Mac's status menu): the Games window.
+  games,
+
   /// Where Mochi lives (the Mac's menu-bar styles): roaming the taskbar, playing in its spot there, or as the classic
   /// tray icon.
   roamTaskbar,
@@ -135,6 +138,9 @@ abstract final class SurfaceSizes {
 
   /// The popover: the Mac popover's width, a little taller (it holds the toggles the Mac keeps in its menu too).
   static const Size popover = Size(360, 540);
+
+  /// The Games page: the Mac's Games window (572 × 512 points) with the title bar.
+  static const Size games = Size(600, 600);
 }
 
 /// window_manager and tray_manager (Windows; the macOS development build).
@@ -221,6 +227,8 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
     MenuItem(key: ShellAction.showMain.name, label: 'Show Mochi'),
     MenuItem(key: ShellAction.pair.name, label: 'Pair a Phone…'),
     MenuItem(key: ShellAction.settings.name, label: 'Settings'),
+    MenuItem.separator(),
+    MenuItem(key: ShellAction.games.name, label: 'Games…'),
     MenuItem.separator(),
     // Where Mochi lives, as the Mac's status menu lists its styles.
     MenuItem.checkbox(key: ShellAction.roamTaskbar.name, label: DesktopStyle.roam.title, checked: style == DesktopStyle.roam),

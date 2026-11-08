@@ -193,6 +193,8 @@ class _PetSurfaceState extends State<PetSurface> {
         const PopupMenuItem(value: ShellAction.pair, child: Text('Pair a Phone…')),
         const PopupMenuItem(value: ShellAction.settings, child: Text('Settings')),
         const PopupMenuDivider(),
+        const PopupMenuItem(value: ShellAction.games, child: Text('Games…')),
+        const PopupMenuDivider(),
         // Where Mochi lives (the tray menu has the same), and the desktop pet's own (the Mac's "Always on Top").
         for (final (action, style) in const [
           (ShellAction.roamTaskbar, DesktopStyle.roam),

@@ -124,6 +124,7 @@ void main() {
         }
         expect(find.text('Friendship level 0'), findsOneWidget, reason: 'the Mac’s hearts (W13)');
         expect(find.bySemanticsLabel(RegExp('^Mark a milestone')), findsOneWidget);
+        expect(find.bySemanticsLabel(RegExp('^Games: Catch the Treats')), findsOneWidget, reason: 'the Mac’s fun row (W14)');
         expect(find.textContaining('Sound'), findsNothing, reason: 'no sounds on Windows yet: no switch for them');
         for (final button in ['Open Mochi', 'Ask Mochi', 'Settings']) {
           expect(find.text(button), findsOneWidget);
@@ -205,13 +206,14 @@ void main() {
   testWidgets('the keyboard: it opens with the focus on Pet, Tab moves on, Enter and Space press, Escape closes it', (tester) async {
     final state = await open(tester);
     final settings = t.desktop.settings;
-    for (var i = 0; i < 4; i++) {
+    // Pet, Play, Treat, Milestone, the fun row (Games), then Pause.
+    for (var i = 0; i < 5; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     }
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
-    expect(settings.pauseReactions, isTrue, reason: 'Pet, Play, Treat, Milestone, then Pause');
+    expect(settings.pauseReactions, isTrue, reason: 'Pet, Play, Treat, Milestone, Games, then Pause');
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pump();
     expect(settings.pauseReactions, isFalse);
@@ -275,5 +277,16 @@ void main() {
     await tester.tap(find.text('Settings'));
     await tester.pump(const Duration(milliseconds: 300));
     expect((state.surface, state.page), (Surface.main, MainPage.settings));
+  });
+
+  testWidgets('the fun row’s Games opens the Games window (W14)', (tester) async {
+    final state = await open(tester);
+    tester.view.physicalSize = SurfaceSizes.games;
+    final games = find.bySemanticsLabel(RegExp('^Games: Catch the Treats'));
+    await tester.ensureVisible(games);
+    await tester.tap(games);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect((state.surface, state.page), (Surface.main, MainPage.games));
+    expect(shell.mainSize, SurfaceSizes.games);
   });
 }

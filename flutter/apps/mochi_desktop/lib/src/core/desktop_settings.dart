@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart' show Accessory, AccessorySlot, OfficeTheme, PetColor, SeasonDecor, SeasonalEvent, Wearer;
-import 'package:mochi_world/mochi_world.dart' show Chattiness;
+import 'package:mochi_world/mochi_world.dart' show Chattiness, GameRecords;
 
 import 'hotkeys.dart';
 import 'notifications.dart';
@@ -164,9 +164,9 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   /// its spot and room, the size, always on top, clicks passing through, a place on each display, the tray icon's
   /// animation, and Patch only for interesting moments); 6 Mochi's world (Sprint 2: talking in speech bubbles, how
   /// chatty, fresh lines from Claude Haiku, growing up and the last stage announced, under the Mac's keys `speech`,
-  /// `lifeStages` and `lifeStageSeen`). `roamTaskbar` is still written (whether Mochi is on the taskbar) for an older
-  /// Mochi reading the file.
-  static const int version = 6;
+  /// `lifeStages` and `lifeStageSeen`); 7 Mochi's life, part 2 (the mini-games' records under the Mac's key `games`).
+  /// `roamTaskbar` is still written (whether Mochi is on the taskbar) for an older Mochi reading the file.
+  static const int version = 7;
 
   /// The Mac's stepper for "Rests after … min without typing or clicking".
   static const int maxRestAfterMinutes = 60;
@@ -237,6 +237,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   bool _speechFreshLines = false;
   bool _lifeStages = true;
   int _lifeStageSeen = -1;
+  GameRecords _games = GameRecords();
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -337,6 +338,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _lifeStages = flag('lifeStages', true);
     final seen = json['lifeStageSeen'];
     _lifeStageSeen = seen is int && seen >= -1 && seen <= 2 ? seen : -1;
+    _games = GameRecords.fromJson(json['games']);
   }
 
   static int _minutes(Object? value, int fallback, int min, int max) => value is int ? value.clamp(min, max) : fallback;
@@ -661,6 +663,14 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   int get lifeStageSeen => _lifeStageSeen;
   set lifeStageSeen(int value) => _set(() => _lifeStageSeen = value.clamp(-1, 2));
 
+  /// The mini-games' records (the Mac's `games`): high scores, best combo and win counts. A copy: change it, then set
+  /// it back to save it.
+  GameRecords get games => _games.copy();
+  set games(GameRecords value) {
+    if (value == _games) return;
+    _set(() => _games = value.copy());
+  }
+
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
 
@@ -744,6 +754,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'speech': {'enabled': _speechEnabled, 'useAppleIntelligence': _speechFreshLines, 'chattiness': _chattiness.name},
     'lifeStages': _lifeStages,
     'lifeStageSeen': _lifeStageSeen,
+    'games': _games.toJson(),
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
 

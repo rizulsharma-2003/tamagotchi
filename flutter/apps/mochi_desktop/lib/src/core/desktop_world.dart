@@ -326,6 +326,14 @@ class DesktopWorld extends ChangeNotifier {
     speech.windowVisible = visible;
   }
 
+  /// A feature's moment (a game, the focus buddy, the recap, a holiday): its note, line, animations, sound and
+  /// notification, as the Mac's controllers show them (sounds only with sound on and outside quiet mode and hours).
+  void apply(w.FeatureMoment? moment) {
+    if (moment == null || moment.isEmpty || _disposed) return;
+    moment.applyTo(world);
+    _changed();
+  }
+
   /// You clicked Patch: a little wave back.
   void pokeCompanion() {
     world.pokeCompanion();

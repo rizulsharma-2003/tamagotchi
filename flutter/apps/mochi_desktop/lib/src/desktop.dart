@@ -10,6 +10,7 @@ import 'core/claude_cli.dart';
 import 'core/desktop_settings.dart';
 import 'core/desktop_world.dart';
 import 'core/fresh_lines.dart';
+import 'core/games.dart';
 import 'core/hook_setup.dart';
 import 'core/hotkeys.dart';
 import 'core/pc_rhythm.dart';
@@ -94,6 +95,7 @@ class MochiDesktop {
       uptime: uptime,
       seed: worldSeed,
     );
+    games = DesktopGames(settings: settings, world: world);
     this.hotkeys = Hotkeys(
       registrar: hotkeys ?? const UnsupportedHotkeys(),
       chosen: settings.shortcut,
@@ -251,6 +253,9 @@ class MochiDesktop {
   /// Mochi's world (the Mac's CompanionWorld): what Mochi and Patch do, friendship and achievements, speech and growing
   /// up.
   late final DesktopWorld world;
+
+  /// The mini-games (W14): Catch the Treats and rock-paper-scissors, and their records.
+  late final DesktopGames games;
 
   /// The global shortcuts (Settings › Desktop Pet and Assistant).
   late final Hotkeys hotkeys;
@@ -452,6 +457,7 @@ class MochiDesktop {
     await _bridge.dispose();
     link.dispose();
     motion.dispose();
+    games.dispose();
     world.dispose();
     rhythm.dispose();
     hotkeys.dispose();
