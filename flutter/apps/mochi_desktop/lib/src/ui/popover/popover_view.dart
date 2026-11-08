@@ -7,15 +7,18 @@
 // turn that just finished; its recent events (LATE for ones that came in while Mochi wasn't running); Pet, Play and
 // Treat; quick switches; and the way to Mochi's window, Ask Mochi and Settings.
 //
-// Under Pet, Play and Treat are the friendship hearts and the Mac's fun row (Games so far; the rest of the Mac's row
-// joins it as each is built for Windows, and nothing is shown dead). Its switches are the Windows ones: pause
+// Under Pet, Play and Treat are the Mac's fun row (Games and Focus so far; the rest of the Mac's row joins it as each
+// is built for Windows, and nothing is shown dead), the running focus session and the friendship hearts. Its switches are the Windows ones: pause
 // reactions, the desktop pet, roaming the taskbar and Patch on the taskbar.
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mochi_art/mochi_art.dart' show SceneLayout;
 import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_wire/mochi_wire.dart' show HookStatus;
+import 'package:mochi_world/mochi_world.dart' as w show FocusPhase, FocusPhaseText, FocusStatus, focusClock;
 
 import '../../core/desktop_settings.dart';
 import '../../core/session_store.dart';
@@ -88,7 +91,7 @@ class PopoverView extends StatelessWidget {
               decoration: claySurface(p, radius: 14),
               clipBehavior: Clip.antiAlias,
               child: ListenableBuilder(
-                listenable: Listenable.merge([desktop.sessions, desktop.settings, desktop.hooks, desktop.bridgeProblem, companion]),
+                listenable: Listenable.merge([desktop.sessions, desktop.settings, desktop.hooks, desktop.bridgeProblem, companion, desktop.focus]),
                 builder: (context, _) => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -116,6 +119,10 @@ class PopoverView extends StatelessWidget {
                               const SizedBox(height: Space.s),
                               _FunRow(desktop: desktop, onGames: onGames),
                               const SizedBox(height: Space.s),
+                              if (desktop.focus.status case final status?) ...[
+                                FocusRow(desktop: desktop, status: status),
+                                const SizedBox(height: Space.s),
+                              ],
                               _Friendship(desktop: desktop),
                               const SizedBox(height: Space.s),
                               _Switches(settings: desktop.settings),
@@ -641,12 +648,161 @@ class _FunRow extends StatelessWidget {
           tint: p.indigo,
           onTap: onGames!,
         ),
+      // The Mac's Focus (Stop while a session runs): Mochi naps while you focus and wakes you for breaks.
+      Tooltip(
+        message: 'A focus timer: $pet naps while you work and wakes you for breaks',
+        child: _ControlButton(
+          title: desktop.focus.running ? 'Stop' : 'Focus',
+          label: desktop.focus.running ? 'Stop focus' : 'Focus: a timer $pet naps through and wakes you for breaks',
+          icon: Icons.timer_outlined,
+          tint: p.indigo,
+          onTap: desktop.focus.toggle,
+        ),
+      ),
     ];
     if (buttons.isEmpty) return const SizedBox.shrink();
     return Row(
       children: [
         for (final (index, button) in buttons.indexed) ...[if (index > 0) const SizedBox(width: Space.s), Expanded(child: button)],
       ],
+    );
+  }
+}
+
+/// The running focus session (the Mac's FocusPopoverRow): the phase and the time left, the blocks of the set, a bar
+/// through the phase, Skip and Stop. It counts down once a second while it's shown.
+class FocusRow extends StatefulWidget {
+  const FocusRow({super.key, required this.desktop, required this.status});
+
+  final MochiDesktop desktop;
+  final w.FocusStatus status;
+
+  @override
+  State<FocusRow> createState() => _FocusRowState();
+}
+
+class _FocusRowState extends State<FocusRow> {
+  Timer? _second;
+
+  @override
+  void initState() {
+    super.initState();
+    _second = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && !widget.desktop.rhythm.unseen) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _second?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final status = widget.status;
+    final focus = widget.desktop.focus;
+    final now = widget.desktop.world.world.date;
+    final cycles = focus.cycles;
+    final (tint, icon) = switch (status.phase) {
+      w.FocusPhase.focus => (p.indigo, status.petNaps ? Icons.bedtime_rounded : Icons.timer_rounded),
+      w.FocusPhase.shortBreak => (const Color(0xFF1F9E99), Icons.self_improvement_rounded),
+      w.FocusPhase.longBreak => (p.success, Icons.local_cafe_rounded),
+    };
+    final left = w.focusClock(status.remaining(now));
+    final title = '${status.phase.title} $left left';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Space.s + 2, vertical: Space.s - 1),
+      decoration: BoxDecoration(color: tint.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(Radii.tile)),
+      child: Row(
+        children: [
+          ExcludeSemantics(
+            child: Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: tint.withValues(alpha: 0.14)),
+              child: Icon(icon, size: 15, color: tint),
+            ),
+          ),
+          const SizedBox(width: Space.s),
+          Expanded(
+            child: Semantics(
+              label: '$title, focus block ${status.cycle} of $cycles',
+              excludeSemantics: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.type.caption.copyWith(
+                            color: p.ink,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: Space.xs),
+                      Tooltip(
+                        message: 'Focus block ${status.cycle} of $cycles',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (var index = 1; index <= cycles; index++)
+                              Container(
+                                width: 6,
+                                height: 6,
+                                margin: const EdgeInsets.only(left: 3),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: index < status.cycle || (index == status.cycle && status.phase != w.FocusPhase.focus)
+                                      ? tint
+                                      : tint.withValues(alpha: 0.2),
+                                  border: index == status.cycle && status.phase == w.FocusPhase.focus ? Border.all(color: tint) : null,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                      value: status.progress(now),
+                      minHeight: 3,
+                      color: tint,
+                      backgroundColor: tint.withValues(alpha: 0.15),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: Space.xs),
+          Tooltip(
+            message: status.phase == w.FocusPhase.focus ? 'Start the break now (this block isn’t counted)' : 'End the break and focus again',
+            child: TextButton(
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: Space.s)),
+              onPressed: focus.skip,
+              child: const Text('Skip'),
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            iconSize: 16,
+            tooltip: 'Stop focus',
+            onPressed: focus.stop,
+            icon: const Icon(Icons.stop_rounded),
+          ),
+        ],
+      ),
     );
   }
 }

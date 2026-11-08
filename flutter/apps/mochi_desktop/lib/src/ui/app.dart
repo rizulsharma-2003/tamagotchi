@@ -255,6 +255,7 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.reactions.addListener(_tray.refresh);
     desktop.settings.addListener(_settingsChanged);
     desktop.updater.addListener(_updatesChanged);
+    desktop.focus.addListener(_focusChanged);
     unawaited(widget.shell.setStyle(_trayStyle));
     _updatesChanged();
     if (_page == MainPage.settings) widget.shell.mainSize = settingsSize();
@@ -278,6 +279,15 @@ class DesktopAppState extends State<DesktopApp> {
   }
 
   bool _trayUpdate = false;
+  bool _trayFocus = false;
+
+  /// "Start Focus" or "Stop Focus" in the tray as a session starts or ends.
+  void _focusChanged() {
+    final running = desktop.focus.running;
+    if (running == _trayFocus) return;
+    _trayFocus = running;
+    unawaited(widget.shell.setFocusing(running));
+  }
 
   /// "Restart to Update" in the tray while a verified update waits.
   void _updatesChanged() {
@@ -326,6 +336,8 @@ class DesktopAppState extends State<DesktopApp> {
         open(MainPage.pairing);
       case ShellAction.settings:
         open(MainPage.settings);
+      case ShellAction.focus:
+        desktop.focus.toggle();
       case ShellAction.games:
         openGames();
       // On the taskbar (roaming it, or playing in its spot) is where you'll see Mochi: the pet shows too.
@@ -616,6 +628,7 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.settings.removeListener(_settingsChanged);
     _warmUpTimer?.cancel();
     desktop.updater.removeListener(_updatesChanged);
+    desktop.focus.removeListener(_focusChanged);
     _rhythmLog?.cancel();
     _stroll.dispose();
     _companion.dispose();

@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart' show Accessory, AccessorySlot, OfficeTheme, PetColor, SeasonDecor, SeasonalEvent, Wearer;
-import 'package:mochi_world/mochi_world.dart' show Chattiness, GameRecords;
+import 'package:mochi_world/mochi_world.dart' show Chattiness, FocusSettings, GameRecords;
 
 import 'hotkeys.dart';
 import 'notifications.dart';
@@ -164,7 +164,8 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   /// its spot and room, the size, always on top, clicks passing through, a place on each display, the tray icon's
   /// animation, and Patch only for interesting moments); 6 Mochi's world (Sprint 2: talking in speech bubbles, how
   /// chatty, fresh lines from Claude Haiku, growing up and the last stage announced, under the Mac's keys `speech`,
-  /// `lifeStages` and `lifeStageSeen`); 7 Mochi's life, part 2 (the mini-games' records under the Mac's key `games`).
+  /// `lifeStages` and `lifeStageSeen`); 7 Mochi's life, part 2 (the mini-games' records and the focus buddy's settings under the Mac's keys `games` and
+  /// `focus`).
   /// `roamTaskbar` is still written (whether Mochi is on the taskbar) for an older Mochi reading the file.
   static const int version = 7;
 
@@ -238,6 +239,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   bool _lifeStages = true;
   int _lifeStageSeen = -1;
   GameRecords _games = GameRecords();
+  FocusSettings _focus = const FocusSettings();
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -339,6 +341,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     final seen = json['lifeStageSeen'];
     _lifeStageSeen = seen is int && seen >= -1 && seen <= 2 ? seen : -1;
     _games = GameRecords.fromJson(json['games']);
+    _focus = FocusSettings.fromJson(json['focus']);
   }
 
   static int _minutes(Object? value, int fallback, int min, int max) => value is int ? value.clamp(min, max) : fallback;
@@ -671,6 +674,13 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _set(() => _games = value.copy());
   }
 
+  /// The focus buddy (the Mac's `focus`): the block and break lengths, naps, the chime and the notification at a break.
+  FocusSettings get focus => _focus;
+  set focus(FocusSettings value) {
+    if (value == _focus) return;
+    _set(() => _focus = value);
+  }
+
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
 
@@ -755,6 +765,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'lifeStages': _lifeStages,
     'lifeStageSeen': _lifeStageSeen,
     'games': _games.toJson(),
+    'focus': _focus.toJson(),
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
 

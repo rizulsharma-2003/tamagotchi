@@ -10,7 +10,9 @@ import 'core/claude_cli.dart';
 import 'core/desktop_settings.dart';
 import 'core/desktop_world.dart';
 import 'core/fresh_lines.dart';
+import 'core/focus.dart';
 import 'core/games.dart';
+import 'core/json_store.dart';
 import 'core/hook_setup.dart';
 import 'core/hotkeys.dart';
 import 'core/pc_rhythm.dart';
@@ -69,6 +71,7 @@ class MochiDesktop {
     UsageSampler? usage,
     HotkeyRegistrar? hotkeys,
     WorldStore? worldStore,
+    JsonStore Function(String file)? stores,
     double Function()? uptime,
     int? worldSeed,
   }) : _claude = claude,
@@ -96,6 +99,9 @@ class MochiDesktop {
       seed: worldSeed,
     );
     games = DesktopGames(settings: settings, world: world);
+    final store = stores ?? (_) => MemoryJsonStore();
+    focus = DesktopFocus(settings: settings, world: world, rhythm: rhythm, store: store('focus-log.json'));
+    reactions.focusing = () => focus.focusing;
     this.hotkeys = Hotkeys(
       registrar: hotkeys ?? const UnsupportedHotkeys(),
       chosen: settings.shortcut,
@@ -226,6 +232,7 @@ class MochiDesktop {
       usage: system == null ? null : Win32Usage(system),
       hotkeys: system,
       worldStore: demoMode ? null : FileWorldStore(paths.join(paths.home, 'world.json')),
+      stores: demoMode ? null : (file) => FileJsonStore(paths.join(paths.home, file)),
     );
   }
 
@@ -256,6 +263,9 @@ class MochiDesktop {
 
   /// The mini-games (W14): Catch the Treats and rock-paper-scissors, and their records.
   late final DesktopGames games;
+
+  /// The focus buddy (W15): a Pomodoro timer Mochi naps through, and the blocks it kept for the recap.
+  late final DesktopFocus focus;
 
   /// The global shortcuts (Settings › Desktop Pet and Assistant).
   late final Hotkeys hotkeys;
@@ -458,6 +468,7 @@ class MochiDesktop {
     link.dispose();
     motion.dispose();
     games.dispose();
+    focus.dispose();
     world.dispose();
     rhythm.dispose();
     hotkeys.dispose();

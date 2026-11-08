@@ -4,7 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_ui/mochi_ui.dart';
-import 'package:mochi_world/mochi_world.dart' show AchievementID, Chattiness, ProgressState;
+import 'package:mochi_world/mochi_world.dart' show AchievementID, Chattiness, FocusSettings, ProgressState;
 
 import '../../core/desktop_settings.dart';
 import '../../core/hotkeys.dart';
@@ -710,6 +710,8 @@ class FunPane extends StatelessWidget {
       children: [
         _TalkingGroup(host: host),
         _GrowingUpGroup(host: host),
+        _FocusGroup(host: host),
+        _GamesGroup(host: host),
         SettingsGroup(
           title: 'Holidays',
           footer:
@@ -745,17 +747,88 @@ class FunPane extends StatelessWidget {
             ),
           ],
         ),
-        _GamesGroup(host: host),
         SettingsGroup(
           title: 'From the Mac',
           children: [
             SoonRow(title: 'Adventures', detail: '$pet heads out to explore your desktop and comes back with stories.'),
-            SoonRow(title: 'Focus sessions', detail: 'A focus timer $pet keeps you company through.'),
             SoonRow(title: 'Daily recap', detail: 'A card of what you and Claude did today.'),
             SoonRow(title: 'Room furniture', detail: 'Arrange furniture in $pet’s room.'),
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Settings › Fun › Focus buddy (the Mac's FocusSettingsSection): the lengths, naps, the chime and the notification at
+/// a break, and Start or Stop Focus.
+class _FocusGroup extends StatelessWidget {
+  const _FocusGroup({required this.host});
+
+  final SettingsHost host;
+
+  static List<(int, String)> _minutes(int from, int to, int step) => [for (var m = from; m <= to; m += step) (m, '$m min')];
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = host.desktop.settings;
+    final focus = settings.focus;
+    final buddy = host.desktop.focus;
+    void set(FocusSettings value) => settings.focus = value;
+    return ListenableBuilder(
+      listenable: buddy,
+      builder: (context, _) => SettingsGroup(
+        title: 'Focus buddy',
+        footer: settings.soundEnabled
+            ? 'Changes apply to the next focus session. While you focus only the sounds for what needs you play.'
+            : 'Turn on Play sounds (Notifications › Sound) to hear the chime. Changes apply to the next session.',
+        children: [
+          MenuRow<int>(
+            label: 'Focus block',
+            value: focus.workMinutes.clamp(5, 120),
+            items: _minutes(5, 120, 5),
+            onChanged: (value) => set(focus.copyWith(workMinutes: value)),
+          ),
+          MenuRow<int>(
+            label: 'Short break',
+            value: focus.breakMinutes.clamp(1, 30),
+            items: _minutes(1, 30, 1),
+            onChanged: (value) => set(focus.copyWith(breakMinutes: value)),
+          ),
+          MenuRow<int>(
+            label: 'Long break',
+            value: focus.longBreakMinutes.clamp(5, 60),
+            items: _minutes(5, 60, 5),
+            onChanged: (value) => set(focus.copyWith(longBreakMinutes: value)),
+          ),
+          MenuRow<int>(
+            label: 'Long break after',
+            value: focus.cyclesBeforeLongBreak.clamp(2, 8),
+            items: [for (var n = 2; n <= 8; n++) (n, '$n blocks')],
+            onChanged: (value) => set(focus.copyWith(cyclesBeforeLongBreak: value)),
+          ),
+          ToggleRow(
+            title: '${host.pet} naps while you focus',
+            value: focus.napsDuringFocus,
+            onChanged: (value) => set(focus.copyWith(napsDuringFocus: value)),
+          ),
+          ToggleRow(
+            title: 'Chime when a break starts',
+            value: focus.chimeAtBreak && settings.soundEnabled,
+            onChanged: settings.soundEnabled ? (value) => set(focus.copyWith(chimeAtBreak: value)) : null,
+          ),
+          ToggleRow(
+            title: 'Show a notification when a break starts',
+            value: focus.bannerAtBreak,
+            onChanged: (value) => set(focus.copyWith(bannerAtBreak: value)),
+          ),
+          ActionsRow(
+            children: [
+              FilledButton(onPressed: buddy.toggle, child: Text(buddy.running ? 'Stop Focus' : 'Start Focus')),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

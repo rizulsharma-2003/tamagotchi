@@ -334,6 +334,11 @@ class DesktopWorld extends ChangeNotifier {
     _changed();
   }
 
+  /// A feature changed the world itself (the focus buddy's phases and lines): the views hear about it.
+  void noteChanged() {
+    if (!_disposed) _changed();
+  }
+
   /// You clicked Patch: a little wave back.
   void pokeCompanion() {
     world.pokeCompanion();

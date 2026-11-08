@@ -125,6 +125,7 @@ void main() {
         expect(find.text('Friendship level 0'), findsOneWidget, reason: 'the Mac’s hearts (W13)');
         expect(find.bySemanticsLabel(RegExp('^Mark a milestone')), findsOneWidget);
         expect(find.bySemanticsLabel(RegExp('^Games: Catch the Treats')), findsOneWidget, reason: 'the Mac’s fun row (W14)');
+        expect(find.bySemanticsLabel(RegExp('^Focus: a timer Mochi naps through')), findsOneWidget, reason: 'and Focus (W15)');
         expect(find.textContaining('Sound'), findsNothing, reason: 'no sounds on Windows yet: no switch for them');
         for (final button in ['Open Mochi', 'Ask Mochi', 'Settings']) {
           expect(find.text(button), findsOneWidget);
@@ -206,14 +207,14 @@ void main() {
   testWidgets('the keyboard: it opens with the focus on Pet, Tab moves on, Enter and Space press, Escape closes it', (tester) async {
     final state = await open(tester);
     final settings = t.desktop.settings;
-    // Pet, Play, Treat, Milestone, the fun row (Games), then Pause.
-    for (var i = 0; i < 5; i++) {
+    // Pet, Play, Treat, Milestone, the fun row (Games, Focus), then Pause.
+    for (var i = 0; i < 6; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     }
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
-    expect(settings.pauseReactions, isTrue, reason: 'Pet, Play, Treat, Milestone, Games, then Pause');
+    expect(settings.pauseReactions, isTrue, reason: 'Pet, Play, Treat, Milestone, Games, Focus, then Pause');
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pump();
     expect(settings.pauseReactions, isFalse);

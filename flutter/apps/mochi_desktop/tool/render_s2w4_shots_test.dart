@@ -148,6 +148,37 @@ void main() {
     });
   }
 
+  for (final theme in [ThemeMode.light, ThemeMode.dark]) {
+    testWidgets('W15 focus in the popover, ${theme.name}', (tester) async {
+      t.desktop.settings.themeMode = theme;
+      final state = await app(tester, size: SurfaceSizes.popover, surface: Surface.pet);
+      t.desktop.focus.begin();
+      state.openPopover();
+      await frames(tester, const Duration(milliseconds: 900));
+      t.desktop.world.tick();
+      await tester.pump(const Duration(milliseconds: 400));
+      await save(tester, 'w15-popover-focus-${theme.name}', SurfaceSizes.popover);
+      t.desktop.focus.skip();
+      t.desktop.world.tick();
+      await frames(tester, const Duration(milliseconds: 1500));
+      t.desktop.world.tick();
+      await tester.pump(const Duration(milliseconds: 100));
+      await save(tester, 'w15-popover-break-${theme.name}', SurfaceSizes.popover);
+      t.desktop.focus.stop();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 8));
+    });
+  }
+
+  testWidgets('W15 Settings › Fun › Focus buddy', (tester) async {
+    await app(tester, size: SurfaceSizes.settings, page: MainPage.settings, pane: SettingsTab.fun);
+    await tester.ensureVisible(find.text('Focus buddy'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await save(tester, 'w15-settings-focus', SurfaceSizes.settings);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('W14 games at 2× text', (tester) async {
     await app(tester, size: SurfaceSizes.games, page: MainPage.games, scale: 2);
     await save(tester, 'w14-catch-ready-2x', SurfaceSizes.games);
