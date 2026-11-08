@@ -817,21 +817,28 @@ class DesktopAdventure extends ChangeNotifier {
     final plan = outing.plan;
     if (nudger == null || plan == null || nudger.running || outing.hurrying || sample.finished) return;
     final force = nudgeForce;
-    if (force == NudgeForce.tug || !gate.may(MischiefExtra.windowNudges)) return;
+    if (force == NudgeForce.tug) return;
     final segment = plan.segment(now);
     if (segment == null) return;
     if (sample.move == w.AdventureMove.hold && sample.style == w.AdventureStyle.land) {
       if (outing.landed == segment.start) return;
       outing.landed = segment.start;
       if (force == NudgeForce.shove) return;
+      // The stroll-debug log says why a landing didn't wobble (nothing about the window but its handle's reason).
+      final note = nudger.log;
+      if (!gate.may(MischiefExtra.windowNudges)) return note?.call('nudge: landing, the extra may not run (${gate.why(MischiefExtra.windowNudges)?.name})');
       final hwnd = _ledgeHwnd(outing, sample);
-      if (hwnd == null || (force == null && outing.wobbled.contains(hwnd))) return;
+      if (hwnd == null) return note?.call('nudge: landing, not on a window');
+      if (force == null && outing.wobbled.contains(hwnd)) return;
       if (nudger.start(hwnd, NudgeKind.wobble, scale: outing.space.scale)) {
         outing.wobbled.add(hwnd);
         _schedule(moveEvery);
+      } else {
+        note?.call('nudge: landing, wobble skipped (${nudger.qualify(hwnd)?.name ?? 'not started'})');
       }
       return;
     }
+    if (!gate.may(MischiefExtra.windowNudges)) return;
     if (force == NudgeForce.wobble || (outing.shoved && force == null)) return;
     final pause = sample.animation == PetAnimation.sit || sample.animation == PetAnimation.sniff || sample.animation == PetAnimation.lookAround;
     if (!pause || sample.move != w.AdventureMove.hold || sample.style != w.AdventureStyle.plain || sample.phase != w.AdventurePhase.exploring) return;
