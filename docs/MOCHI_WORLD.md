@@ -1,6 +1,6 @@
 # Mochi's world in Dart (`mochi_world`)
 
-Sprint 2 **G1** and **G2**, and the logic of **W11, W12, W14, W15, W16, W18 and W20**. `flutter/packages/mochi_world` is the Mac's pet-life engine (`Sources/TamagotchiCore`) in pure Dart, with no dependencies. Windows (W11–W20) and Android (A5) run it so that Mochi and Patch behave exactly as they do on the Mac. `mochi_desktop` runs it since Sprint 2 (G1: `lib/src/core/desktop_world.dart`); `mochi_pocket` doesn't yet. This note says how.
+Sprint 2 **G1** and **G2**, and the logic of **W11, W12, W14, W15, W16, W18 and W20**. `flutter/packages/mochi_world` is the Mac's pet-life engine (`Sources/TamagotchiCore`) in pure Dart, with no dependencies. Windows (W11–W20) and Android (A5) run it so that Mochi and Patch behave exactly as they do on the Mac. `mochi_desktop` runs it since Sprint 2 (G1: `lib/src/core/desktop_world.dart`), and `mochi_pocket` since A5 (`lib/src/scene/phone_world.dart`). This note says how.
 
 ## What's in it
 
@@ -212,23 +212,34 @@ Per item:
 
 ## Android (`mochi_pocket`, A5)
 
-Run one `MochiWorld` for the room, as the iPhone runs `CompanionWorld` (`iOS/MochiPocket/PhoneWorld.swift`):
+How it's done (Sprint 2 A5): `PhoneWorld` (`lib/src/scene/phone_world.dart`) runs one `MochiWorld` for the room, as the iPhone runs `CompanionWorld` (`iOS/MochiPocket/PhoneWorld.swift`). The app makes it at launch for the room it shows (the real one, or a development build's test room) and the room draws `frame()` as it is (`lib/src/scene/room_view.dart`).
 
-- Construct it with `companionVisibility: always` (Patch keeps Mochi company all the time).
-- **Follow the computer.** Turn the room's Claude state (`claude`: phase and category) into **simulated** wire events, exactly as `PhoneWorld.play` does:
-  - a mirror session: `SessionStart`, `UserPromptSubmit`, `PreToolUse`/`PostToolUse` with the category's tool, `Notification` with `permission_prompt` for waiting, `Stop`, `StopFailure` and `SessionEnd`
-  - `origin: 'simulator'`
+- **Patch keeps Mochi company.** It's constructed with `companionVisibility: always`.
+- **Follow the computer.** The room's Claude state (`claude`: phase and category) becomes **simulated** wire events, exactly as `PhoneWorld.play` does:
+  - a mirror session: `SessionStart`, `UserPromptSubmit`, `PreToolUse`/`PostToolUse` with the category's tool (1.6 s apart), `Notification` with `permission_prompt` for waiting, `Stop`, `StopFailure` and `SessionEnd`
+  - `origin: 'simulator'`, the project named after the computer ("Your Mac")
 
-  Mochi then reacts on the phone, but the phone never counts progress twice: the computer is the one that counts. The `resting` flag becomes `updateSystem(SystemActivity(idleSeconds: resting ? 86400 : 0))`.
-- **Petting, play and treats.** Both ways, as on the iPhone. Call `world.interact(kind)` for the phone's own buttons and send `phoneInteraction`; for the computer's `macInteraction` (within 90 s, not seen before), call `world.interact(kind)`.
-- **The look.** Name, colours and room come from the room's `look`. Show the friendship level from the look too: the computer's progress is the real one.
-- Tick at 4 Hz while the room is visible; pause the timer in the background.
+  Mochi then reacts on the phone (a high five for a finished turn, a wave while Claude waits, a worried look for a snag), but the phone never counts progress twice: the computer is the one that counts. The `resting` flag becomes `updateSystem(SystemActivity(idleSeconds: resting ? 86400 : 0))`, so Mochi naps while the computer rests and wakes with a stretch.
+- **Petting, play and treats.** Both ways, as on the iPhone. The phone's own buttons and taps call `world.interact(kind)` and send `phoneInteraction` (the computer counts it); the computer's `macInteraction` (within 90 s, not seen before) calls `world.interact(kind)` and isn't sent back.
+- **The look.** The names go into the world's settings. The colours, room, things to wear and today's holiday (`SeasonCalendar.event` with the look's `seasonal`, so decorations and costumes) go to the renderers. The friendship level shown is the look's: the computer's progress is the real one.
+- **Talking (A3).** Hold to talk takes over Mochi's pose as the iPhone's `RoomView.pose` does: turning to listen, a nod as it sends, looking around while it waits, a bounce and a smile for the answer, a worried look when it didn't work.
+- **When it ticks.** At 4 Hz only while the room can be seen: the app in front (an `inactive` system dialog still counts), the home screen not covered by another screen (`TickerMode`), and the room scrolled into view. No timer at all otherwise. The room is drawn every display frame only for your own moments (Mochi answering a pet, play or treat, or what you asked; talking), at 30 frames a second for the others (Claude's news, a moment together, a stretch), 15 for the loops, 6 while both nap, and at most 10 with animations off.
+- **Reduce Motion.** Android's "Remove animations" is `setSystemReducedMotion(true)`: the Mac's Reduce Motion poses.
+- **Nothing is stored.** As on the iPhone, a launch starts calm with a new seed and the look and Claude's state come back from the room. The phone's own count of petting stays in memory, unseen.
+
+Where it differs from the iPhone, on purpose:
+
+- The first state seen after launch or pairing sets the scene quietly (restored delivery): Patch is already typing, but there's no high five for a turn that ended before you looked.
+- A mirrored tool still "running" when the next state arrives finishes first, so the events stay in order. On the iPhone its `PostToolUse` can land after "Claude needs you" and stop Mochi waving.
+- No decorations for Mochi's own birthday: the look doesn't carry the day the computer adopted Mochi. The iPhone uses the phone's own first petting.
+- The iPhone's room shows `activeSpeech`, but nothing makes the iPhone's world speak. So the phone's bubble shows what Mochi hears and the computer's answers, as before. The look carries no life stage, so Mochi is drawn grown up, as on the iPhone.
+- G2's `Celebrations` never fires on the phone, because everything there is simulated. The world's own reactions still play, as on the iPhone.
 
 ## Persistence
 
 - **Progress.** Write `ProgressState.toJson()` from `AchievementEngine.onChange`, as the Mac writes `progress.json`: the same keys, with ISO dates. `ProgressState.fromJson` reads the Mac's file too.
 - **History.** `world.toJson()` keeps the progress and up to 3 hours of real events (at most 4,000). `world.restore(json)` rebuilds Claude's sessions from them without reacting, as the Mac's `restoreFromJournal` does.
-  - Store it on quit and every few minutes, in `%LOCALAPPDATA%\Mochi` beside the app's other state on Windows, or the app's files directory on Android.
+  - Store it on quit and every few minutes, in `%LOCALAPPDATA%\Mochi` beside the app's other state on Windows. Android stores nothing: the phone mirrors the computer (see above).
   - Paths are never stored. Project keys are already hashes.
 - **Features.** Store the settings groups under the Mac's keys (`focus`, `games`, `recap`, `room`, `seasonal`, `lifeStageSeen`, `speech`). Also store the focus log (`FocusLog.toJson`), the recap's event journal (`EventJournal.toJsonLines`, a week by default) and the greeted holidays (`SeasonTracker.toJson`). With history off (0 days), the focus log and the journal stay in memory.
 - **Not stored.** Animation and scheduler state (`CharacterAnimator` and `InteractionScheduler` have `toJson` if ever needed). Like the Mac, a new launch starts calm.
