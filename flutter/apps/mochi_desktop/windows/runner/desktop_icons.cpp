@@ -81,13 +81,33 @@ struct DesktopView {
 
 // Which call failed, for the stroll-debug log when the desktop can't be read (a number and an HRESULT, nothing else).
 enum Step {
-  kCreate = 1, kFind, kProvider, kBrowser, kView, kFolder, kViewWindow, kList, kFlags, kSpacing, kIconSize, kItems
+  kCreate = 1, kFind, kProvider, kBrowser, kView, kFolder, kList, kFlags, kSpacing, kIconSize, kItems
 };
 
 bool Fail(Answer* answer, int step, HRESULT hr) {
   answer->failed_step = step;
   answer->failed_hr = static_cast<long>(hr);
   return false;
+}
+
+// The desktop's icon list view: SHELLDLL_DefView under the desktop's shell window (Progman), or under a WorkerW where the
+// wallpaper slideshow moved it, and its SysListView32. Class names of the shell's own windows only.
+HWND DesktopList(HWND shell) {
+  HWND def_view = shell != nullptr ? ::FindWindowExW(shell, nullptr, L"SHELLDLL_DefView", nullptr) : nullptr;
+  if (def_view == nullptr) {
+    const HWND progman = ::FindWindowW(L"Progman", nullptr);
+    if (progman != nullptr) {
+      def_view = ::FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr);
+    }
+  }
+  for (HWND worker = nullptr; def_view == nullptr;) {
+    worker = ::FindWindowExW(nullptr, worker, L"WorkerW", nullptr);
+    if (worker == nullptr) {
+      break;
+    }
+    def_view = ::FindWindowExW(worker, nullptr, L"SHELLDLL_DefView", nullptr);
+  }
+  return def_view != nullptr ? ::FindWindowExW(def_view, nullptr, L"SysListView32", nullptr) : nullptr;
 }
 
 bool Acquire(DesktopView* out, Answer* answer) {
@@ -127,12 +147,9 @@ bool Acquire(DesktopView* out, Answer* answer) {
   if (FAILED(hr)) {
     return Fail(answer, kFolder, hr);
   }
-  HWND def_view = nullptr;
-  hr = view->GetWindow(&def_view);
-  if (FAILED(hr) || def_view == nullptr) {
-    return Fail(answer, kViewWindow, hr);
-  }
-  out->list = ::FindWindowExW(def_view, nullptr, L"SysListView32", nullptr);
+  // The list view that holds the icons, found through the window tree: IShellView::GetWindow is an input-synchronous call,
+  // which a multi-threaded apartment may not make (RPC_E_CANTCALLOUT_ININPUTSYNCCALL).
+  out->list = DesktopList(reinterpret_cast<HWND>(static_cast<LONG_PTR>(found)));
   return out->list != nullptr || Fail(answer, kList, HRESULT_FROM_WIN32(::GetLastError()));
 }
 
