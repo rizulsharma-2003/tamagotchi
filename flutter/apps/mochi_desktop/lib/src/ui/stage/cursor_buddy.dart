@@ -222,6 +222,18 @@ class CursorBuddy {
     home.comeBack(x: back?.$1);
   }
 
+  /// Another extra takes Mochi over (an adventure you asked for): the buddy lets go where Mochi stands, which stays out
+  /// (the new owner brings it home). Returns where its feet are, or null when it wasn't out.
+  (int, int)? release() {
+    if (!_out) return null;
+    final feet = (_x.round(), _y.round());
+    _stopTimer();
+    _out = false;
+    _paused = false;
+    _pressedAt = null;
+    return feet;
+  }
+
   void _setMode(BuddyMode mode, double now) {
     if (mode == _mode && _modeSince != 0) return;
     _mode = mode;
@@ -395,6 +407,7 @@ class CursorBuddy {
 
   /// A click on Mochi while it sits (it lets clicks through while it runs).
   void _pointerEvent(StagePointer event) {
+    if (!_out) return;
     switch (event.kind) {
       case StagePointerKind.down:
         _pressedAt = (event.screenX, event.screenY);

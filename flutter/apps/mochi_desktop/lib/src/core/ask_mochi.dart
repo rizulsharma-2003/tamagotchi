@@ -128,6 +128,11 @@ class AskMochi extends ChangeNotifier {
   String get petName => _petName();
   final Duration timeout;
 
+  /// Mochi's desktop adventures (W19), set by the app: "go explore" and "come home" (null: not here, as in tests of
+  /// everything else).
+  AskOutcome Function()? explore;
+  AskOutcome Function()? comeHome;
+
   final List<AskExchange> _exchanges = [];
   int _counter = 0;
 
@@ -185,10 +190,12 @@ class AskMochi extends ChangeNotifier {
         return opened ? AskOutcome('Opening ${url.host}.') : AskOutcome("I couldn't open ${url.host}.", ok: false);
       case MediaCommand() || VolumeCommand() || AppCommand():
         return const AskOutcome("I can't do that on Windows yet.", ok: false);
+      case SimpleCommand.explore:
+        return explore?.call() ?? const AskOutcome("That trick isn't on Windows yet.", ok: false);
+      case SimpleCommand.comeHome:
+        return comeHome?.call() ?? const AskOutcome("That trick isn't on Windows yet.", ok: false);
       case FocusCommand() ||
           SimpleCommand.stopFocus ||
-          SimpleCommand.explore ||
-          SimpleCommand.comeHome ||
           SimpleCommand.games ||
           SimpleCommand.recap ||
           SimpleCommand.decorate:

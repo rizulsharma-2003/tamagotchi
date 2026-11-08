@@ -47,6 +47,7 @@ class PetSurface extends StatefulWidget {
     this.onNativeMenu,
     this.onOpenPopover,
     this.companion,
+    this.exploreLabel,
   });
 
   final MochiDesktop desktop;
@@ -63,6 +64,9 @@ class PetSurface extends StatefulWidget {
 
   /// Patch (drawn beside Mochi while he's on the taskbar).
   final CompanionDirector? companion;
+
+  /// The menu's "Explore the Desktop" or "Bring Mochi Home" (null: no such item, as Adventures are off).
+  final String? Function()? exploreLabel;
 
   /// Clicking Mochi (or Patch) on the taskbar opens the popover, as clicking Mochi in the Mac's menu bar does.
   final VoidCallback? onOpenPopover;
@@ -193,6 +197,7 @@ class _PetSurfaceState extends State<PetSurface> {
         const PopupMenuItem(value: ShellAction.pair, child: Text('Pair a Phone…')),
         const PopupMenuItem(value: ShellAction.settings, child: Text('Settings')),
         const PopupMenuDivider(),
+        if (widget.exploreLabel?.call() case final label?) PopupMenuItem(value: ShellAction.explore, child: Text(label)),
         PopupMenuItem(value: ShellAction.focus, child: Text(widget.desktop.focus.menuTitle)),
         const PopupMenuItem(value: ShellAction.games, child: Text('Games…')),
         const PopupMenuItem(value: ShellAction.recap, child: Text('Today’s Recap…')),

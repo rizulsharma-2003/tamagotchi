@@ -10,6 +10,7 @@ import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_wire/mochi_wire.dart' show HookStatus;
 
 import '../core/desktop_settings.dart' show DesktopStyle;
+import '../core/ask_mochi.dart' show AskOutcome;
 import '../core/hotkeys.dart';
 import '../core/json_store.dart';
 import '../core/pet_cues.dart';
@@ -21,6 +22,7 @@ import '../platform/process_cpu.dart';
 import '../platform/taskbar.dart';
 import '../platform/image_export.dart';
 import '../platform/native_stage.dart';
+import '../platform/window_frames.dart';
 import '../platform/win32_taskbar.dart' show Win32PetWindow, Win32TaskbarInfo;
 import 'perf_meter.dart';
 import 'pet/companion_director.dart';
@@ -28,6 +30,7 @@ import 'pet/pet_director.dart' show PetMood;
 import '../update/updater.dart';
 import 'pet/pet_surface.dart';
 import 'pet/taskbar_stroll.dart';
+import 'stage/adventure.dart' show AdventureStart, DesktopAdventure;
 import 'stage/mischief_stage.dart';
 import 'games/games_screen.dart';
 import 'recap/recap_screen.dart';
@@ -74,6 +77,7 @@ class DesktopApp extends StatefulWidget {
     this.strollRandom,
     this.images,
     this.stage,
+    this.windowFrames,
   });
 
   final MochiDesktop desktop;
@@ -84,6 +88,9 @@ class DesktopApp extends StatefulWidget {
 
   /// Mochi's native stage (N1: the Windows runner's; none on the macOS build; a fake in tests).
   final NativeStage? stage;
+
+  /// Where other apps' windows are, for Mochi's adventures (Win32 on Windows, none elsewhere, a fake in tests).
+  final WindowFrames? windowFrames;
 
   /// Where the taskbar is (Win32 on Windows, none elsewhere, a fake in tests).
   final TaskbarInfo? taskbar;
@@ -154,6 +161,8 @@ class DesktopAppState extends State<DesktopApp> {
     onOpen: () => open(MainPage.home),
     notesStore: demoMode ? MemoryJsonStore() : FileJsonStore(desktop.paths.join(desktop.paths.home, 'notes.json')),
     demo: MischiefStage.demoFrom(Platform.environment['MOCHI_DESKTOP_MISCHIEF_DEMO']),
+    frames: widget.windowFrames ?? systemWindowFrames(),
+    adventureDemo: MischiefStage.adventureDemoFrom(Platform.environment['MOCHI_DESKTOP_ADVENTURE_DEMO']),
   );
 
   /// The Windows extras on the native stage (tests).
@@ -291,6 +300,14 @@ class DesktopAppState extends State<DesktopApp> {
     }
     unawaited(_loadLibrary());
     _mischief.start();
+    // Adventures (W19): dropped off the taskbar, Mochi sets off from there; the tray's and the menu's Explore item follows.
+    _stroll.onDropOff = (x, y) => desktop.settings.adventure.enabled && (_mischief.adventure?.dropped(x, y) ?? false);
+    desktop.ask
+      ..explore = _askExplore
+      ..comeHome = _askComeHome;
+    _mischief.adventure?.addListener(_exploreChanged);
+    desktop.settings.addListener(_exploreChanged);
+    _exploreChanged();
     _startPerf();
     _subscriptions.add(widget.shell.actions.listen(handle));
     _subscriptions.add(desktop.cues.listen(_noteActivity));
@@ -328,6 +345,63 @@ class DesktopAppState extends State<DesktopApp> {
 
   bool _trayUpdate = false;
   bool _trayFocus = false;
+
+  String? _trayExplore;
+
+  /// The tray's and the menu's "Explore the Desktop" or "Bring Mochi Home" (null while Adventures are off).
+  String? exploreLabel() {
+    if (!desktop.settings.adventure.enabled) return null;
+    return _mischief.adventure?.active == true ? 'Bring ${desktop.settings.petName} Home' : 'Explore the Desktop';
+  }
+
+  void _exploreChanged() {
+    final label = exploreLabel();
+    if (label == _trayExplore) return;
+    _trayExplore = label;
+    unawaited(widget.shell.setExploring(label));
+  }
+
+  /// Explore was chosen (the popover, the menu, Settings): Mochi sets off from the taskbar; while it's out, the same choice
+  /// brings it home. From Mochi's window or the popover it goes back to the taskbar first, then sets off.
+  void explore() {
+    final adventure = _mischief.adventure;
+    if (adventure == null) return;
+    if (adventure.active || _surface == Surface.pet) {
+      adventure.explore();
+      return;
+    }
+    if (!desktop.settings.adventure.enabled || !desktop.settings.showPet) return;
+    _exploreWhenBack = true;
+    if (_surface == Surface.popover) {
+      closePopover();
+    } else if (_surface == Surface.main) {
+      closeMain();
+    }
+  }
+
+  bool _exploreWhenBack = false;
+
+  /// "Go explore" to Ask Mochi.
+  AskOutcome _askExplore() {
+    final adventure = _mischief.adventure;
+    final pet = desktop.settings.petName;
+    if (adventure == null) return const AskOutcome("I can't explore from here.", ok: false);
+    if (!desktop.settings.adventure.enabled) return AskOutcome(DesktopAdventure.say(AdventureStart.off, pet, null), ok: false);
+    if (!adventure.active && _surface != Surface.pet) {
+      // From Mochi's window: it goes back to the taskbar and sets off from there.
+      explore();
+      return AskOutcome(DesktopAdventure.say(AdventureStart.started, pet, null));
+    }
+    final start = adventure.explore();
+    return AskOutcome(
+      DesktopAdventure.say(start, pet, adventure.why),
+      ok: start == AdventureStart.started || start == AdventureStart.headingHome,
+    );
+  }
+
+  /// "Come home" to Ask Mochi.
+  AskOutcome _askComeHome() =>
+      _mischief.adventure?.comeHome() == true ? const AskOutcome('Coming home!') : AskOutcome('${desktop.settings.petName} is already home.');
 
   /// "Start Focus" or "Stop Focus" in the tray as a session starts or ends.
   void _focusChanged() {
@@ -392,6 +466,8 @@ class DesktopAppState extends State<DesktopApp> {
         openRecap();
       case ShellAction.decorate:
         openDecorate();
+      case ShellAction.explore:
+        explore();
       // On the taskbar (roaming it, or playing in its spot) is where you'll see Mochi: the pet shows too.
       case ShellAction.roamTaskbar:
         desktop.settings
@@ -617,6 +693,18 @@ class DesktopAppState extends State<DesktopApp> {
     final shown = _stroll.show(surface);
     if (surface == Surface.popover) _popoverReady = shown;
     unawaited(shown);
+    // Explore was chosen from Mochi's window or the popover: once Mochi is back on the taskbar, off it goes.
+    if (surface == Surface.pet && _exploreWhenBack) {
+      unawaited(
+        shown.then((_) {
+          if (!_exploreWhenBack || !mounted || _surface != Surface.pet) return;
+          _exploreWhenBack = false;
+          _mischief.adventure?.explore();
+        }),
+      );
+    } else if (surface == Surface.hidden) {
+      _exploreWhenBack = false;
+    }
     // Mochi out with the pointer comes home while its window or the popover is open (and may go out again after).
     _mischief.surfaceChanged();
   }
@@ -636,6 +724,7 @@ class DesktopAppState extends State<DesktopApp> {
     onSetUpClaude: () => open(MainPage.settings, pane: SettingsTab.claude),
     onGames: openGames,
     onRecap: openRecap,
+    onExplore: explore,
   );
 
   /// The popover is drawn once out of sight soon after launch, on Windows (see [_PopoverWarmUp]).
@@ -697,6 +786,12 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.reactions.removeListener(_tray.refresh);
     _tray.dispose();
     desktop.settings.removeListener(_settingsChanged);
+    desktop.settings.removeListener(_exploreChanged);
+    _mischief.adventure?.removeListener(_exploreChanged);
+    desktop.ask
+      ..explore = null
+      ..comeHome = null;
+    _stroll.onDropOff = null;
     _warmUpTimer?.cancel();
     desktop.updater.removeListener(_updatesChanged);
     desktop.focus.removeListener(_focusChanged);
@@ -738,6 +833,7 @@ class DesktopAppState extends State<DesktopApp> {
                 onNativeMenu: () => unawaited(widget.shell.popUpMenu()),
                 onOpenPopover: openPopover,
                 companion: _companion,
+                exploreLabel: exploreLabel,
               ),
             ),
             if (_warmingUp) _PopoverWarmUp(panel: _popoverPanel(false), onDone: _warmedUp),
@@ -898,6 +994,7 @@ class _MainSurface extends StatelessWidget {
                   onGames: state.openGames,
                   onRecap: state.openRecap,
                   onDecorate: state.openDecorate,
+                  onExplore: state.explore,
                   mischief: state._mischief,
                 ),
               ),

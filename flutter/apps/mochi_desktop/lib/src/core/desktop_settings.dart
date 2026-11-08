@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart' show Accessory, AccessorySlot, OfficeTheme, PetColor, SeasonDecor, SeasonalEvent, Wearer;
-import 'package:mochi_world/mochi_world.dart' show Chattiness, FocusSettings, GameRecords, RecapSettings, RoomLayout;
+import 'package:mochi_world/mochi_world.dart' show AdventureSettings, Chattiness, FocusSettings, GameRecords, RecapSettings, RoomLayout;
 import 'package:mochi_world/mochi_world.dart' as w show SeasonalSettings;
 
 import 'hotkeys.dart';
@@ -249,6 +249,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   bool _purrSound = true;
   RoomLayout _room = RoomLayout();
   MischiefSettings _mischief = const MischiefSettings();
+  AdventureSettings _adventure = const AdventureSettings();
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -356,6 +357,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _purrSound = flag('hapticPurr', true);
     _room = RoomLayout.fromJson(json['room']).sanitized();
     _mischief = MischiefSettings.fromJson(json['mischief']);
+    _adventure = AdventureSettings.fromJson(json['adventure']);
   }
 
   static int _minutes(Object? value, int fallback, int min, int max) => value is int ? value.clamp(min, max) : fallback;
@@ -735,6 +737,14 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _set(() => _mischief = value);
   }
 
+  /// Desktop adventures (Settings › Fun › Adventures; the Mac's `adventure`): Mochi explores the desktop, and how often it
+  /// sets off by itself.
+  AdventureSettings get adventure => _adventure;
+  set adventure(AdventureSettings value) {
+    if (value == _adventure) return;
+    _set(() => _adventure = value);
+  }
+
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
 
@@ -824,6 +834,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'hapticPurr': _purrSound,
     'room': _room.toJson(),
     'mischief': _mischief.toJson(),
+    'adventure': _adventure.toJson(),
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
 

@@ -18,6 +18,7 @@ import 'package:mochi_desktop/src/ui/pet/room_view.dart';
 import 'package:mochi_desktop/src/ui/popover/popover_view.dart';
 import 'package:mochi_desktop/src/ui/screens/home_screen.dart';
 import 'package:mochi_desktop/src/ui/shell.dart';
+import 'package:mochi_world/mochi_world.dart' as w;
 
 import 'support/fakes.dart';
 
@@ -124,6 +125,7 @@ void main() {
         }
         expect(find.text('Friendship level 0'), findsOneWidget, reason: 'the Mac’s hearts (W13)');
         expect(find.bySemanticsLabel(RegExp('^Mark a milestone')), findsOneWidget);
+        expect(find.bySemanticsLabel(RegExp('^Explore: Mochi leaves the taskbar')), findsOneWidget, reason: 'the Mac’s Explore (W19)');
         expect(find.bySemanticsLabel(RegExp('^Games: Catch the Treats')), findsOneWidget, reason: 'the Mac’s fun row (W14)');
         expect(find.bySemanticsLabel(RegExp('^Focus: a timer Mochi naps through')), findsOneWidget, reason: 'and Focus (W15)');
         expect(find.bySemanticsLabel(RegExp('^Today’s recap')), findsOneWidget, reason: 'and Recap (W16)');
@@ -209,14 +211,14 @@ void main() {
   testWidgets('the keyboard: it opens with the focus on Pet, Tab moves on, Enter and Space press, Escape closes it', (tester) async {
     final state = await open(tester);
     final settings = t.desktop.settings;
-    // Pet, Play, Treat, Milestone, the fun row (Games, Focus, Recap, Decorate), then Pause.
-    for (var i = 0; i < 8; i++) {
+    // Pet, Play, Treat, Milestone, the fun row (Explore, Games, Focus, Recap, Decorate), then Pause.
+    for (var i = 0; i < 9; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     }
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
-    expect(settings.pauseReactions, isTrue, reason: 'Pet, Play, Treat, Milestone, Games, Focus, Recap, Decorate, then Pause');
+    expect(settings.pauseReactions, isTrue, reason: 'Pet, Play, Treat, Milestone, Explore, Games, Focus, Recap, Decorate, then Pause');
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pump();
     expect(settings.pauseReactions, isFalse);
@@ -291,5 +293,20 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect((state.surface, state.page), (Surface.main, MainPage.games));
     expect(shell.mainSize, SurfaceSizes.games);
+  });
+
+  testWidgets('the fun row’s Explore (W19): there while Adventures are on, gone while they are off; it closes the popover', (tester) async {
+    final state = await open(tester);
+    final explore = find.bySemanticsLabel(RegExp('^Explore: Mochi leaves the taskbar'));
+    expect(explore, findsOneWidget);
+    t.desktop.settings.adventure = const w.AdventureSettings(enabled: false);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(explore, findsNothing, reason: 'no dead button');
+    t.desktop.settings.adventure = const w.AdventureSettings();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.ensureVisible(explore);
+    await tester.tap(explore);
+    await follow(tester, const Duration(seconds: 2));
+    expect(state.surface, Surface.pet, reason: 'the popover closed: Mochi goes out from the taskbar, not from its window');
   });
 }

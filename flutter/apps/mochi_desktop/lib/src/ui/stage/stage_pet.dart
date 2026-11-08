@@ -78,7 +78,8 @@ class StagePet {
   /// Draws Mochi at [time] (the world's clock) doing [motion] (walking, running, sitting, a little moment of its own;
   /// null: the world's own loop), its feet at [feet] (physical pixels) on a display at [ratio], [unit] logical pixels
   /// to an art unit. [quantum]: the loops' grid (seconds). False while the picture is still being drawn (Mochi keeps
-  /// the one it has, moved to the new place).
+  /// the one it has, moved to the new place). [accent] changes the pose before it's drawn (body language on top of the
+  /// animation: a crouch, a leap, a lean); keep its values on a coarse grid, as each different pose is a picture.
   bool draw({
     required double time,
     required StrollSample? motion,
@@ -88,10 +89,12 @@ class StagePet {
     double? quantum = 1 / 15,
     bool clickThrough = false,
     double opacity = 1,
+    void Function(PetPose pose)? accent,
   }) {
     sprites.use(_context(ratio, unit));
     final frame = director.pose(time, roam: motion, quantum: quantum);
     final pose = frame.pose;
+    accent?.call(pose);
     // A fade is the window's opacity, so the picture stays the same.
     final fade = (pose.opacity * opacity).clamp(0.0, 1.0);
     pose.opacity = 1;

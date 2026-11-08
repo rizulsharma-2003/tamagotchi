@@ -4,7 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:mochi_art/mochi_art.dart';
 import 'package:mochi_ui/mochi_ui.dart';
-import 'package:mochi_world/mochi_world.dart' show AchievementID, Chattiness, FocusSettings, ProgressState, RecapSettings;
+import 'package:mochi_world/mochi_world.dart' show AchievementID, AdventureFrequency, Chattiness, FocusSettings, ProgressState, RecapSettings;
 import 'package:mochi_world/mochi_world.dart' as w show SeasonCalendar;
 
 import '../../core/desktop_settings.dart';
@@ -756,10 +756,48 @@ class FunPane extends StatelessWidget {
             ),
           ],
         ),
-        SettingsGroup(
-          title: 'From the Mac',
+        _AdventuresGroup(host: host),
+      ],
+    );
+  }
+}
+
+/// Settings › Fun › Adventures (the Mac's AdventureSettingsSection): whether Mochi explores the desktop, how often it sets off
+/// by itself, and Explore Now.
+class _AdventuresGroup extends StatelessWidget {
+  const _AdventuresGroup({required this.host});
+
+  final SettingsHost host;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = host.desktop.settings;
+    final adventure = settings.adventure;
+    final pet = host.pet;
+    return SettingsGroup(
+      title: 'Adventures',
+      footer:
+          'Drag $pet up off the taskbar, or choose Explore. Out there it walks along window tops, sits on the taskbar and '
+          'climbs the screen’s edge. Only where windows are is read — never what they show — and only while $pet is out.',
+      children: [
+        ToggleRow(
+          title: '$pet explores the desktop',
+          value: adventure.enabled,
+          onChanged: (value) => settings.adventure = adventure.copyWith(enabled: value),
+        ),
+        ChoiceRow<AdventureFrequency>(
+          label: 'Sets off by itself',
+          selected: adventure.spontaneous,
+          onSelected: adventure.enabled ? (value) => settings.adventure = adventure.copyWith(spontaneous: value) : null,
+          choices: const [
+            (AdventureFrequency.never, 'Never', Icons.block_rounded),
+            (AdventureFrequency.rarely, 'Rarely', Icons.hourglass_bottom_rounded),
+            (AdventureFrequency.sometimes, 'Sometimes', Icons.directions_walk_rounded),
+          ],
+        ),
+        ActionsRow(
           children: [
-            SoonRow(title: 'Adventures', detail: '$pet heads out to explore your desktop and comes back with stories.'),
+            OutlinedButton(onPressed: adventure.enabled ? host.onExplore : null, child: const Text('Explore Now')),
           ],
         ),
       ],
