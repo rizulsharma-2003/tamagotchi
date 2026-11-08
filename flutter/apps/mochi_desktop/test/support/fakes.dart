@@ -23,6 +23,7 @@ import 'package:mochi_desktop/src/desktop.dart';
 import 'package:mochi_desktop/src/link/link_host.dart';
 import 'package:mochi_desktop/src/platform/credential_vault.dart';
 import 'package:mochi_desktop/src/platform/displays.dart';
+import 'package:mochi_desktop/src/platform/foreground_window.dart';
 import 'package:mochi_desktop/src/platform/startup.dart';
 import 'package:mochi_desktop/src/platform/system.dart';
 import 'package:mochi_desktop/src/platform/taskbar.dart';
@@ -866,5 +867,21 @@ class FakeWindowFrames implements WindowFrames {
     reads++;
     if (minimised.contains(hwnd)) return null;
     return windows.where((window) => window.hwnd == hwnd).firstOrNull;
+  }
+}
+
+/// The window with the focus, as the test sets it (Peekaboo, X3).
+class FakeForegroundWindows implements ForegroundWindows {
+  FakeForegroundWindows([this.window]);
+
+  ForegroundWindow? window;
+
+  /// How many times it was read.
+  int reads = 0;
+
+  @override
+  ForegroundWindow? read() {
+    reads++;
+    return window;
   }
 }

@@ -22,6 +22,7 @@ import '../platform/process_cpu.dart';
 import '../platform/taskbar.dart';
 import '../platform/image_export.dart';
 import '../platform/native_stage.dart';
+import '../platform/foreground_window.dart';
 import '../platform/window_frames.dart';
 import '../platform/win32_taskbar.dart' show Win32PetWindow, Win32TaskbarInfo;
 import 'perf_meter.dart';
@@ -78,6 +79,7 @@ class DesktopApp extends StatefulWidget {
     this.images,
     this.stage,
     this.windowFrames,
+    this.foregroundWindow,
   });
 
   final MochiDesktop desktop;
@@ -91,6 +93,9 @@ class DesktopApp extends StatefulWidget {
 
   /// Where other apps' windows are, for Mochi's adventures (Win32 on Windows, none elsewhere, a fake in tests).
   final WindowFrames? windowFrames;
+
+  /// The window with the focus (Peekaboo; null: Win32's).
+  final ForegroundWindows? foregroundWindow;
 
   /// Where the taskbar is (Win32 on Windows, none elsewhere, a fake in tests).
   final TaskbarInfo? taskbar;
@@ -163,6 +168,7 @@ class DesktopAppState extends State<DesktopApp> {
     notesStore: demoMode ? MemoryJsonStore() : FileJsonStore(desktop.paths.join(desktop.paths.home, 'notes.json')),
     demo: MischiefStage.demoFrom(Platform.environment['MOCHI_DESKTOP_MISCHIEF_DEMO']),
     frames: widget.windowFrames ?? systemWindowFrames(),
+    foreground: widget.foregroundWindow ?? systemForegroundWindow(),
     adventureDemo: MischiefStage.adventureDemoFrom(Platform.environment['MOCHI_DESKTOP_ADVENTURE_DEMO']),
   );
 
