@@ -18,8 +18,11 @@
 //   speech bubble does: wider around Mochi (the window stays centred on it) and taller above it, growing a moment
 //   before the first toy shows and shrinking a moment after the last has gone (`_playRoom`). The frames are the
 //   walk's (25 a second) while a toy is in play; nothing runs for it otherwise or while the screen is unseen.
-// - It walks only in the taskbar's empty stretches (between the widgets tile and the buttons, and between the buttons
-//   and the tray), measured with UI Automation every few seconds; it hops between stretches, never over a button.
+// - It lingers only in the taskbar's empty stretches (between the widgets tile and the buttons, and between the buttons
+//   and the tray), measured with UI Automation every few seconds, but walks, trots, runs and leaps over the buttons between
+//   them, as the Mac's Mochi does past other apps' status items (the user's feedback on 0.2.5, 2026-11-08: "mochi is not
+//   roaming over the taskbar icons"): it rests, sits, naps, sniffs, fidgets, plays with a toy, hides and sits beside the
+//   pointer only where the bar is free. It fades to another stretch only with animation effects off.
 // - The window lets clicks through to the taskbar everywhere but on Mochi itself: the pointer is checked 10 times a
 //   second, and the window takes clicks only while it's over Mochi (to pet, open or drag it). The same check puts the
 //   window back on top of the taskbar every half second, and at once when the taskbar is clicked (it rises over other
@@ -1162,7 +1165,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     return StrollLine(centre - room / 2, centre + room / 2);
   }
 
-  /// Puts Mochi in the taskbar: carrying on where it was if it was already strolling (hopping out of a stretch that
+  /// Puts Mochi in the taskbar: carrying on where it was if it was already strolling (walking out of a stretch that
   /// buttons now fill), or under where it stood. With Patch around, his desk takes a spot ([TaskbarStage.home]: where
   /// it was if it still fits, else near Mochi, or [near] after a drag) and Mochi keeps him company beside it.
   Future<void> _onto(TaskbarStage stage, {double? near, bool respot = false}) async {

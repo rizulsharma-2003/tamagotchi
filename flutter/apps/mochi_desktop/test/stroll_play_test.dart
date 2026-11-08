@@ -71,14 +71,14 @@ void main() {
       for (var i = 0; i < draws; i++) {
         counts.update(stroller.chooseFreeActivity(), (n) => n + 1, ifAbsent: () => 1);
       }
-      // Ours also has the trot (0.5) and a hop to the other stretch (0.6), which the Mac's bar doesn't.
+      // Ours also has the trot (0.5) and a walk across to the other stretch (0.6), which the Mac's bar doesn't have.
       const weights = {
         StrollActivity.wander: 3.0,
         StrollActivity.sniff: 2.0,
         StrollActivity.fidget: 1.8,
         StrollActivity.nap: 0.45,
         StrollActivity.trot: 0.5,
-        StrollActivity.hop: 0.6,
+        StrollActivity.cross: 0.6,
         StrollActivity.zoomies: 1.0,
         StrollActivity.butterfly: 1.2,
         StrollActivity.ball: 1.0,
@@ -123,7 +123,7 @@ void main() {
       expect(stroller.nextChange(600), isNull, reason: 'nothing wakes a timer');
     });
 
-    test('play stays inside the free stretch Mochi is in: it never walks across a button, and its toys stay over free room', () {
+    test('the toys stay inside the free stretch Mochi is in (never over a button); the zoomies may cross the buttons, ending over free room', () {
       var toys = 0;
       for (var seed = 0; seed < 40; seed++) {
         final stroller = Stroller(random: Random(seed))..place(_zones, now: 0, x: 300 + seed * 20);
@@ -131,7 +131,7 @@ void main() {
         _live(stroller, 0, 1500, (t) {
           seen.addAll(stroller.segments);
           final sample = stroller.sample(t);
-          expect(_inZone(_zones, sample.x), isTrue);
+          if (!sample.travelling || _play.contains(sample.activity) && sample.activity != StrollActivity.zoomies) expect(_inZone(_zones, sample.x), isTrue);
           for (final toy in sample.props) {
             toys++;
             // (A flutter or a drift sways a few pixels either side of its path.)
@@ -140,7 +140,7 @@ void main() {
         }, step: 0.1);
         for (final segment in seen) {
           expect(_inZone(_zones, segment.fromX) && _inZone(_zones, segment.toX), isTrue, reason: '$segment');
-          if (segment.travels && !segment.hop) {
+          if (segment.travels && !segment.hop && !segment.crosses) {
             expect(_zones.any((zone) => _inZone([zone], segment.fromX) && _inZone([zone], segment.toX)), isTrue, reason: 'no crossing: $segment');
           }
         }

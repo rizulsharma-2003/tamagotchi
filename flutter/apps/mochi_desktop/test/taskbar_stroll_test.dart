@@ -99,7 +99,7 @@ void main() {
     expect(window.raises, greaterThan(0), reason: 'over the taskbar from the start');
   });
 
-  strollTest('walks: the window moves only inside the free stretches, and no timer runs while Mochi rests', (tester) async {
+  strollTest('walks: the window moves along the taskbar, over the buttons too, and no timer runs while Mochi rests', (tester) async {
     final stroll = await start(tester, seed: 3);
     var rested = false;
     await elapse(
@@ -112,12 +112,15 @@ void main() {
     );
     expect(window.moves, isNotEmpty, reason: 'Mochi walked');
     final stage = stroll.stage!;
+    var overButtons = false;
     for (final move in window.moves) {
       // (The window grows upwards for a toy in play, so its feet stay where they are.)
       expect(move.bottom, window.frames.first.bottom, reason: 'it stays at the same height');
       final centre = (move.left + move.width / 2) / stage.scale;
-      expect(stage.zones.any((zone) => centre >= zone.minX - 1 && centre <= zone.maxX + 1), isTrue, reason: '$move');
+      expect(centre, inInclusiveRange(stage.zones.first.minX - 1, stage.zones.last.maxX + 1), reason: 'along the taskbar: $move');
+      if (!stage.zones.any((zone) => centre >= zone.minX - 1 && centre <= zone.maxX + 1)) overButtons = true;
     }
+    expect(overButtons, isTrue, reason: 'it walked over the buttons to the other stretch');
     expect(rested, isTrue, reason: 'the frame timer stops while Mochi rests');
   });
 

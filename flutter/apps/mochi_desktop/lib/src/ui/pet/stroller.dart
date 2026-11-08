@@ -2,18 +2,25 @@
 // functions of time (so it can be drawn at any frame rate). It follows the Mac's MenuBarRoamer
 // (Sources/TamagotchiCore/Roaming/MenuBarRoamer.swift), cut down to a strip with no bed: Patch's desk is home.
 //
-// Mochi walks only in the taskbar's empty stretches (zones) and never over its buttons: to get to another stretch it
-// fades out and back in there (a hop), as the Mac's Mochi does with Reduce Motion on.
+// The taskbar's empty stretches (zones) are where Mochi lingers; the buttons between them it only crosses, as the Mac's Mochi
+// runs, leaps and plays across other apps' status items but rests, naps, sniffs and fidgets only where the bar is free
+// (`RoamZone.canLinger`, `freeSpot`). Getting to another stretch is a real walk, or a trot when it's far, over the buttons
+// (`StrollSegment.crosses`); it fades out and back in there (`hop`) only with animation effects off, as the Mac's Mochi does
+// with Reduce Motion on. Every stop, hold and rest is over free room: a walk always ends in a stretch, and a plan cut in the
+// middle of a trip (a reaction, a drag) first walks on to the nearest free spot. Beside Patch or in "Plays in its spot" there
+// is only the one stretch, and Mochi keeps to it as ever.
 //
-// - Nothing going on (free): it wanders, sniffs about, fidgets, sits and rests (10–35 s between outings, with a glance
-//   or a scratch in the middle of long rests) and sometimes naps, more the longer Claude has been quiet. And it plays
+// - Nothing going on (free): it wanders (to somewhere free anywhere on the taskbar, each stretch as likely as it is long, over
+//   the buttons to get there), trots, goes over to another stretch for a look round, sniffs about, fidgets, sits and rests
+//   (10–35 s between outings, with a glance or a scratch in the middle of long rests) and sometimes naps, more the longer
+//   Claude has been quiet. And it plays
 //   on its own as the Mac's menu-bar Mochi does (`chooseFreeActivity`, `RoamBuilder.zoomies`, `ballPlay`,
 //   `chaseButterfly`, `leafPlay` with the Mac's weights, motions, poses and timings, scaled up to the taskbar): zoomies
-//   (sprints along its stretch, skids and doubles back), a ball or yarn to bat and chase, a butterfly to stalk and leap
-//   at, a leaf to watch land and bat away. The toys are props on the plan ([StrollPropTrack]; the view draws them with
-//   mochi_art's EffectRenderer.drawProp), and the window grows around Mochi for them ([StrollPropTrack.reachX]).
-//   Each play stays inside the free stretch Mochi is in (so never over a button, and in "Plays in its spot" inside its
-//   room) and is skipped when the stretch is too short for it.
+//   (sprints along the taskbar, over the buttons if they're in the way, each dash skidding to a stop over free room, and
+//   doubling back), a ball or yarn to bat and chase, a butterfly to stalk and leap at, a leaf to watch land and bat away.
+//   The toys are props on the plan ([StrollPropTrack]; the view draws them with mochi_art's EffectRenderer.drawProp), and the
+//   window grows around Mochi for them ([StrollPropTrack.reachX]). A toy's play stays inside the free stretch Mochi is in
+//   (so never over a button, and in "Plays in its spot" inside its room) and is skipped when the stretch is too short for it.
 // - Peekaboo (Mischief's X3, only with Mochi free to wander alone): after two minutes without input Mochi walks to a
 //   free spot and sinks down into the taskbar until only its ears and eyes show above the bottom of its window
 //   (`StrollSample.sink`; the view draws it lower and the window's edge cuts it off), looking around now and then. When
@@ -21,8 +28,8 @@
 //   anything else (Claude needing you, a reaction, a nap, a drag, the switch going off) brings it up normally first
 //   (every cut of the plan rises before it carries on).
 // - Landmarks (Mischief's X6, only while Mochi is free to wander alone and the caller says which landmarks are known and
-//   allowed, `setLandmarks`): about as often as a toy, Mochi visits a landmark of the taskbar. The clock: it walks to the
-//   free spot nearest it, leaps up and hangs from the clock button's top edge for 6–10 seconds (PetAnimation.idle with the
+//   allowed, `setLandmarks`): about as often as a toy, Mochi visits a landmark of the taskbar. The clock: it walks (over the
+//   buttons, if that spot is in another stretch) to the free spot nearest it, leaps up and hangs from the clock button's top edge for 6–10 seconds (PetAnimation.idle with the
 //   `StrollStyle.hang` accent: both arms up holding on, a gentle swing, drawn lifted `StrollSample.lift`), then drops back
 //   down. Start: it goes to the free spot right beside the button, faces it, bats at it three or four times with a pounce
 //   (PetAnimation.bat, .pounce) and wanders off. The widgets tile: it leaps onto the taskbar's top edge above the tile and
@@ -38,8 +45,8 @@
 // - Animation effects off: it stays where it is, expressions only.
 // - A pet, a game, a finished turn: it holds still while that plays (facing you for news), then carries on.
 // - The cursor buddy (Mischief's X4, only with Mochi free to wander): while the pointer is on the taskbar Mochi turns
-//   to it, trots (or runs, if far) to the free spot nearest it and sits beside it, never under it (at least a body
-//   away, so whatever is under the pointer stays clickable), hopping between stretches as a stroll does. When the pointer
+//   to it, trots (or runs, if far) to the free spot nearest it, over the buttons if need be, and sits beside it, never under
+//   it (at least a body away, so whatever is under the pointer stays clickable). When the pointer
 //   stops, a pounce or a sit facing it. A pointer coming to Mochi (within a body and a half) stops it at once, facing
 //   you, holding still: it never moves away from one that's coming to it, so it can be clicked. The pointer leaving the
 //   taskbar, Mochi watches a moment and carries on strolling (`follow`).
@@ -47,6 +54,10 @@
 //   on the Mac (`RoamMode.companion`, `.working`): it sits with him, potters a little way off and comes back, watches
 //   him work, waves from beside him when Claude needs you and naps there. For a moment together (a high five, a coffee
 //   delivery) it holds still where it is while the moment plays (it goes over to him and back in the moment itself).
+//
+// - Drawn by the native stage while Mochi's window is open (`useView(false)`; ui/pet/taskbar_stroll.dart): the toys, the
+//   landmark visits and Peekaboo are left out, since the pet's own view draws their props, lifts and sink; the rest
+//   (walking, resting, napping, attending, reactions, zoomies, the cursor buddy) goes on as ever.
 //
 // Positions are Mochi's centre in logical pixels along the taskbar; times are seconds on the caller's clock. The plan
 // reaches a couple of seconds ahead and is extended as time passes (`update`). Every choice comes from the `Random`
@@ -90,7 +101,7 @@ enum StrollMode {
 }
 
 /// What Mochi is up to.
-enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, hop, potter, watch, attend, sleep, still, react, company, follow, zoomies, butterfly, ball, yarn, leaf, hide, swing, batStart, perch }
+enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, cross, hop, potter, watch, attend, sleep, still, react, company, follow, zoomies, butterfly, ball, yarn, leaf, hide, swing, batStart, perch }
 
 /// Small accents the pose gets on top of its animation.
 enum StrollStyle {
@@ -245,6 +256,7 @@ class StrollSegment {
     this.speed = 0,
     this.ease = 0,
     this.hop = false,
+    this.crosses = false,
     this.sinkFrom = 0,
     this.sinkTo = 0,
     this.liftFrom = 0,
@@ -273,8 +285,11 @@ class StrollSegment {
   final double speed;
   final double ease;
 
-  /// Mochi fades out at [fromX] and back in at [toX] (to another stretch of the taskbar, over the buttons).
+  /// Mochi fades out at [fromX] and back in at [toX] (to another stretch of the taskbar, with animation effects off).
   final bool hop;
+
+  /// Mochi walks over the taskbar's buttons on this walk (it may start and end in different stretches).
+  final bool crosses;
 
   /// How far down into the taskbar Mochi is at the start and the end of the segment (0 standing, 1 hidden: Peekaboo).
   final double sinkFrom;
@@ -600,7 +615,7 @@ class Stroller {
   List<StrollSegment> get segments => List.unmodifiable(_segments);
 
   /// Starts the stroll in [zones] at [x] (or carries on from where Mochi is), in [mode]. Carrying on from a spot
-  /// that's no longer in a free stretch (the buttons moved), Mochi hops to the nearest free one. With a [home] (Patch's
+  /// that's no longer in a free stretch (the buttons moved), Mochi walks to the nearest free one. With a [home] (Patch's
   /// spot: [zones] is then the little stretch beside his desk), Mochi keeps him company.
   void place(
     List<StrollLine> zones, {
@@ -628,7 +643,7 @@ class Stroller {
     final from = x ?? state?.x ?? _zones.first.minX;
     final to = nearest(from);
     _pen(now, state == null || x != null ? to : from, facing ?? state?.facing ?? 1, state?.odometer ?? 0);
-    if (_x != to) _hopTo(to);
+    if (_x != to) _goTo(to);
     _open();
     _extend(now);
   }
@@ -641,8 +656,8 @@ class Stroller {
     bool free(double x) => sorted.any((zone) => x >= zone.minX - 0.5 && x <= zone.maxX + 0.5);
     final fits = _segments.where((segment) => segment.end > now).every((segment) {
       if (!free(segment.toX) || (segment.start >= now && !free(segment.fromX))) return false;
-      // A walk can't cross a button: both ends in the same stretch.
-      if (segment.travels && !segment.hop) {
+      // A walk that doesn't cross the buttons keeps to one stretch: both ends in the same one.
+      if (segment.travels && !segment.hop && !segment.crosses) {
         return sorted.any((zone) => [segment.fromX, segment.toX].every((x) => x >= zone.minX - 0.5 && x <= zone.maxX + 0.5));
       }
       return true;
@@ -961,20 +976,16 @@ class Stroller {
     if ((spot - here).abs() < 2) return _settle(now, pointerX, still);
     final target = _buddyTarget;
     if (_buddy && target != null && ((spot - target).abs() < bodyWidth * 0.5 || now - _lastRetarget < 0.4)) return false;
-    // Off to the spot beside the pointer: turn to it, trot (run if far), and sit there.
-    _cut(now);
+    // Off to the spot beside the pointer: turn to it, trot (run if far), over the buttons if need be, and sit there.
+    _cut(now, settle: false);
     _buddy = true;
     _buddyTarget = spot;
     _buddyHold = _BuddyHold.none;
     _lastRetarget = now;
     _activity = StrollActivity.follow;
-    if (_zoneAt(spot) != _line) {
-      _hopTo(spot);
-    } else {
-      final far = (spot - _x).abs() > buddyFar * bodyWidth;
-      // A re-aim on the move doesn't start from a standstill again.
-      _walk(spot, speed: far ? buddyRun : tuning.trotSpeed, easeIn: target == null ? null : 0.12);
-    }
+    final far = (spot - _x).abs() > buddyFar * bodyWidth;
+    // A re-aim on the move doesn't start from a standstill again.
+    _walk(spot, speed: far ? buddyRun : tuning.trotSpeed, easeIn: target == null ? null : 0.12, cross: true);
     _facing = pointerX >= _x ? 1.0 : -1.0;
     _holdForever(PetAnimation.sit);
     _extend(now);
@@ -1079,8 +1090,9 @@ class Stroller {
   }
 
   /// Drops the plan from [now] on; the pen starts where Mochi is. A Mochi that is sunk down (hiding) comes up first, so
-  /// whatever cuts the plan finds it standing.
-  void _cut(double now) {
+  /// whatever cuts the plan finds it standing; one over a button (crossing the taskbar) walks on to the nearest free spot,
+  /// unless it's about to go somewhere else ([settle] false).
+  void _cut(double now, {bool settle = true}) {
     final state = _state(now);
     _segments.clear();
     _hiding = false;
@@ -1090,13 +1102,15 @@ class Stroller {
     _visitUntil = double.negativeInfinity;
     _pen(now, state.x, state.facing, state.odometer, sink: state.sink, lift: state.lift);
     if (state.sink > 0) _add(PetAnimation.sit, 0.3 + 0.5 * state.sink, sinkTo: 0);
-    // On a landmark (or leaping to one): drops back to the free spot nearest it first, so whatever cut the plan finds
-    // Mochi in free room.
+    // On a landmark (or leaping to one): drops back to the free spot nearest it first, so whatever cut the plan finds Mochi
+    // in free room; over a button: walks on to it.
     final spot = nearest(state.x);
-    if (state.lift > 0 || (spot - state.x).abs() > 0.5) {
+    if (state.lift > 0) {
       final from = _t;
       _leap(spot, lift: 0);
-      if (state.lift > 0) _rooms.add(_Room(from, _t, _dropRoom(state.lift)));
+      _rooms.add(_Room(from, _t, _dropRoom(state.lift)));
+    } else if (settle && (spot - state.x).abs() > 0.5) {
+      _walk(spot, speed: tuning.trotSpeed, cross: true);
     }
   }
 
@@ -1139,6 +1153,7 @@ class Stroller {
     StrollStyle style = StrollStyle.plain,
     bool oneShot = false,
     bool hop = false,
+    bool crosses = false,
     double? sinkTo,
     double? liftTo,
     double arc = 0,
@@ -1162,6 +1177,7 @@ class Stroller {
         speed: speed,
         ease: ease,
         hop: hop,
+        crosses: crosses,
         sinkFrom: _sink,
         sinkTo: sunk,
         liftFrom: _lift,
@@ -1194,13 +1210,21 @@ class Stroller {
     _hold(PetAnimation.idle, 0.35, style: StrollStyle.notice);
   }
 
-  /// Walks (or trots) to [target], kept on the line; turns round first if it's behind.
-  void _walk(double target, {double? speed, double? easeIn, double atLeast = 0}) {
-    final goal = _line!.clamp(target);
+  /// Walks (or trots) to [target], kept on the line (or, with [cross], anywhere on the taskbar, over its buttons: [target]
+  /// is then a free spot); turns round first if it's behind.
+  void _walk(double target, {double? speed, double? easeIn, double atLeast = 0, bool cross = false}) {
+    final goal = (cross ? _bar! : _line!).clamp(target);
     final distance = (goal - _x).abs();
     if (distance < 1) return;
     final direction = goal > _x ? 1.0 : -1.0;
-    if (direction != _facing) _turn(direction);
+    if (direction != _facing) {
+      // Over a button (a trip cut short) there's no stopping to notice the way: it turns on the move.
+      if (_free(_x)) {
+        _turn(direction);
+      } else {
+        _facing = direction;
+      }
+    }
     var pace = speed ?? tuning.walkSpeed;
     final ease = math.min(easeIn ?? tuning.ease, distance / pace);
     // Not before [atLeast] seconds: slower, to arrive as something else finishes.
@@ -1211,14 +1235,63 @@ class Stroller {
       toX: goal,
       speed: pace,
       ease: ease,
+      crosses: cross,
     );
+    if (cross) _line = _zoneAt(goal);
     // At the screen's edge: turn round.
     if (_room(direction) < 1) _turn(-direction);
   }
 
-  double _room(double direction) => direction > 0 ? _line!.maxX - _x : _x - _line!.minX;
+  /// [x] is over free room (a free stretch), not over a button.
+  bool _free(double x) => _zones.any((zone) => x >= zone.minX - 0.5 && x <= zone.maxX + 0.5);
 
-  /// Fades out here and back in at [target] (another stretch: Mochi never walks over the taskbar's buttons).
+  /// How far Mochi can go in [direction] within [within] (the stretch it's in, by default).
+  double _room(double direction, [StrollLine? within]) {
+    final span = within ?? _line!;
+    return direction > 0 ? span.maxX - _x : _x - span.minX;
+  }
+
+  /// Everything Mochi may walk across: the taskbar from the first free stretch to the last, buttons and all, when there's
+  /// more than one stretch and it isn't beside Patch (as the Mac's Mochi walks past other apps' status items; it lingers only
+  /// where the bar is free, `RoamZone.canLinger`); otherwise just the stretch it's in.
+  StrollLine? get _bar => _crossing ? StrollLine(_zones.first.minX, _zones.last.maxX) : _line;
+
+  bool get _crossing => _zones.length > 1 && _home == null;
+
+  /// To the free spot [target] anywhere on the taskbar: a walk over the buttons in between (a trot when it's far), or, with
+  /// animation effects off, a fade, as the Mac's Mochi fades with Reduce Motion on.
+  void _goTo(double target, {double? speed, double? easeIn}) {
+    if (_mode == StrollMode.still) {
+      if ((target - _x).abs() >= 1) _hopTo(target);
+      return;
+    }
+    _walk(target, speed: speed ?? ((target - _x).abs() > farWalk ? tuning.trotSpeed : null), easeIn: easeIn, cross: true);
+  }
+
+  /// A trip longer than this (logical pixels) is a trot.
+  static const double farWalk = 400;
+
+  /// A free spot chosen at random on the taskbar, each stretch as likely as it is long, and at least [atLeast] from Mochi
+  /// when the dice allow.
+  double _randomSpot({double atLeast = 0}) {
+    final total = _zones.fold<double>(0, (sum, zone) => sum + zone.maxX - zone.minX);
+    double pick() {
+      var roll = _uniform(0, total);
+      for (final zone in _zones) {
+        if (roll <= zone.maxX - zone.minX) return zone.minX + roll;
+        roll -= zone.maxX - zone.minX;
+      }
+      return _zones.last.maxX;
+    }
+
+    var spot = pick();
+    for (var tries = 0; tries < 8 && (spot - _x).abs() < atLeast; tries++) {
+      spot = pick();
+    }
+    return spot;
+  }
+
+  /// Fades out here and back in at [target] (animation effects off: Mochi doesn't walk then).
   void _hopTo(double target) {
     final activity = _activity;
     _activity = StrollActivity.hop;
@@ -1227,10 +1300,10 @@ class Stroller {
     _activity = activity;
   }
 
-  /// Mostly towards the side with more room.
-  double _roomyDirection() {
-    final right = _room(1);
-    final total = right + _room(-1);
+  /// Mostly towards the side with more room (within [within]: the stretch Mochi is in, by default).
+  double _roomyDirection([StrollLine? within]) {
+    final right = _room(1, within);
+    final total = right + _room(-1, within);
     if (total <= 0) return 1;
     return _random.nextDouble() < right / total ? 1 : -1;
   }
@@ -1407,7 +1480,7 @@ class Stroller {
       (StrollActivity.fidget, 1.8),
       (StrollActivity.nap, naps),
       (StrollActivity.trot, 0.5),
-      if (_zones.length > 1) (StrollActivity.hop, 0.6),
+      if (_crossing) (StrollActivity.cross, 0.6),
       if (_playFits(StrollActivity.zoomies)) (StrollActivity.zoomies, 1.0),
       // The toys are drawn by the pet's view.
       if (_view && _playFits(StrollActivity.butterfly)) (StrollActivity.butterfly, 1.2),
@@ -1439,8 +1512,8 @@ class Stroller {
         _nap();
       case StrollActivity.trot:
         _trot();
-      case StrollActivity.hop:
-        _hopAcross();
+      case StrollActivity.cross:
+        _crossOver();
       case StrollActivity.zoomies:
         _zoomies();
       case StrollActivity.butterfly:
@@ -1478,15 +1551,6 @@ class Stroller {
     if (!_view || mark == null || _zones.isEmpty || _line == null) return null;
     final spot = nearest(mark.x);
     return (spot - mark.x).abs() <= mark.reach ? spot : null;
-  }
-
-  /// To [spot]: walking if it's in the stretch Mochi is in, else a hop to its stretch.
-  void _goTo(double spot) {
-    if (_zoneAt(spot) != _line) {
-      _hopTo(spot);
-    } else {
-      _walk(spot);
-    }
   }
 
   /// A leap (with an arc) from where Mochi is to [target], ending [lift] above the taskbar's floor: onto a landmark, or
@@ -1597,10 +1661,15 @@ class Stroller {
     _ => 60,
   };
 
-  /// The stretch Mochi is in is long enough for [activity]: room for it on each side of the middle.
+  /// What [activity] plays across: the stretch Mochi is in, or, for the zoomies, which may cross the buttons as on the Mac,
+  /// the whole taskbar. (The toys stay in a free stretch.)
+  StrollLine? _span(StrollActivity activity) => activity == StrollActivity.zoomies ? _bar : _line;
+
+  /// The stretch Mochi is in (the taskbar, for the zoomies) is long enough for [activity]: room for it on each side of the
+  /// middle.
   bool _playFits(StrollActivity activity) {
-    final line = _line;
-    return line != null && line.maxX - line.minX >= 2 * _playNeed(activity);
+    final span = _span(activity);
+    return span != null && span.maxX - span.minX >= 2 * _playNeed(activity);
   }
 
   double _roomFrom(double x, double direction) => direction > 0 ? _line!.maxX - x : x - _line!.minX;
@@ -1608,9 +1677,10 @@ class Stroller {
   /// Where Mochi stands to play: where it is if there's room for [activity] on one side, else the middle of the stretch.
   double _toPlaySpot(StrollActivity activity) {
     final need = _playNeed(activity);
-    if (math.max(_room(1), _room(-1)) < need) _walk((_line!.minX + _line!.maxX) / 2);
-    var direction = _roomyDirection();
-    if (_room(direction) < need) direction = -direction;
+    final span = _span(activity)!;
+    if (math.max(_room(1, span), _room(-1, span)) < need) _walk(nearest((span.minX + span.maxX) / 2), cross: true);
+    var direction = _roomyDirection(span);
+    if (_room(direction, span) < need) direction = -direction;
     if (direction != _facing) _turn(direction);
     return direction;
   }
@@ -1646,27 +1716,31 @@ class Stroller {
   /// Room around a toy beyond its centre (logical pixels): its own size, and the wobble.
   static const double propMargin = 16;
 
-  /// Sprints along the stretch and skids back (`zoomies`): a bounce or a shake, three to five dashes, a tumble or a
-  /// bounce, a blep.
+  /// Sprints along the taskbar, over the buttons if they're in the way, and skids back (`zoomies`): a bounce or a shake,
+  /// three to five dashes that each end over a free spot, a tumble or a bounce, a blep.
   void _zoomies() {
     _activity = StrollActivity.zoomies;
+    final span = _span(StrollActivity.zoomies)!;
     var direction = _toPlaySpot(StrollActivity.zoomies);
     _act(_chance(0.5) ? PetAnimation.happyBounce : PetAnimation.shake);
     final legs = 3 + _random.nextInt(3);
     final zoom = _MacSpeed.zoom * _k;
     final skidRoom = zoom * 0.1 + 2;
     for (var leg = 0; leg < legs; leg++) {
-      if (_room(direction) < 40 * _k + skidRoom) direction = -direction;
-      final room = _room(direction);
+      if (_room(direction, span) < 40 * _k + skidRoom) direction = -direction;
+      final room = _room(direction, span);
       if (leg < legs - 1) {
         final distance = math.min(_uniform(70, 230) * _k, room - skidRoom);
         if (distance <= 20 * _k) break;
-        // Sprint, skid to a stop, hop around, go again.
-        _walk(_x + direction * distance, speed: zoom, easeIn: 0.18);
+        // Sprint, skid to a stop (over free room), hop around, go again.
+        final stop = nearest(_x + direction * distance);
+        if ((stop - _x) * direction <= 20 * _k) break;
+        _walk(stop, speed: zoom, easeIn: 0.18, cross: true);
         direction = -direction;
       } else {
         // The last dash ends with room to spare, where the finale plays.
-        _walk(_x + direction * math.min(_uniform(50, math.max(50, math.min(230, room / _k))) * _k, room), speed: zoom, easeIn: 0.18);
+        final stop = nearest(_x + direction * math.min(_uniform(50, math.max(50, math.min(230, room / _k))) * _k, room));
+        if ((stop - _x) * direction > 0) _walk(stop, speed: zoom, easeIn: 0.18, cross: true);
       }
     }
     if (_chance(0.5) && _room(_facing) > 15 * _k) {
@@ -1830,31 +1904,46 @@ class Stroller {
     _prop(ScenePropKind.leaf, keys, scale: _Toys.leafScale, variant: _random.nextInt(3));
   }
 
+  /// Wanders off to somewhere free on the taskbar (any stretch, over the buttons to get there), or, in a stretch of its own,
+  /// a way along it.
   void _wander() {
-    var direction = _roomyDirection();
-    if (_room(direction) < 120) direction = -direction;
-    _walk(_x + direction * _uniform(120, 700));
+    if (_crossing) {
+      _goTo(_randomSpot(atLeast: 120));
+    } else {
+      var direction = _roomyDirection();
+      if (_room(direction) < 120) direction = -direction;
+      _walk(_x + direction * _uniform(120, 700));
+    }
+    final direction = _facing;
     _hold(PetAnimation.idle, _uniform(0.6, 1.4));
     if (_chance(0.45)) _act(PetAnimation.lookAround);
     if (_chance(0.25)) _walk(_x - direction * _uniform(30, 90));
   }
 
   void _trot() {
-    var direction = _roomyDirection();
-    if (_room(direction) < 250) direction = -direction;
-    if (direction != _facing) _turn(direction);
-    _hold(PetAnimation.idle, 0.3, style: StrollStyle.notice);
-    _walk(_x + direction * _uniform(250, 700), speed: tuning.trotSpeed);
+    if (_crossing) {
+      final spot = _randomSpot(atLeast: 250);
+      final direction = spot >= _x ? 1.0 : -1.0;
+      if (direction != _facing) _turn(direction);
+      _hold(PetAnimation.idle, 0.3, style: StrollStyle.notice);
+      _walk(spot, speed: tuning.trotSpeed, cross: true);
+    } else {
+      var direction = _roomyDirection();
+      if (_room(direction) < 250) direction = -direction;
+      if (direction != _facing) _turn(direction);
+      _hold(PetAnimation.idle, 0.3, style: StrollStyle.notice);
+      _walk(_x + direction * _uniform(250, 700), speed: tuning.trotSpeed);
+    }
     _act(_chance(0.5) ? PetAnimation.happyBounce : PetAnimation.blep);
   }
 
-  /// Over to another free stretch, and a look around there.
-  void _hopAcross() {
+  /// Over to another free stretch, a walk (a trot when it's far) over the buttons in between, and a look around there.
+  void _crossOver() {
     final others = [for (final zone in _zones) if (zone != _line) zone];
     if (others.isEmpty) return _hold(PetAnimation.idle, _uniform(2, 4));
     final zone = others[_random.nextInt(others.length)];
     _hold(PetAnimation.idle, 0.4, style: StrollStyle.notice);
-    _hopTo(zone.minX + (zone.maxX - zone.minX) * _uniform(0.2, 0.8));
+    _goTo(zone.minX + (zone.maxX - zone.minX) * _uniform(0.2, 0.8));
     _act(PetAnimation.lookAround);
   }
 

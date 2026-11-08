@@ -112,17 +112,25 @@ void main() {
     final target = farFrom(stroll);
     pointAt(stroll, target);
     var travelled = false;
+    var crossed = false;
     await elapse(
       tester,
       30,
       each: () {
         final x = mochi(stroll);
-        if (stroll.sample()!.travelling) travelled = true;
-        expect(inFreeStretch(stroll, x), isTrue, reason: 'never over a button: $x');
+        if (stroll.sample()!.travelling) {
+          travelled = true;
+          // It walks over the buttons to get to the pointer's stretch (no fade), but only stops in free room.
+          if (!inFreeStretch(stroll, x)) crossed = true;
+        } else {
+          expect(inFreeStretch(stroll, x), isTrue, reason: 'never rests over a button: $x');
+        }
+        expect(stroll.stroller.segments.any((segment) => segment.hop), isFalse, reason: 'a walk, not a fade');
         expect((x - target).abs(), greaterThanOrEqualTo(w * 0.99), reason: 'never under the pointer: $x vs $target');
       },
     );
     expect(travelled, isTrue);
+    expect(crossed, isTrue, reason: 'it crossed the buttons on foot');
     expect(stroll.stroller.buddying, isTrue);
     expect((mochi(stroll) - target).abs(), lessThanOrEqualTo(Stroller.buddyNear * w + 1), reason: 'beside the pointer');
     expect(stroll.placement, PetPlacement.taskbar, reason: 'never leaves the taskbar');
@@ -135,7 +143,7 @@ void main() {
         tester,
         6,
         each: () {
-          expect(inFreeStretch(stroll, mochi(stroll)), isTrue);
+          if (!stroll.sample()!.travelling) expect(inFreeStretch(stroll, mochi(stroll)), isTrue);
           if (stroll.sample()!.travelling) expect((mochi(stroll) - x).abs(), greaterThanOrEqualTo(w * 0.99));
         },
       );
