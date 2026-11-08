@@ -5,6 +5,7 @@
 //   GUID_CONSOLE_DISPLAY_STATE);
 // - `session`: the session was locked, unlocked or switched (WTSRegisterSessionNotification's WTS_* codes);
 // - `power`: the PC is going to sleep or woke (PBT_APMSUSPEND / PBT_APMRESUMEAUTOMATIC);
+// - `sessionEnding`: Windows is ending the session (WM_QUERYENDSESSION, WM_ENDSESSION): the nudges put any window back;
 // - `hotkey`: one of Mochi's shortcuts was pressed (WM_HOTKEY with its id);
 // - `toastActivated`: one of Mochi's Windows notifications was clicked (its `launch` argument; windows/runner/toasts.cpp);
 // - `state` (asked): the display and lock state now (the lock from WTSQuerySessionInformation at launch).
@@ -45,6 +46,11 @@ class RunnerSystem implements HotkeyRegistrar {
   /// The display, the lock or sleep changed.
   Stream<void> get changes => _changes.stream;
 
+  final StreamController<void> _ending = StreamController.broadcast();
+
+  /// Windows is ending the session (a log off, a shutdown or a restart).
+  Stream<void> get sessionEnding => _ending.stream;
+
   Future<void> _readState() async {
     try {
       final state = await _channel.invokeMapMethod<String, Object?>('state');
@@ -77,6 +83,8 @@ class RunnerSystem implements HotkeyRegistrar {
       case 'power':
         suspended = call.arguments == 'suspend';
         _changes.add(null);
+      case 'sessionEnding':
+        _ending.add(null);
       case 'hotkey':
         final id = call.arguments;
         if (id is int) _pressed.add(id);

@@ -7,7 +7,7 @@
 //   it now); only a bool leaves the reader, never which app.
 // - The foreground app: GetForegroundWindow, GetWindowThreadProcessId, OpenProcess (limited query) and
 //   QueryFullProcessImageName, reduced to the file name ("Code.exe"); never a window title or contents. Mochi's own
-//   windows read as null.
+//   windows read as null. The same read of any window's handle ([windowProcessName]) serves X2's terminal tug.
 //
 // The macOS development build has none; tests use fakes.
 
@@ -102,29 +102,39 @@ class Win32Mic implements MicReader {
 class Win32ForegroundApp implements ForegroundApps {
   @override
   String? processName() {
-    final pid = calloc<Uint32>();
-    final path = calloc<Uint16>(1024);
-    final size = calloc<Uint32>();
-    var process = 0;
     try {
       final window = GetForegroundWindow();
-      if (window == 0) return null;
-      GetWindowThreadProcessId(window, pid);
-      if (pid.value == 0 || pid.value == GetCurrentProcessId()) return null;
-      process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid.value);
-      if (process == 0) return null;
-      size.value = 1024;
-      if (QueryFullProcessImageName(process, 0, path.cast<Utf16>(), size) == 0) return null;
-      final full = path.cast<Utf16>().toDartString(length: size.value);
-      return full.split(RegExp(r'[\\/]')).last;
+      return window == 0 ? null : windowProcessName(window);
     } on Object {
       return null;
-    } finally {
-      if (process != 0) CloseHandle(process);
-      calloc.free(pid);
-      calloc.free(path);
-      calloc.free(size);
     }
+  }
+}
+
+/// The file name of the program that owns [window] ("Code.exe"), or null for one of Mochi's own windows or when Windows won't
+/// say. Never a title or contents (X7 reads it for the foreground window, X2 for the windows it may nudge).
+String? windowProcessName(int window) {
+  final pid = calloc<Uint32>();
+  final path = calloc<Uint16>(1024);
+  final size = calloc<Uint32>();
+  var process = 0;
+  try {
+    if (window == 0) return null;
+    GetWindowThreadProcessId(window, pid);
+    if (pid.value == 0 || pid.value == GetCurrentProcessId()) return null;
+    process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid.value);
+    if (process == 0) return null;
+    size.value = 1024;
+    if (QueryFullProcessImageName(process, 0, path.cast<Utf16>(), size) == 0) return null;
+    final full = path.cast<Utf16>().toDartString(length: size.value);
+    return full.split(RegExp(r'[\\/]')).last;
+  } on Object {
+    return null;
+  } finally {
+    if (process != 0) CloseHandle(process);
+    calloc.free(pid);
+    calloc.free(path);
+    calloc.free(size);
   }
 }
 

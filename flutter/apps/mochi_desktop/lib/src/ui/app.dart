@@ -24,6 +24,8 @@ import '../platform/image_export.dart';
 import '../platform/native_stage.dart';
 import '../platform/foreground_window.dart';
 import '../platform/window_frames.dart';
+import '../platform/window_mover.dart';
+import '../core/window_nudge.dart' show WindowMover;
 import '../platform/win32_taskbar.dart' show Win32PetWindow, Win32TaskbarInfo;
 import 'perf_meter.dart';
 import 'pet/companion_director.dart';
@@ -80,6 +82,7 @@ class DesktopApp extends StatefulWidget {
     this.stage,
     this.windowFrames,
     this.foregroundWindow,
+    this.windowMover,
   });
 
   final MochiDesktop desktop;
@@ -96,6 +99,9 @@ class DesktopApp extends StatefulWidget {
 
   /// The window with the focus (Peekaboo; null: Win32's).
   final ForegroundWindows? foregroundWindow;
+
+  /// What the window nudges ask of Windows (X2; Win32 on Windows, none elsewhere, a fake in tests).
+  final WindowMover? windowMover;
 
   /// Where the taskbar is (Win32 on Windows, none elsewhere, a fake in tests).
   final TaskbarInfo? taskbar;
@@ -175,6 +181,11 @@ class DesktopAppState extends State<DesktopApp> {
     takeoverOccasion: MischiefStage.takeoverFrom(Platform.environment['MOCHI_DESKTOP_TAKEOVER']),
     patchOnTaskbar: () => _stroll.home != null,
     weather: MischiefStage.weatherFrom(Platform.environment['MOCHI_DESKTOP_WEATHER']),
+    // Window nudges (X2): the journal that puts a window back after a crash is nudge.json in Mochi's folder.
+    mover: widget.windowMover ?? systemWindowMover(),
+    nudgeStore: demoMode ? MemoryJsonStore() : FileJsonStore(desktop.paths.join(desktop.paths.home, 'nudge.json')),
+    nudgeForce: MischiefStage.nudgeFrom(Platform.environment['MOCHI_DESKTOP_NUDGE']),
+    nudgeLog: _strollLog(),
   );
 
   /// The Windows extras on the native stage (tests).
