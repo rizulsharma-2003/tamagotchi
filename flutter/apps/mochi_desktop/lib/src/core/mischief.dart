@@ -72,6 +72,14 @@ enum MischiefExtra {
     'Weather and time moods',
     'Mochi has coffee with Patch the first time you’re at your PC in the morning, and can bring an umbrella when it rains.',
     moves: true,
+  ),
+
+  /// X7: Mochi bops to music, goes quiet during calls and perks up when you open your editor or terminal.
+  reacts(
+    'Reacts to what you do',
+    'Mochi bops along while music plays, goes quiet while your microphone is in use (a call) and perks up when you open your editor or terminal. '
+        'It only sees whether media is playing, whether the microphone is in use and the app’s name, never what or who. It hides for full-screen games.',
+    moves: true,
   );
 
   const MischiefExtra(this.title, this.detail, {required this.moves});

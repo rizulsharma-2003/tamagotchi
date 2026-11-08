@@ -163,11 +163,17 @@ class MochiSounds {
   final Map<SoundCue, DateTime> _lastPlayed = {};
   final Map<(SoundCue, int), Uint8List> _cache = {};
 
+  /// Mochi is quiet now (a call has the microphone, X7): nothing plays, not even a forced sound.
+  bool Function() muted = _never;
+
+  static bool _never() => false;
+
   /// How many sounds actually played (Settings › Developer, tests).
   int played = 0;
 
   /// Plays [cue]; false when it was too soon after the same one, or silent.
   bool play(SoundCue cue, {bool force = false}) {
+    if (muted()) return false;
     final volume = _volume();
     if (!output.supported || !output.systemSoundsOn || volume <= 0.01) return false;
     final now = _clock();

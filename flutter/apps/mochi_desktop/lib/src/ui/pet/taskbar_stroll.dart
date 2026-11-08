@@ -112,6 +112,7 @@ import 'package:mochi_art/mochi_art.dart' show PetRenderer;
 import '../../core/desktop_settings.dart';
 import '../../core/mischief.dart';
 import '../../core/pc_rhythm.dart';
+import '../../core/reacts.dart';
 import '../../platform/displays.dart';
 import '../../core/pet_cues.dart';
 import '../../platform/system.dart';
@@ -220,6 +221,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     this.companion,
     this.rhythm,
     this.mischief,
+    this.reacts,
     this.displays = const NoDisplays(),
     Duration Function()? idle,
     double Function()? clock,
@@ -241,6 +243,10 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
        _roaming = settings.roamTaskbar {
     // Late at night (X12): the Mac's quiet-hours reshuffle of what Mochi chooses, asked as each stretch is planned.
     stroller.lateWhen(() => LateNight.at(settings, _wall()));
+    // Reacts to what you do (X7): a bop while music plays, calm while the microphone is in use.
+    stroller.reactsWhen(music: () => reacts?.music ?? false, calm: () => reacts?.calling ?? false);
+    reacts?.addListener(_reactsChanged);
+    _perks = reacts?.perks.listen((_) => _perked());
     _cues = cues.listen(_cue);
     _celebrations = companion?.host.celebrated.listen((_) => _celebrated());
     settings.addListener(_settingsChanged);
@@ -270,6 +276,9 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
 
   /// What Mischief allows now (the cursor buddy asks it; null: no extras, as in tests of the stroll alone).
   final MischiefGate? mischief;
+
+  /// Reacts to what you do (X7): music, a call, an editor coming to the front (null: none, as in tests of the stroll alone).
+  final ReactsDirector? reacts;
 
   /// What draws Mochi on the taskbar while Mochi's window is open (null: Mochi is away while it is, as on the macOS build).
   TaskbarStand? stand;
@@ -320,6 +329,7 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
   final DateTime Function() _wall;
   late final StreamSubscription<PetCue> _cues;
   StreamSubscription<Object?>? _celebrations;
+  StreamSubscription<void>? _perks;
 
   Surface _surface = Surface.hidden;
   PetPlacement _placement = PetPlacement.away;
@@ -1669,6 +1679,24 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     _tick();
   }
 
+  /// A call began or ended, or music started or stopped (X7): the stroll looks at it when it plans the next stretch; the
+  /// pet's window shows or hides its speech bubble now.
+  void _reactsChanged() {
+    if (_disposed) return;
+    log?.call('reacts: ${reacts?.label ?? 'none'}');
+    notifyListeners();
+  }
+
+  /// An editor or terminal came to the front (X7): one attentive look toward you, the way Claude's news gets one, and only
+  /// while Mochi is free (never while it works, waits for you, sleeps or is on a call).
+  void _perked() {
+    if (_disposed || !_strolling || _dragging || !stroller.isPlaced || stroller.mode != StrollMode.free) return;
+    if (reacts?.calling ?? false) return;
+    if (companion?.together ?? false) return;
+    stroller.react(_clock(), 2.2, attentive: true);
+    _tick();
+  }
+
   /// One of Mochi's news moments (the Mac's captions: greetings, finishes, snags, worries, celebrations, Claude needing
   /// you): with "only for interesting moments", Patch comes out for it.
   void _moment(PetCue cue) {
@@ -1911,6 +1939,8 @@ class TaskbarStroll extends ChangeNotifier with WidgetsBindingObserver implement
     if (_covered) shell.petWindow?.uncover();
     unawaited(_cues.cancel());
     unawaited(_celebrations?.cancel());
+    unawaited(_perks?.cancel());
+    reacts?.removeListener(_reactsChanged);
     settings.removeListener(_settingsChanged);
     motion.removeListener(_motionChanged);
     companion?.removeListener(_companionChanged);

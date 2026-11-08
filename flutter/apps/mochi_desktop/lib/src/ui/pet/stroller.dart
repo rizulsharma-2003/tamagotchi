@@ -111,7 +111,7 @@ enum StrollMode {
 }
 
 /// What Mochi is up to.
-enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, cross, hop, potter, watch, attend, sleep, still, react, company, follow, zoomies, butterfly, ball, yarn, leaf, hide, swing, batStart, perch }
+enum StrollActivity { settle, rest, wander, sniff, fidget, nap, trot, cross, hop, potter, watch, attend, sleep, still, react, company, follow, zoomies, butterfly, ball, yarn, leaf, hide, swing, batStart, perch, bop }
 
 /// Small accents the pose gets on top of its animation.
 enum StrollStyle {
@@ -604,6 +604,21 @@ class Stroller {
 
   bool get _late => _lateNow();
 
+  // Reacts to what you do (X7): music playing, and a call (the microphone in use), asked as each stretch is planned.
+  bool Function() _musicNow = _never;
+  bool Function() _callNow = _never;
+
+  /// The stroll's answers to X7: whether media is playing ([music]: the free choice gains a bop, never late at night) and
+  /// whether a call has the microphone ([calm]: no zoomies, toys or landmark visits, only rests, fidgets and naps, and
+  /// longer rests). Asked when the next stretch is planned; nothing is re-planned for them.
+  void reactsWhen({required bool Function() music, required bool Function() calm}) {
+    _musicNow = music;
+    _callNow = calm;
+  }
+
+  /// A call has the microphone: Mochi is calm.
+  bool get calm => _callNow();
+
   // Landmarks (X6): the ones that are known and allowed now, the visit in the plan (until when), and the room the window
   // makes for the visits in the plan.
   List<StrollLandmark> _landmarks = const [];
@@ -649,7 +664,7 @@ class Stroller {
   bool get lateNight => _late;
 
   /// Longer or shorter rests between outings: the tuning's, and the Mac's ×1.4 late at night.
-  double get _restScale => tuning.restScale * (_late ? 1.4 : 1);
+  double get _restScale => tuning.restScale * (_late || calm ? 1.4 : 1);
 
   /// Whether the pet's own view draws Mochi from now on. Without it (Mochi's window is open and the native stage draws Mochi on
   /// the taskbar) the toys, the landmark visits and Peekaboo aren't chosen, since their props, lifts and sink are drawn by the
@@ -1586,6 +1601,12 @@ class Stroller {
   StrollActivity _chooseFree() {
     // The longer Claude has been quiet, the sleepier Mochi gets.
     final naps = 0.45 * (_idle > 900 ? 3 : (_idle > 300 ? 2 : 1));
+    if (calm) {
+      // On a call (X7): it stays where it is and rests, fidgets or naps; no zoomies, toys, landmark visits or walks.
+      var quiet = <(StrollActivity, double)>[(StrollActivity.settle, 2), (StrollActivity.fidget, 1.8), (StrollActivity.nap, math.max(naps, 0.9))];
+      if (_recent.isNotEmpty) quiet.removeWhere((option) => option.$1 == _recent.last);
+      return _pick(quiet);
+    }
     var options = <(StrollActivity, double)>[
       (StrollActivity.wander, 3),
       (StrollActivity.sniff, 2),
@@ -1602,6 +1623,8 @@ class Stroller {
       // The taskbar's landmarks (X6), when they're known and allowed and there's a free spot beside them.
       for (final visit in StrollVisit.values)
         if (_visitSpot(visit) != null) (visit.activity, 0.6),
+      // Music is playing (X7): a bop, a little less than the weights above add up to. Not late at night, when it's calm.
+      if (_mode == StrollMode.free && !_late && _musicNow()) (StrollActivity.bop, 1.5),
     ];
     if (_late) {
       // The Mac's quiet-hours weights: naps ×3, zoomies ×0.25, the ball, the yarn and the butterfly ×0.5.
@@ -1657,8 +1680,20 @@ class Stroller {
         _batAtStart();
       case StrollActivity.perch:
         _perchOnWidgets();
+      case StrollActivity.bop:
+        _bop();
       default:
         _hold(PetAnimation.idle, _uniform(2, 4));
+    }
+  }
+
+  /// To the music (X7): bounces and nods on the beat, in place, from the recorded one-shots.
+  void _bop() {
+    _activity = StrollActivity.bop;
+    final beats = _chance(0.5) ? 3 : 4;
+    for (var i = 0; i < beats; i++) {
+      _act(PetAnimation.happyBounce);
+      if (i < beats - 1) _act(PetAnimation.nod);
     }
   }
 

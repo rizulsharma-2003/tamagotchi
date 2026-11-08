@@ -105,6 +105,8 @@ class _PetSurfaceState extends State<PetSurface> {
       );
     });
     widget.desktop.hotkeys.addListener(_shortcutsChanged);
+    // A call (X7) hides the speech bubbles, and ending it brings them back.
+    widget.desktop.reacts.addListener(_worldSays);
     _shortcutsChanged();
   }
 
@@ -183,6 +185,7 @@ class _PetSurfaceState extends State<PetSurface> {
     widget.desktop.world.speechNow.removeListener(_worldSays);
     widget.desktop.world.toastNow.removeListener(_worldSays);
     widget.desktop.hotkeys.removeListener(_shortcutsChanged);
+    widget.desktop.reacts.removeListener(_worldSays);
     _bubbleTimer?.cancel();
     super.dispose();
   }
@@ -265,7 +268,9 @@ class _PetSurfaceState extends State<PetSurface> {
     final overPatch = world?.patch ?? false;
     // Out on the desktop, Mochi's own lines wait (Patch still says his).
     final away = widget.stroll.out;
-    final bubble = away && !overPatch ? null : (needsYou ? _needsYou(patch: duo != null) : _bubble ?? world?.text);
+    // On a call (X7) there are no speech bubbles.
+    final onCall = widget.stroll.reacts?.calling ?? false;
+    final bubble = onCall || (away && !overPatch) ? null : (needsYou ? _needsYou(patch: duo != null) : _bubble ?? world?.text);
     if ((bubble != null) != _bubbleShown) {
       _bubbleShown = bubble != null;
       // The taskbar window makes room for it (after this frame: never during a build).

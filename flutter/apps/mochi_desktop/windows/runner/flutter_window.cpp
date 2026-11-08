@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "media.h"
 #include "native_stage.h"
 #include "toasts.h"
 #include "utils.h"
@@ -126,6 +127,7 @@ bool FlutterWindow::OnCreate() {
 
 void FlutterWindow::OnDestroy() {
   mochi_toasts::Stop();
+  mochi_media::Stop();
   stage_ = nullptr;
   if (display_notification_ != nullptr) {
     ::UnregisterPowerSettingNotification(display_notification_);
@@ -241,6 +243,11 @@ void FlutterWindow::HandleSystemCall(const flutter::MethodCall<flutter::Encodabl
     state[flutter::EncodableValue("display")] = flutter::EncodableValue(static_cast<int32_t>(display_state_));
     state[flutter::EncodableValue("locked")] = flutter::EncodableValue(static_cast<int32_t>(locked_));
     result->Success(flutter::EncodableValue(state));
+    return;
+  }
+  // X7: whether media is playing (media.cpp; a bool, never what is playing).
+  if (method == "isMediaPlaying") {
+    result->Success(flutter::EncodableValue(mochi_media::IsPlaying()));
     return;
   }
   const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
