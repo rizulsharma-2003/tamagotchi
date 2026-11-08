@@ -162,8 +162,16 @@ class RunnerDesktopIcons implements DesktopIcons {
   Future<IconsRead?> read() async {
     try {
       final answer = await _channel.invokeMethod<Object?>('desktopIcons');
-      lastError = answer is Map && answer['error'] is String ? answer['error'] as String : null;
-      return IconsRead.fromJson(answer);
+      final read = IconsRead.fromJson(answer);
+      lastError = answer is Map && answer['error'] is String
+          ? answer['error'] as String
+          : read != null
+          ? null
+          : answer is Map
+          // Its shape only (never an id): what the parser would not take.
+          ? 'unparsed: spacing ${answer['spacing']}, icon size ${answer['iconSize']}, ${answer['icons'] is List ? (answer['icons'] as List).length : '-'} icons'
+          : 'nothing';
+      return read;
     } on Object catch (error) {
       lastError = error.runtimeType.toString();
       return null;
