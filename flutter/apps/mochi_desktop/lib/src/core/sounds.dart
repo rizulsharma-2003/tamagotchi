@@ -61,7 +61,7 @@ abstract final class SoundSynth {
     SoundCue.investigate => const [_Note(587.3, 0, 0.22, 0.16), _Note(493.9, 0.15, 0.34, 0.14)],
     SoundCue.pop => const [_Note(1760, 0, 0.09, 0.14)],
     SoundCue.achievement => const [_Note(784, 0, 0.16), _Note(1046.5, 0.1, 0.16), _Note(1318.5, 0.2, 0.16), _Note(1568, 0.3, 0.6)],
-    SoundCue.keyboard => const [],
+    SoundCue.keyboard || SoundCue.purr => const [],
   };
 
   /// [cue] as 16-bit mono samples at [volume] (0–1; the Mac's player plays at 60% of the slider).
@@ -77,6 +77,17 @@ abstract final class SoundSynth {
           value += noise * 0.05 * math.exp(-local * 240);
         }
         return value;
+      });
+    }
+    if (cue == SoundCue.purr) {
+      // A low, rumbling "prrr": a soft tone and a breath of noise, fluttering about 26 times a second.
+      const length = 0.34;
+      return _render(length, gain, (t) {
+        final swell = math.sin(math.pi * t / length);
+        final flutter = 0.5 + 0.5 * math.sin(2 * math.pi * 26 * t);
+        final tone = 0.6 * math.sin(2 * math.pi * 92 * t) + 0.22 * math.sin(2 * math.pi * 184 * t);
+        final breath = (Ease.hash((t * 11025).floor(), 31) * 2 - 1) * 0.18;
+        return (tone + breath) * flutter * swell * 0.5;
       });
     }
     final notes = _notes(cue);

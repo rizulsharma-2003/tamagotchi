@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:mochi_art/mochi_art.dart';
 
 import '../../desktop.dart';
 import 'companion_director.dart';
 import 'pet_director.dart';
+import 'purr_hold.dart';
+import '../../core/purr.dart';
 import 'speech_bubble.dart';
 
 /// Mochi's room in Mochi's window, as the phones' home screens show it (mochi_pocket's RoomView, the iPhone's
@@ -67,6 +70,7 @@ class _RoomViewState extends State<RoomView> {
   void initState() {
     super.initState();
     widget.desktop.sessions.addListener(_follow);
+    widget.desktop.purr.addListener(_frame);
     companion.addListener(_companionChanged);
     _moodTimer = Timer.periodic(const Duration(seconds: 5), (_) => _follow());
     _follow();
@@ -103,7 +107,7 @@ class _RoomViewState extends State<RoomView> {
     _clock.value = time;
     final fps = RoomView.frameRate(
       mood: _mood,
-      petMoment: widget.desktop.world.world.pet.isPlayingOneShot,
+      petMoment: widget.desktop.world.world.pet.isPlayingOneShot || widget.desktop.purr.active,
       companion: companion.visible ? companion.frameRate(time) : 0,
       calm: _calm,
     );
@@ -116,8 +120,9 @@ class _RoomViewState extends State<RoomView> {
   /// Everyone at [time], as the world has them (a moment together, or each at what they're doing).
   SceneFrame _scene(double time) {
     final frame = widget.desktop.world.world.frame(time);
+    final purr = widget.desktop.purr;
     return SceneFrame(
-      pet: frame.pet,
+      pet: purr.active ? PurrSession.decorate(frame.pet, time, calm: _calm) : frame.pet,
       companion: frame.companion,
       props: frame.props,
       companionVisible: frame.companionVisible,
@@ -129,6 +134,7 @@ class _RoomViewState extends State<RoomView> {
   @override
   void dispose() {
     widget.desktop.sessions.removeListener(_follow);
+    widget.desktop.purr.removeListener(_frame);
     companion.removeListener(_companionChanged);
     _moodTimer?.cancel();
     _frames?.cancel();
@@ -199,7 +205,10 @@ class _RoomViewState extends State<RoomView> {
                     width: MochiBubble.maxWidth,
                     bottom: math.max(0.0, constraints.maxHeight - bottom),
                     child: IgnorePointer(
-                      child: Align(alignment: Alignment.bottomCenter, child: MochiBubble(key: ObjectKey(speech), text: speech.text)),
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: MochiBubble(key: ObjectKey(speech), text: speech.text),
+                      ),
                     ),
                   );
                 },
@@ -213,7 +222,11 @@ class _RoomViewState extends State<RoomView> {
                         top: 6,
                         left: 8,
                         right: 8,
-                        child: IgnorePointer(child: Center(child: SceneNote(title: note.title, detail: note.detail))),
+                        child: IgnorePointer(
+                          child: Center(
+                            child: SceneNote(title: note.title, detail: note.detail),
+                          ),
+                        ),
                       ),
               ),
               Positioned.fromRect(
@@ -221,10 +234,14 @@ class _RoomViewState extends State<RoomView> {
                 child: Semantics(
                   container: true,
                   button: true,
-                  label: '$pet. Click to pet.',
+                  label: '$pet. Click to pet, press and hold to keep it purring.',
+                  customSemanticsActions: {CustomSemanticsAction(label: 'Purr'): widget.desktop.purr.pulse},
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
-                    child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => widget.desktop.interact('pet')),
+                    child: PurrHold(
+                      purr: widget.desktop.purr,
+                      child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => widget.desktop.interact('pet')),
+                    ),
                   ),
                 ),
               ),

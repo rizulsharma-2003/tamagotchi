@@ -16,6 +16,7 @@ import 'package:mochi_desktop/src/core/desktop_world.dart';
 import 'package:mochi_desktop/src/core/games.dart';
 import 'package:mochi_desktop/src/ui/recap/recap_card.dart';
 import 'package:mochi_desktop/src/ui/app.dart';
+import 'package:mochi_desktop/src/ui/pet/mochi_view.dart';
 import 'package:mochi_desktop/src/ui/shell.dart';
 import 'package:mochi_world/mochi_world.dart' as w;
 
@@ -242,6 +243,26 @@ void main() {
           File('${out.path}/w16-recap-quiet-exported.png').writeAsBytesSync(quiet.png);
         });
       }
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 8));
+    });
+  }
+
+  for (final theme in [ThemeMode.light, ThemeMode.dark]) {
+    testWidgets('W21 purring, ${theme.name}', (tester) async {
+      t.desktop.settings.themeMode = theme;
+      await app(tester, size: SurfaceSizes.pet, surface: Surface.pet);
+      final gesture = await tester.startGesture(tester.getCenter(find.byType(MochiView)));
+      await frames(tester, const Duration(milliseconds: 1400));
+      await save(tester, 'w21-desktop-pet-purring-${theme.name}', SurfaceSizes.pet);
+      await gesture.up();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 8));
+      await app(tester, size: SurfaceSizes.main);
+      final room = await tester.startGesture(tester.getCenter(find.bySemanticsLabel(RegExp('^Mochi. Click to pet'))));
+      await frames(tester, const Duration(milliseconds: 1400));
+      await save(tester, 'w21-room-purring-${theme.name}', SurfaceSizes.main);
+      await room.up();
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 8));
     });

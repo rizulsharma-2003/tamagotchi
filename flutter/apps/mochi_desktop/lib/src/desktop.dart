@@ -17,6 +17,7 @@ import 'core/hook_setup.dart';
 import 'core/hotkeys.dart';
 import 'core/pc_rhythm.dart';
 import 'core/pet_cues.dart';
+import 'core/purr.dart';
 import 'core/recap.dart';
 import 'core/reactions.dart';
 import 'core/session_store.dart';
@@ -103,6 +104,7 @@ class MochiDesktop {
     final store = stores ?? (_) => MemoryJsonStore();
     focus = DesktopFocus(settings: settings, world: world, rhythm: rhythm, store: store('focus-log.json'));
     reactions.focusing = () => focus.focusing;
+    purr = PurrSession(settings: settings, sounds: sounds, rhythm: rhythm, pet: () => interact('pet'), time: world.now, clock: clock);
     recap = DesktopRecap(settings: settings, world: world, focus: focus, toasts: this.toasts, store: store('journal.json'), clock: clock);
     this.hotkeys = Hotkeys(
       registrar: hotkeys ?? const UnsupportedHotkeys(),
@@ -271,6 +273,9 @@ class MochiDesktop {
 
   /// The daily recap (W16): the week of real events it counts, and the evening announcement.
   late final DesktopRecap recap;
+
+  /// Press and hold Mochi to keep it purring (W21).
+  late final PurrSession purr;
 
   /// The global shortcuts (Settings › Desktop Pet and Assistant).
   late final Hotkeys hotkeys;
@@ -474,6 +479,7 @@ class MochiDesktop {
     link.dispose();
     motion.dispose();
     games.dispose();
+    purr.dispose();
     recap.dispose();
     focus.dispose();
     world.dispose();

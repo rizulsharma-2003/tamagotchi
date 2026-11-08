@@ -656,8 +656,8 @@ class DesktopPetPane extends StatelessWidget {
           title: 'Using $pet',
           children: [
             TextRow(
-              'Click $pet to pet it, double-click (or press Enter) to open Mochi, and right-click (or Shift+F10) for the '
-              'menu. On the taskbar a click opens Mochi’s popover, and clicks go through to the taskbar everywhere but on '
+              'Click $pet to pet it (press and hold to keep it purring), double-click (or press Enter) to open Mochi, and '
+              'right-click (or Shift+F10) for the menu. On the taskbar a click opens Mochi’s popover, and clicks go through to the taskbar everywhere but on '
               '$pet.',
               secondary: true,
             ),
@@ -709,6 +709,7 @@ class FunPane extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _TalkingGroup(host: host),
+        _TouchGroup(host: host),
         _GrowingUpGroup(host: host),
         _FocusGroup(host: host),
         _RecapGroup(host: host),
@@ -754,6 +755,34 @@ class FunPane extends StatelessWidget {
             SoonRow(title: 'Adventures', detail: '$pet heads out to explore your desktop and comes back with stories.'),
             SoonRow(title: 'Room furniture', detail: 'Arrange furniture in $pet’s room.'),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Settings › Fun › Touch (the Mac's): press and hold Mochi to keep it purring; the Mac's trackpad purr is a soft purr
+/// sound here.
+class _TouchGroup extends StatelessWidget {
+  const _TouchGroup({required this.host});
+
+  final SettingsHost host;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = host.desktop.settings;
+    final pet = host.pet;
+    final sounds = settings.soundEnabled;
+    return SettingsGroup(
+      title: 'Touch',
+      footer: 'Press and hold $pet on the taskbar, on the desktop or in its room: it keeps purring, with little purr lines at '
+          'its sides, for as long as you hold on.',
+      children: [
+        ToggleRow(
+          title: 'Purr sound while you hold $pet',
+          subtitle: sounds ? null : 'Turn on Play sounds (Notifications › Sound) to hear it.',
+          value: settings.purrSound && sounds,
+          onChanged: sounds ? (value) => settings.purrSound = value : null,
         ),
       ],
     );

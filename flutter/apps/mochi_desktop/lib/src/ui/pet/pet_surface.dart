@@ -20,6 +20,7 @@ import '../shell.dart';
 import 'companion_director.dart';
 import 'mochi_view.dart';
 import 'pet_director.dart';
+import 'purr_hold.dart';
 import 'speech_bubble.dart';
 import 'taskbar_stroll.dart';
 
@@ -155,8 +156,7 @@ class _PetSurfaceState extends State<PetSurface> {
   }
 
   /// "session started" → "Session started" (a caption led by a project's name keeps it as it is).
-  static String sentence(String caption) =>
-      caption.contains(' · ') ? caption : '${caption[0].toUpperCase()}${caption.substring(1)}';
+  static String sentence(String caption) => caption.contains(' · ') ? caption : '${caption[0].toUpperCase()}${caption.substring(1)}';
 
   void _say(String text, Duration duration) {
     _bubbleTimer?.cancel();
@@ -292,6 +292,7 @@ class _PetSurfaceState extends State<PetSurface> {
           hint: onTaskbar && widget.onOpenPopover != null
               ? 'Press Enter for the popover, Space to pet'
               : 'Press Enter to open Mochi, Space to pet',
+          customSemanticsActions: {CustomSemanticsAction(label: 'Purr'): widget.desktop.purr.pulse},
           excludeSemantics: true,
           child: Stack(
             children: [
@@ -303,44 +304,48 @@ class _PetSurfaceState extends State<PetSurface> {
                 child: Tooltip(
                   // No room for a tooltip in the taskbar's little window (the spoken label says the same).
                   message: onTaskbar ? '' : _mood.describe(name),
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _tap,
-                    // On the taskbar a click opens the popover at once (no wait for a second click); standing on the
-                    // desktop, a double-click opens Mochi's window.
-                    onDoubleTap: onTaskbar ? null : () => widget.onAction(ShellAction.showMain),
-                    onSecondaryTapUp: (details) => _menu(details.globalPosition),
-                    onPanStart: (_) => widget.onDragStart(),
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(onTaskbar ? 8 : 24),
-                          border: _focused ? Border.all(color: p.focus, width: 2) : null,
-                        ),
-                        child: MochiView(
-                          world: widget.desktop.world,
-                          sessions: widget.desktop.sessions,
-                          lastActivity: widget.lastActivity,
-                          onMood: (mood) {
-                            setState(() => _mood = mood);
-                            widget.stroll.mood = mood;
-                          },
-                          fill: onTaskbar ? SurfaceSizes.taskbarFill : SurfaceSizes.standingFill,
-                          // In the taskbar Mochi walks, turns and naps by the stroll, drawn as in the Mac's menu bar.
-                          feet: onTaskbar ? SurfaceSizes.taskbarFeet : SurfaceSizes.standingFeet,
-                          stroll: onTaskbar ? widget.stroll.sample : null,
-                          detail: onTaskbar ? RenderDetail.tiny : RenderDetail.standard,
-                          color: settings.petColor,
-                          accessory: settings.wornByPet(now),
-                          companion: companion,
-                          duo: duo == null ? null : () => widget.stroll.duo,
-                          theme: settings.officeTheme,
-                          companionAccessory: settings.wornByCompanion(now),
-                          deskAccessory: settings.deskAccessory,
-                          burst: onTaskbar,
-                          rhythm: widget.desktop.rhythm,
-                          badge: widget.desktop.reactions.badge?.level,
+                  child: PurrHold(
+                    purr: widget.desktop.purr,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _tap,
+                      // On the taskbar a click opens the popover at once (no wait for a second click); standing on the
+                      // desktop, a double-click opens Mochi's window.
+                      onDoubleTap: onTaskbar ? null : () => widget.onAction(ShellAction.showMain),
+                      onSecondaryTapUp: (details) => _menu(details.globalPosition),
+                      onPanStart: (_) => widget.onDragStart(),
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(onTaskbar ? 8 : 24),
+                            border: _focused ? Border.all(color: p.focus, width: 2) : null,
+                          ),
+                          child: MochiView(
+                            world: widget.desktop.world,
+                            sessions: widget.desktop.sessions,
+                            lastActivity: widget.lastActivity,
+                            onMood: (mood) {
+                              setState(() => _mood = mood);
+                              widget.stroll.mood = mood;
+                            },
+                            fill: onTaskbar ? SurfaceSizes.taskbarFill : SurfaceSizes.standingFill,
+                            // In the taskbar Mochi walks, turns and naps by the stroll, drawn as in the Mac's menu bar.
+                            feet: onTaskbar ? SurfaceSizes.taskbarFeet : SurfaceSizes.standingFeet,
+                            stroll: onTaskbar ? widget.stroll.sample : null,
+                            detail: onTaskbar ? RenderDetail.tiny : RenderDetail.standard,
+                            color: settings.petColor,
+                            accessory: settings.wornByPet(now),
+                            companion: companion,
+                            duo: duo == null ? null : () => widget.stroll.duo,
+                            theme: settings.officeTheme,
+                            companionAccessory: settings.wornByCompanion(now),
+                            deskAccessory: settings.deskAccessory,
+                            burst: onTaskbar,
+                            rhythm: widget.desktop.rhythm,
+                            badge: widget.desktop.reactions.badge?.level,
+                            purr: widget.desktop.purr,
+                          ),
                         ),
                       ),
                     ),

@@ -165,7 +165,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   /// animation, and Patch only for interesting moments); 6 Mochi's world (Sprint 2: talking in speech bubbles, how
   /// chatty, fresh lines from Claude Haiku, growing up and the last stage announced, under the Mac's keys `speech`,
   /// `lifeStages` and `lifeStageSeen`); 7 Mochi's life, part 2 (the mini-games' records, the focus buddy's settings and the evening recap's under the Mac's
-  /// keys `games`, `focus` and `recap`).
+  /// keys `games`, `focus` and `recap`, and the purr's sound under `hapticPurr`).
   /// `roamTaskbar` is still written (whether Mochi is on the taskbar) for an older Mochi reading the file.
   static const int version = 7;
 
@@ -241,6 +241,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   GameRecords _games = GameRecords();
   FocusSettings _focus = const FocusSettings();
   RecapSettings _recap = RecapSettings();
+  bool _purrSound = true;
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -344,6 +345,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _games = GameRecords.fromJson(json['games']);
     _focus = FocusSettings.fromJson(json['focus']);
     _recap = RecapSettings.fromJson(json['recap']);
+    _purrSound = flag('hapticPurr', true);
   }
 
   static int _minutes(Object? value, int fallback, int min, int max) => value is int ? value.clamp(min, max) : fallback;
@@ -695,6 +697,11 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _set(() => _recap = value.copy());
   }
 
+  /// A soft purr plays while you press and hold Mochi (with Mochi's sounds on; the Mac's `hapticPurr`, which purrs on
+  /// its Force Touch trackpad).
+  bool get purrSound => _purrSound;
+  set purrSound(bool value) => _set(() => _purrSound = value);
+
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
 
@@ -781,6 +788,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'games': _games.toJson(),
     'focus': _focus.toJson(),
     'recap': _recap.toJson(),
+    'hapticPurr': _purrSound,
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
 
