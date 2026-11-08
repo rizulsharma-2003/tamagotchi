@@ -11,8 +11,10 @@ import 'package:mochi_wire/mochi_wire.dart' show HookStatus;
 
 import '../core/desktop_settings.dart' show DesktopStyle;
 import '../core/hotkeys.dart';
+import '../core/json_store.dart';
 import '../core/pet_cues.dart';
 import '../core/toasts.dart';
+import '../demo.dart' show demoMode;
 import '../desktop.dart';
 import '../platform/displays.dart';
 import '../platform/process_cpu.dart';
@@ -149,6 +151,8 @@ class DesktopAppState extends State<DesktopApp> {
       ThemeMode.system => WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark,
     },
     onMenu: (_, _) => unawaited(widget.shell.popUpMenu()),
+    onOpen: () => open(MainPage.home),
+    notesStore: demoMode ? MemoryJsonStore() : FileJsonStore(desktop.paths.join(desktop.paths.home, 'notes.json')),
     demo: MischiefStage.demoFrom(Platform.environment['MOCHI_DESKTOP_MISCHIEF_DEMO']),
   );
 

@@ -123,6 +123,7 @@ void main() {
 
     Future<void> done(WidgetTester tester) async {
       mischief.celebrations.stop();
+      mischief.notes.stop();
       t.desktop.mischief.stop();
       await tester.pump();
     }
@@ -193,10 +194,11 @@ void main() {
       expect(mischief.celebrations.playing, CelebrationKind.fireworks);
       await play(tester, 1.6);
       expect(stage.showing, isNotEmpty);
-      expect(stage.sprites.length, celebrationColors.length * 3);
+      expect(mischief.celebrations.sprites.length, celebrationColors.length * 3, reason: 'three sizes of spark in each colour');
+      expect(mischief.notes.notes.single.title, '3 days in a row!', reason: 'and a note');
       await play(tester, 2);
       expect(mischief.celebrations.running, isFalse);
-      expect(stage.windows, isEmpty);
+      expect(stage.windows.difference({mischief.notes.actorOf(mischief.notes.notes.single)}), isEmpty, reason: 'only the note stays');
       await done(tester);
     });
 

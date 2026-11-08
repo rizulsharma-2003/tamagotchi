@@ -56,7 +56,7 @@ class MischiefPane extends StatelessWidget {
             if (stage != null && supported)
               SettingsGroup(
                 title: 'Try it',
-                footer: 'Plays once now, on the display you’re on, even during quiet hours (you asked).',
+                footer: 'Plays once now, on the display you’re on, even during quiet hours (you asked). The note goes at the top right of your main display.',
                 children: [
                   ActionsRow(
                     children: [
@@ -67,6 +67,10 @@ class MischiefPane extends StatelessWidget {
                       OutlinedButton(
                         onPressed: mischief.enabled ? () => stage.preview(CelebrationKind.fireworks) : null,
                         child: const Text('Fireworks'),
+                      ),
+                      OutlinedButton(
+                        onPressed: mischief.enabled ? stage.previewNote : null,
+                        child: const Text('Leave a note'),
                       ),
                     ],
                   ),
