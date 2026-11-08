@@ -342,6 +342,7 @@ class _PetSurfaceState extends State<PetSurface> {
                             // In the taskbar Mochi walks, turns and naps by the stroll, drawn as in the Mac's menu bar.
                             feet: onTaskbar ? SurfaceSizes.taskbarFeet : SurfaceSizes.standingFeet,
                             stroll: onTaskbar ? widget.stroll.sample : null,
+                            roamBeat: widget.stroll.beat,
                             detail: onTaskbar ? RenderDetail.tiny : RenderDetail.standard,
                             color: settings.petColor,
                             accessory: settings.wornByPet(now),
