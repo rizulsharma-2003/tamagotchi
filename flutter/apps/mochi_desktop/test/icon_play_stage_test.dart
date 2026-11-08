@@ -1,3 +1,5 @@
+import 'dart:async';
+
 // Desktop icon play on the stage (docs/SPRINT_2.md X5): a visit on a desktop adventure (off by default, about one outing in
 // two, the development switch), the icons it skips, once per outing, the visit ending at home and Mochi carrying on, every
 // abort path putting the icon back, and the journal replayed at start. The put-back contract itself is in icon_play_test.dart.
@@ -378,12 +380,14 @@ void main() {
       await done(tester);
     });
 
-    testWidgets('the app quits (the exit hook), and so does Windows ending the session', (tester) async {
+    testWidgets('the app quits: quitting waits until the icon is home (an exit task), and so does Windows ending the session', (tester) async {
       begin(force: IconForce.visit);
       await kicked(tester);
-      t.desktop.runExitHooks();
+      var finished = false;
+      unawaited(t.desktop.runExitTasks()!.then((_) => finished = true));
       await run(tester, 0.3);
       homeAgain();
+      expect(finished, isTrue, reason: 'the wait ends once the icon is seen home');
       expect(store.json, isNull);
       await done(tester);
     });

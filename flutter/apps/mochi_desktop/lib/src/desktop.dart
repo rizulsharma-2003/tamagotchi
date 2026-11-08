@@ -172,7 +172,11 @@ class MochiDesktop {
       friendship: () => world.world.progress.friendshipLevel,
     );
     // Windows ending the session (a log off or a shutdown): whatever Mochi moved goes back first (X2).
-    _ending = sessionEnding?.listen((_) => runExitHooks());
+    _ending = sessionEnding?.listen((_) {
+      runExitHooks();
+      final waiting = runExitTasks();
+      if (waiting != null) unawaited(waiting);
+    });
   }
 
   StreamSubscription<void>? _ending;
@@ -184,6 +188,37 @@ class MochiDesktop {
   void addExitHook(void Function() hook) => _exitHooks.add(hook);
 
   void removeExitHook(void Function() hook) => _exitHooks.remove(hook);
+
+  final List<Future<void>? Function()> _exitTasks = [];
+
+  /// [task] runs when the app quits, and quitting waits for the future it returns (at most [exitWait]; null: nothing to
+  /// wait for): what must be put back and can only be done by asking the runner (desktop icon play, X5). Windows ending
+  /// the session starts it without waiting.
+  void addExitTask(Future<void>? Function() task) => _exitTasks.add(task);
+
+  void removeExitTask(Future<void>? Function() task) => _exitTasks.remove(task);
+
+  /// The longest quitting waits for the exit tasks.
+  static const Duration exitWait = Duration(milliseconds: 1500);
+
+  /// Starts the exit tasks: a future that ends when they have (or after [exitWait]), or null when none has anything to
+  /// wait for (quitting then doesn't wait at all).
+  Future<void>? runExitTasks() {
+    final running = <Future<void>>[];
+    for (final task in List.of(_exitTasks)) {
+      try {
+        final waiting = task();
+        if (waiting != null) running.add(waiting.catchError((Object error) => debugPrint('Mochi: an exit task failed (${error.runtimeType})')));
+      } on Object catch (error) {
+        debugPrint('Mochi: an exit task failed (${error.runtimeType})');
+      }
+    }
+    if (running.isEmpty) return null;
+    return Future.wait(running).timeout(exitWait).then<void>(
+      (_) {},
+      onError: (Object _) => debugPrint('Mochi: quitting before an exit task finished (its journal finishes it at the next start)'),
+    );
+  }
 
   /// Runs the exit hooks now (quitting, or the session ending).
   void runExitHooks() {
@@ -556,6 +591,8 @@ class MochiDesktop {
     if (_disposed) return;
     _disposed = true;
     runExitHooks();
+    final waiting = runExitTasks();
+    if (waiting != null) await waiting;
     unawaited(_ending?.cancel());
     _prune?.cancel();
     _greeting?.cancel();

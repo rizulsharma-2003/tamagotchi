@@ -117,7 +117,7 @@ class MischiefStage extends ChangeNotifier {
       log: iconLog,
     );
     desktop.mischief.addListener(iconPlay.recheck);
-    desktop.addExitHook(iconPlay.putBack);
+    desktop.addExitTask(iconPlay.settle);
     celebrations = StageCelebrations(stage: stage, cast: cast, gate: desktop.mischief, displays: displays, cursor: cursor, clock: clock);
     notes = StickyNotes(
       stage: stage,
@@ -509,7 +509,7 @@ class MischiefStage extends ChangeNotifier {
     } on FlutterError {
       // The gate went with the app.
     }
-    desktop.removeExitHook(iconPlay.putBack);
+    desktop.removeExitTask(iconPlay.settle);
     iconPlay.dispose();
     notes.dispose();
     for (final subscription in _subscriptions) {

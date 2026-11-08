@@ -386,9 +386,17 @@ class IconNudger {
     if (active && !allowed()) abort();
   }
 
-  /// Quitting, or Windows ending the session: home at once. Nothing can be waited for here, so the journal stays until the
-  /// icon has been seen home: the next start finishes the job.
+  /// Quitting, or Windows ending the session: home at once. The journal stays until the icon has been seen home, so a quit
+  /// that can't wait for it leaves the next start to finish the job.
   void putBack() => abort();
+
+  /// [putBack], and a future that ends once the visit has (quitting waits for it: MochiDesktop.addExitTask); null when no
+  /// visit is running (nothing to wait for).
+  Future<void>? settle() {
+    if (!active) return null;
+    abort();
+    return _tail;
+  }
 
   /// Something that must stop the visit before the next move: the desktop in use, a mouse button down, the gate closed.
   bool blocked() => !allowed() || icons.mouseDown() || icons.usingDesktop();
