@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <unknwn.h>
 
+#include <condition_variable>
 #include <mutex>
 #include <thread>
 
@@ -18,60 +19,97 @@ namespace {
 using winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager;
 using winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus;
 
-std::mutex g_lock;
-GlobalSystemMediaTransportControlsSessionManager g_manager{nullptr};
-bool g_loading = false;
+// What the worker and the UI thread share. Allocated once and never freed, so a worker still busy when the app quits
+// never touches something static destruction already took down.
+struct State {
+  std::mutex lock;
+  std::condition_variable wake;
+  bool started = false;
+  bool requested = false;
+  bool stopping = false;
+  bool playing = false;
+};
 
-// Runs on a thread of its own: asks Windows for the session manager and keeps it. A failure leaves nothing cached, so
-// the next call to IsPlaying asks again.
-void Load() {
-  GlobalSystemMediaTransportControlsSessionManager manager{nullptr};
+State& Shared() {
+  static State* state = new State();
+  return *state;
+}
+
+// The worker: one thread with its own multi-threaded apartment, where the session manager is requested, kept and asked,
+// so no WinRT call (some of them go to the media service in another process) is ever made on the UI thread and the
+// manager is only used in the apartment it was made in. Woken by IsPlaying, it reads once and goes back to sleep. A
+// failure drops the manager and waits longer before asking Windows for it again (10 s, 20 s, … up to 160 s), so a PC
+// without the service costs nothing.
+void Work() {
+  State& state = Shared();
   try {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
-    manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
-  } catch (const winrt::hresult_error&) {
   } catch (...) {
   }
-  std::lock_guard<std::mutex> lock(g_lock);
-  g_manager = manager;
-  g_loading = false;
+  GlobalSystemMediaTransportControlsSessionManager manager{nullptr};
+  ULONGLONG retry_at = 0;
+  int failures = 0;
+  for (;;) {
+    {
+      std::unique_lock<std::mutex> lock(state.lock);
+      state.wake.wait(lock, [&state] { return state.requested || state.stopping; });
+      if (state.stopping) {
+        break;
+      }
+      state.requested = false;
+    }
+    bool playing = false;
+    try {
+      if (!manager && GetTickCount64() >= retry_at) {
+        manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+      }
+      if (manager) {
+        const auto session = manager.GetCurrentSession();
+        playing = session && session.GetPlaybackInfo().PlaybackStatus() ==
+                                 GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+      }
+      failures = 0;
+    } catch (...) {
+      manager = nullptr;
+      if (failures < 5) {
+        failures++;
+      }
+      retry_at = GetTickCount64() + (5000ULL << failures);
+    }
+    std::lock_guard<std::mutex> lock(state.lock);
+    state.playing = playing;
+  }
+  manager = nullptr;
 }
 
 }  // namespace
 
 bool IsPlaying() {
-  GlobalSystemMediaTransportControlsSessionManager manager{nullptr};
-  {
-    std::lock_guard<std::mutex> lock(g_lock);
-    manager = g_manager;
-    if (!manager && !g_loading) {
-      g_loading = true;
-      try {
-        std::thread(Load).detach();
-      } catch (...) {
-        g_loading = false;
-      }
-    }
-  }
-  if (!manager) {
+  State& state = Shared();
+  std::lock_guard<std::mutex> lock(state.lock);
+  if (state.stopping) {
     return false;
   }
-  try {
-    const auto session = manager.GetCurrentSession();
-    if (!session) {
+  if (!state.started) {
+    try {
+      std::thread(Work).detach();
+      state.started = true;
+    } catch (...) {
       return false;
     }
-    return session.GetPlaybackInfo().PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
-  } catch (const winrt::hresult_error&) {
-    return false;
-  } catch (...) {
-    return false;
   }
+  state.requested = true;
+  state.wake.notify_one();
+  return state.playing;
 }
 
 void Stop() {
-  std::lock_guard<std::mutex> lock(g_lock);
-  g_manager = nullptr;
+  State& state = Shared();
+  {
+    std::lock_guard<std::mutex> lock(state.lock);
+    state.stopping = true;
+  }
+  state.wake.notify_one();
 }
 
 }  // namespace mochi_media
