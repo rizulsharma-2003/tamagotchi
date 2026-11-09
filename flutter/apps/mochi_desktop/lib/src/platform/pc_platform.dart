@@ -52,7 +52,7 @@ class WindowsPcPlatform implements PcPlatform {
 
   // The walk's scratch space and result, for the callback (which can't capture anything).
   static final List<PcWindow> _found = [];
-  static final Map<int, String> _programs = {};
+  static final Map<int, ({String name, String exe})> _programs = {};
   static final Map<String, String> _descriptions = {};
   static Pointer<Int32>? _flag;
   static Pointer<Uint32>? _pid;
@@ -119,12 +119,12 @@ class WindowsPcPlatform implements PcPlatform {
     final title = text.cast<Utf16>().toDartString(length: size);
     final program = _program(hwnd, pid.value);
     if (program == null) return null;
-    return PcWindow(hwnd: hwnd, program: program, title: title);
+    return PcWindow(hwnd: hwnd, program: program.name, exe: program.exe, title: title);
   }
 
   /// The name of the program that owns [hwnd] (process [pid]); a store app's window is owned by ApplicationFrameHost, so
   /// its own process is the one behind its CoreWindow child. Null when it can't be told.
-  static String? _program(int hwnd, int pid) {
+  static ({String name, String exe})? _program(int hwnd, int pid) {
     var owner = pid;
     final path = _imagePath(owner);
     if (path == null) return null;
@@ -137,9 +137,10 @@ class WindowsPcPlatform implements PcPlatform {
     if (known != null) return known;
     final image = owner == pid ? path : _imagePath(owner);
     if (image == null) return null;
-    final name = _describe(image);
-    _programs[owner] = name;
-    return name;
+    final base = image.substring(image.lastIndexOf(RegExp(r'[\\/]')) + 1);
+    final program = (name: _describe(image), exe: base.toLowerCase().endsWith('.exe') ? base.substring(0, base.length - 4) : base);
+    _programs[owner] = program;
+    return program;
   }
 
   static int? _coreWindowProcess(int frame) {
@@ -185,6 +186,8 @@ class WindowsPcPlatform implements PcPlatform {
     } on Object {
       name = '';
     }
+    // Some programs describe themselves by their file name ("Notepad.exe" for Windows 11's Notepad).
+    if (name.toLowerCase().endsWith('.exe')) name = name.substring(0, name.length - 4).trim();
     if (name.length > 60) name = name.substring(0, 60).trim();
     final result = name.isEmpty ? fallback : name;
     _descriptions[image] = result;

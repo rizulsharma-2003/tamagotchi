@@ -35,13 +35,17 @@ class PcApp {
 
 /// A window on the taskbar. The title is read only to be matched here; it is never put in a result.
 class PcWindow {
-  const PcWindow({required this.hwnd, required this.program, required this.title});
+  const PcWindow({required this.hwnd, required this.program, required this.title, this.exe = ''});
 
   final int hwnd;
 
-  /// The program's name ("Google Chrome").
+  /// The program's name ("Google Chrome"): its file description, which Windows doesn't always fill in with the name people
+  /// use ("Windows Terminal Host"), so [exe] is matched too.
   final String program;
   final String title;
+
+  /// The program's file name without `.exe` ("WindowsTerminal", "Notepad").
+  final String exe;
 }
 
 enum PcTaskState { ok, noFolder, failed }
@@ -181,6 +185,33 @@ abstract final class PcMatch {
     return best;
   }
 
+  /// The program among [windows] that [name] means: by its name or its file name, as the quick commands match names
+  /// ("notepad" is Notepad.exe, "windows terminal" is WindowsTerminal.exe); failing that, by a name of four or more letters
+  /// inside one of them ("terminal" in "Windows Terminal Host"). The first window's program wins (the one in front).
+  static String? program(String name, Iterable<PcWindow> windows) {
+    final query = QuickCommands.normalize(name);
+    for (final window in windows) {
+      for (final known in [window.program, window.exe]) {
+        if (known.isNotEmpty && QuickCommands.matchApp(query, [known]) != null) return window.program;
+      }
+    }
+    var wanted = query;
+    for (final prefix in const ['the ', 'my ']) {
+      if (wanted.startsWith(prefix)) wanted = wanted.substring(prefix.length);
+    }
+    for (final suffix in const [' app', ' application', ' window', ' windows']) {
+      if (wanted.endsWith(suffix)) wanted = wanted.substring(0, wanted.length - suffix.length);
+    }
+    final key = _key(wanted);
+    if (key.length < 4) return null;
+    for (final window in windows) {
+      if (_key(window.program).contains(key) || _key(window.exe).contains(key)) return window.program;
+    }
+    return null;
+  }
+
+  static String _key(String name) => name.toLowerCase().replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '');
+
   /// Whether a Start menu entry is something to open: not an uninstaller, installer or repair tool by name, and not a
   /// script, installer or web shortcut by what it starts. (The runner applies the same rule before it lists; this is the second check.)
   static bool openable(String name, {String id = ''}) {
@@ -265,7 +296,7 @@ class PcActionsImpl implements PcActions {
   /// The running program a spoken name refers to, and its windows front to back.
   ({String program, List<PcWindow> windows})? _running(String name) {
     final windows = platform.windows();
-    final program = QuickCommands.matchApp(QuickCommands.normalize(name), {for (final window in windows) window.program}.toList());
+    final program = PcMatch.program(name, windows);
     if (program == null) return null;
     return (
       program: program,

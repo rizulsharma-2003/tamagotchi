@@ -258,6 +258,20 @@ void main() {
       expect(refused.text, 'Google Chrome is open, but Windows wouldn\'t bring it forward.');
     });
 
+    test('a running program is found by its file name too, or a longer name inside its own (VM, 11-09)', () async {
+      // Windows 11's Notepad describes itself as "Notepad.exe" (the platform drops the .exe) and Windows Terminal as
+      // "Windows Terminal Host": "switch to notepad" opened a second Notepad on the VM before this.
+      final notepad = PcWindow(hwnd: 7, program: 'Text editor', exe: 'Notepad', title: _secret);
+      final terminal = PcWindow(hwnd: 8, program: 'Windows Terminal Host', exe: 'WindowsTerminal', title: _secret);
+      pc.shown = [notepad, terminal];
+      expect((await actions.openApp('notepad')).text, 'Switched to Text editor.');
+      expect((await actions.openApp('windows terminal')).text, 'Switched to Windows Terminal Host.');
+      expect((await actions.openApp('the terminal app')).text, 'Switched to Windows Terminal Host.');
+      expect(pc.calls, ['raise 7', 'raise 8', 'raise 8']);
+      expect(PcMatch.program('pad', [notepad, terminal]), isNull);
+      expect(PcMatch.program('slack', [notepad, terminal]), isNull);
+    });
+
     test('an unknown app says so, and the app list is kept for a minute', () async {
       final outcome = await actions.openApp('the pod bay doors');
       expect(outcome.ok, isFalse);
