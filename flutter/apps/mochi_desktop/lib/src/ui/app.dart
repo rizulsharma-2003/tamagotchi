@@ -222,7 +222,7 @@ class DesktopAppState extends State<DesktopApp> {
     cues: desktop.cues,
     motion: desktop.motion,
     rhythm: desktop.rhythm,
-    badge: () => desktop.reactions.badge?.level,
+    badge: () => desktop.badgeLevel,
     offline: () => desktop.bridgeProblem.value != null,
     sessionOpen: () => desktop.sessions.live.isNotEmpty,
     lightTaskbar: Platform.isWindows ? Win32TaskbarInfo.lightTheme : null,
@@ -397,6 +397,8 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.sessions.addListener(_sessionsChanged);
     desktop.sessions.addListener(_tray.refresh);
     desktop.reactions.addListener(_tray.refresh);
+    // The agent's news puts a dot on Mochi too (the higher of its badge and Claude's).
+    desktop.agent.addListener(_tray.refresh);
     desktop.settings.addListener(_settingsChanged);
     desktop.updater.addListener(_updatesChanged);
     desktop.focus.addListener(_focusChanged);
@@ -790,6 +792,7 @@ class DesktopAppState extends State<DesktopApp> {
     }
     if (surface == Surface.main || surface == Surface.popover) {
       desktop.reactions.acknowledge();
+      desktop.agent.acknowledge();
     } else {
       _focusSession = null;
     }
@@ -892,6 +895,7 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.sessions.removeListener(_sessionsChanged);
     desktop.sessions.removeListener(_tray.refresh);
     desktop.reactions.removeListener(_tray.refresh);
+    desktop.agent.removeListener(_tray.refresh);
     _tray.dispose();
     desktop.settings.removeListener(_settingsChanged);
     desktop.settings.removeListener(_exploreChanged);

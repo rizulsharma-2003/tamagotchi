@@ -1,20 +1,15 @@
-// Settings › Claude: Claude Code (the hooks, consent first, with backups), Assistant (Ask Mochi) and Agent (the Mac's
-// Gmail, Calendar and Notion watcher, which isn't on Windows yet). The Mac's ClaudeSettings, AssistantSettingsView and
-// AgentSettingsView.
+// Settings › Claude: Claude Code (the hooks, consent first, with backups) and Assistant (Ask Mochi). The Mac's
+// ClaudeSettings and AssistantSettingsView. Agent is in panes_agent.dart.
 
 import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_wire/mochi_wire.dart';
 
 import '../../core/hotkeys.dart';
 import '../../desktop.dart';
-import '../../platform/time_zone.dart';
-import 'panes_phones.dart' show phoneNames;
 import 'settings_kit.dart';
 import 'settings_tabs.dart';
 import 'shortcut_row.dart';
@@ -436,189 +431,6 @@ class _AssistantPaneState extends State<AssistantPane> {
           ],
         ),
       ],
-    );
-  }
-}
-
-// MARK: - Agent
-
-class AgentPane extends StatefulWidget {
-  const AgentPane({super.key, required this.host, this.timeZone});
-
-  final SettingsHost host;
-
-  /// This PC's time zone for Mochi Cloud (tests); TimeZoneName.current otherwise.
-  final String Function()? timeZone;
-
-  @override
-  State<AgentPane> createState() => _AgentPaneState();
-}
-
-class _AgentPaneState extends State<AgentPane> {
-  bool _copying = false;
-
-  /// What the last Copy Cloud Settings said, and whether it worked.
-  ({bool ok, String text})? _said;
-
-  /// Copy Cloud Settings (the Mac's AgentController.copyCloudLinkSettings): Mochi Cloud joins this PC's room (in place
-  /// of the one it had: that one is removed, after you say so), and its environment's settings go on the clipboard.
-  Future<void> _copy() async {
-    final link = widget.host.desktop.link;
-    final pet = widget.host.pet;
-    if (link.clouds.isNotEmpty) {
-      final confirmed = await confirmAction(
-        context,
-        title: 'Replace Mochi Cloud’s settings?',
-        message:
-            'Mochi Cloud gets new settings for this PC’s link, and the ones it has now stop working: until you paste the '
-            'new ones into its environment at claude.ai/code, it can’t reach your phones.',
-        confirm: 'Replace',
-      );
-      if (!confirmed || !mounted) return;
-    }
-    setState(() {
-      _copying = true;
-      _said = null;
-    });
-    ({bool ok, String text}) said;
-    try {
-      final joined = await link.joinCloud();
-      final zone = (widget.timeZone ?? TimeZoneName.current)();
-      await Clipboard.setData(ClipboardData(text: joined.environment(timeZone: zone)));
-      said = (
-        ok: true,
-        text:
-            'Copied. On claude.ai/code, open your Mochi Cloud environment › Environment variables and paste it in'
-            '${joined.replaced.isEmpty ? '' : ', in place of the MOCHI_LINK_ lines it had (the old ones no longer work)'}. '
-            'It holds a key to your link, so don’t share it.',
-      );
-    } on LinkPairingException catch (error) {
-      said = (ok: false, text: error.message);
-    } on Object catch (error) {
-      said = (ok: false, text: '$pet couldn’t reach Mochi Link (${error.runtimeType}). Check this PC’s connection and try again.');
-    }
-    if (!mounted) return;
-    setState(() {
-      _copying = false;
-      _said = said;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final host = widget.host;
-    final p = context.palette;
-    final pet = host.pet;
-    final link = host.desktop.link;
-    final opener = host.desktop.opener;
-    final now = host.now;
-    final said = _said;
-    return ListenableBuilder(
-      listenable: link,
-      builder: (context, _) {
-        final clouds = link.devices.where((peer) => peer.role == 'cloud' || peer.linkPlatform == LinkPlatform.cloud).toList();
-        final names = phoneNames(link);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SettingsGroup(
-              children: [
-                Padding(
-                  padding: rowPadding,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SettingsIcon.of(SettingsTab.agent, size: 36),
-                      const SizedBox(width: Space.m),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              spacing: Space.s,
-                              runSpacing: Space.xs,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Text('The agent is coming to Windows', style: context.type.headline),
-                                Tag(text: SoonRow.tag, icon: Icons.schedule_rounded, tint: p.inkSecondary),
-                              ],
-                            ),
-                            const SizedBox(height: Space.xs),
-                            Text(
-                              'On a Mac, every few minutes $pet asks Claude Haiku what’s new in Gmail, Google Calendar and '
-                              'Notion, using the connectors in your own Claude account, and tells you what matters: in a speech '
-                              'bubble, on the menu bar and on your phones. Its checks only read; nothing is sent or deleted. '
-                              'It runs on your Claude subscription, with no API key. This PC doesn’t run those checks yet, '
-                              'but Mochi Cloud can (below).',
-                              style: context.type.footnote,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            SettingsGroup(
-              title: 'Mochi Cloud',
-              footer:
-                  'Mochi Cloud is an hourly Claude task in Anthropic’s cloud (claude.ai/code, with the mochi-cloud repository) '
-                  'that checks your mail, calendar and pages while your computers are off, and pushes the news to '
-                  '${names == LinkPeerNames.yourPhones ? 'the phones paired with this PC' : names} through Mochi Link. It joins this PC’s '
-                  'link as a device of its own; copying its settings again replaces it.',
-              children: [
-                if (clouds.isEmpty)
-                  StatusRow(title: 'Mochi Cloud', ok: false, detail: link.paired ? 'Not in this PC’s link' : 'Pair a phone first')
-                else
-                  for (final cloud in clouds)
-                    StatusRow(
-                      title: cloud.name ?? 'Mochi Cloud',
-                      ok: cloud.lastSeenTime != null,
-                      icon: Icons.cloud_outlined,
-                      detail: cloud.lastSeenTime == null ? 'Hasn’t checked in yet' : 'Last check ${ago(cloud.lastSeenTime!, now)}',
-                    ),
-                ActionsRow(
-                  children: [
-                    FilledButton.icon(
-                      onPressed: link.paired && !_copying ? () => unawaited(_copy()) : null,
-                      icon: _copying
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.copy_rounded, size: 18),
-                      label: const Text('Copy Cloud Settings'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: opener == null ? null : () => opener.open(Uri.parse('https://claude.ai/code')),
-                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                      label: const Text('Open claude.ai/code'),
-                    ),
-                  ],
-                ),
-                if (!link.paired)
-                  const NoteRow(icon: Icons.link_rounded, text: 'Pair a phone in Settings › Phones first: Mochi Cloud joins the same link.'),
-                if (said != null)
-                  Semantics(
-                    liveRegion: true,
-                    child: NoteRow(
-                      icon: said.ok ? Icons.content_paste_rounded : Icons.warning_amber_rounded,
-                      text: said.text,
-                      tint: said.ok ? p.success : p.warning,
-                    ),
-                  ),
-              ],
-            ),
-            SettingsGroup(
-              title: 'From the Mac',
-              children: [
-                SoonRow(title: 'Checks and connections', detail: 'Gmail, Google Calendar and Notion, every 5 to 60 minutes, with quiet hours.'),
-                SoonRow(title: 'Morning briefing', detail: 'A short round-up of your day at the time you choose.'),
-                SoonRow(title: 'VIPs', detail: 'Only mail from the people who matter most rings your phones.'),
-                SoonRow(title: 'Marking things done', detail: 'Tick something off on a phone and it leaves every device; optionally marks the email read.'),
-              ],
-            ),
-          ],
-        );
-      },
     );
   }
 }

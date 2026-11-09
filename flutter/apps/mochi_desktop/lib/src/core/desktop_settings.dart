@@ -6,6 +6,7 @@ import 'package:mochi_art/mochi_art.dart' show Accessory, AccessorySlot, OfficeT
 import 'package:mochi_world/mochi_world.dart' show AdventureSettings, Chattiness, FocusSettings, GameRecords, RecapSettings, RoomLayout;
 import 'package:mochi_world/mochi_world.dart' as w show SeasonalSettings;
 
+import 'agent/agent_settings.dart';
 import 'hotkeys.dart';
 import 'mischief.dart';
 import 'notifications.dart';
@@ -255,6 +256,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   LocalWeatherSettings _weather = const LocalWeatherSettings();
   String? _coffeeDay;
   AdventureSettings _adventure = const AdventureSettings();
+  AgentSettings _agent = const AgentSettings();
   late DateTime _adoptedAt;
 
   void _load(Map<String, Object?> json) {
@@ -369,6 +371,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     final coffee = json['coffeeDay'];
     _coffeeDay = coffee is String && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(coffee) ? coffee : null;
     _adventure = AdventureSettings.fromJson(json['adventure']);
+    _agent = AgentSettings.fromJson(json['agent']);
   }
 
   static int _minutes(Object? value, int fallback, int min, int max) => value is int ? value.clamp(min, max) : fallback;
@@ -786,6 +789,14 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _set(() => _adventure = value);
   }
 
+  /// Mochi's agent (Settings › Agent; the Mac's `agent`): off at first. It reads Gmail, Google Calendar and Notion through
+  /// your Claude connectors, and tells you what matters.
+  AgentSettings get agent => _agent;
+  set agent(AgentSettings value) {
+    if (value == _agent) return;
+    _set(() => _agent = value);
+  }
+
   /// Phone commands already handled (the newest 30), so a redelivered one never runs twice.
   bool wasHandled(String id) => _handledCommands.contains(id);
 
@@ -881,6 +892,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'weather': _weather.toJson(),
     if (_coffeeDay != null) 'coffeeDay': _coffeeDay,
     'adventure': _adventure.toJson(),
+    'agent': _agent.toJson(),
     'adoptedAt': _adoptedAt.toIso8601String(),
   };
 

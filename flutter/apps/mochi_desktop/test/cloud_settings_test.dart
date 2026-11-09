@@ -218,13 +218,13 @@ void main() {
       expect(find.textContaining('Copied. On claude.ai/code'), findsOneWidget);
     });
 
-    testWidgets('no phone yet: the button is off and it says to pair one; the agent itself is honestly not here', (tester) async {
+    testWidgets('no phone yet: the button is off and it says to pair one', (tester) async {
       await room(tester, []);
       await open(tester);
       final button = tester.widget<FilledButton>(copyButton.first);
       expect(button.onPressed, isNull);
       expect(find.text('Pair a phone in Settings › Phones first: Mochi Cloud joins the same link.'), findsOneWidget);
-      expect(find.text('The agent is coming to Windows'), findsOneWidget);
+      expect(find.text('Let Mochi keep an eye on my mail, calendar and tasks'), findsOneWidget, reason: 'the agent itself is here now (W23a)');
       expect(find.textContaining('the phones paired with this PC'), findsOneWidget);
     });
   });

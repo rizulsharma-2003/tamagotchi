@@ -9,7 +9,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart' show TestWidgetsFlutterBinding;
 import 'package:flutter/foundation.dart' show Uint8List;
-import 'package:mochi_desktop/src/core/ask_mochi.dart' show ClipboardText;
+import 'package:mochi_desktop/src/core/ask_mochi.dart' show ClipboardText, UrlOpener;
 import 'package:mochi_desktop/src/core/claude_cli.dart';
 import 'package:mochi_desktop/src/core/desktop_settings.dart';
 import 'package:mochi_desktop/src/core/desktop_world.dart';
@@ -746,6 +746,10 @@ class TestDesktop {
     WindowCapturer? windowCapturer,
     ForegroundWindows? foregroundWindows,
     ScreenshotStore? screenshots,
+    ClaudeRunner? agentClaude,
+    String? agentDebug,
+    Duration agentDebugAfter = const Duration(seconds: 6),
+    UrlOpener? opener,
   }) {
     final stores = {for (final entry in files.entries) entry.key: MemoryJsonStore(entry.value)};
     final temp = Directory.systemTemp.createTempSync('mochi_desktop_test');
@@ -811,6 +815,10 @@ class TestDesktop {
       windowCapturer: windowCapturer,
       foregroundWindows: foregroundWindows,
       screenshots: screenshots,
+      agentClaude: agentClaude == null ? null : () => claudeInstalled ? agentClaude : null,
+      agentDebug: agentDebug,
+      agentDebugAfter: agentDebugAfter,
+      opener: opener,
     );
     return TestDesktop._(temp, desktop, sockets, api, claude, vault, document, start, toastService, sound, usage, hotkeys, store, stores);
   }
