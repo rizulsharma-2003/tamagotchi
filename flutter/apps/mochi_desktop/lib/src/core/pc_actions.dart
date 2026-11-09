@@ -182,14 +182,16 @@ abstract final class PcMatch {
   }
 
   /// Whether a Start menu entry is something to open: not an uninstaller, installer or repair tool by name, and not a
-  /// script or installer by what it starts. (The runner applies the same rule before it lists; this is the second check.)
+  /// script, installer or web shortcut by what it starts. (The runner applies the same rule before it lists; this is the second check.)
   static bool openable(String name, {String id = ''}) {
     final lowered = name.toLowerCase();
     for (final word in const ['uninstall', 'setup', 'installer', 'repair', 'reset', 'remove']) {
       if (lowered.contains(word)) return false;
     }
     final target = id.toLowerCase();
-    for (final end in const ['.bat', '.cmd', '.ps1', '.vbs', '.js', '.wsf', '.hta', '.msi', '.reg']) {
+    // A web shortcut would open a link without open_url's https-only rule.
+    if (target.contains('://')) return false;
+    for (final end in const ['.bat', '.cmd', '.ps1', '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh', '.hta', '.msi', '.reg', '.scr', '.pif', '.url']) {
       if (target.endsWith(end)) return false;
     }
     return true;
@@ -265,7 +267,13 @@ class PcActionsImpl implements PcActions {
     final windows = platform.windows();
     final program = QuickCommands.matchApp(QuickCommands.normalize(name), {for (final window in windows) window.program}.toList());
     if (program == null) return null;
-    return (program: program, windows: [for (final window in windows) if (window.program == program) window]);
+    return (
+      program: program,
+      windows: [
+        for (final window in windows)
+          if (window.program == program) window,
+      ],
+    );
   }
 
   bool _bringForward(List<PcWindow> windows) {
@@ -285,9 +293,8 @@ class PcActionsImpl implements PcActions {
     return PcResult('Opening ${app.name}.');
   }
 
-  PcResult _switchedTo(String program, List<PcWindow> windows) => _bringForward(windows)
-      ? PcResult('Switched to $program.')
-      : PcResult('$program is open, but Windows wouldn\'t bring it forward.', ok: false);
+  PcResult _switchedTo(String program, List<PcWindow> windows) =>
+      _bringForward(windows) ? PcResult('Switched to $program.') : PcResult('$program is open, but Windows wouldn\'t bring it forward.', ok: false);
 
   @override
   PcResult listApps() {
@@ -338,9 +345,7 @@ class PcActionsImpl implements PcActions {
         return await platform.setMuted(true) ? const PcResult('Muted.') : const PcResult('This output can\'t be muted.', ok: false);
       }
       if (change == 'unmute') {
-        return await platform.setMuted(false)
-            ? const PcResult('Sound\'s back on.')
-            : const PcResult('This output can\'t be unmuted.', ok: false);
+        return await platform.setMuted(false) ? const PcResult('Sound\'s back on.') : const PcResult('This output can\'t be unmuted.', ok: false);
       }
     }
     final double target;

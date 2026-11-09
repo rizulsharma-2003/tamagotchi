@@ -242,6 +242,9 @@ void main() {
       expect(PcMatch.openable('Slack', id: 'x'), isTrue);
       expect(PcMatch.openable('Slack uninstaller'), isFalse);
       expect(PcMatch.openable('Tool', id: 'RUN.CMD'), isFalse);
+      expect(PcMatch.openable('Example website', id: r'{A77F5D77}\Example\Website.url'), isFalse);
+      expect(PcMatch.openable('Example', id: 'http://example.com/'), isFalse);
+      expect(PcMatch.openable('Calculator', id: 'Microsoft.WindowsCalculator_8wekyb3d8bbwe!App'), isTrue);
     });
 
     test('an app that is already running is switched to, not started again', () async {
@@ -643,13 +646,7 @@ void main() {
 
     test('a window title is never in what a tool returns, even when the PC could have said it', () async {
       final platform = FakePcPlatform()..shown = [_window(1, 'Google Chrome', _secret)];
-      final real = AskMochi(
-        sessions: rig.sessions,
-        runner: () => null,
-        cue: (_) {},
-        brainFactory: (self) => rig.brain,
-        pc: PcActionsImpl(platform),
-      );
+      final real = AskMochi(sessions: rig.sessions, runner: () => null, cue: (_) {}, brainFactory: (self) => rig.brain, pc: PcActionsImpl(platform));
       rig.tools = real.brainTool;
       final (answer, channel) = await startRequest('x');
       for (final (tool, arguments) in <(String, Map<String, Object?>)>[
@@ -788,7 +785,10 @@ void main() {
       await tester.ensureVisible(row);
       expect(row, findsOneWidget);
       expect(find.text('Open apps and links, bring windows forward, music and volume'), findsOneWidget);
-      final toggle = find.descendant(of: find.ancestor(of: row, matching: find.byType(ToggleRow)), matching: find.byType(Switch));
+      final toggle = find.descendant(
+        of: find.ancestor(of: row, matching: find.byType(ToggleRow)),
+        matching: find.byType(Switch),
+      );
       expect(tester.widget<Switch>(toggle).value, isTrue);
       await tester.tap(toggle);
       await tester.pump();

@@ -90,10 +90,12 @@ bool EndsWith(const std::wstring& text, const std::wstring& suffix) {
   return text.size() >= suffix.size() && text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
-// Entries that are not apps to open: uninstallers, installers and repair tools by name, scripts and installers by target.
+// Entries that are not apps to open: uninstallers, installers and repair tools by name; scripts, installers and web
+// shortcuts by target.
 bool Excluded(const std::wstring& name, const std::wstring& parsing) {
   static const wchar_t* const kWords[] = {L"uninstall", L"setup", L"installer", L"repair", L"reset", L"remove"};
-  static const wchar_t* const kEnds[] = {L".bat", L".cmd", L".ps1", L".vbs", L".js", L".wsf", L".hta", L".msi", L".reg"};
+  static const wchar_t* const kEnds[] = {L".bat", L".cmd", L".ps1", L".vbs", L".vbe", L".js",  L".jse", L".wsf", L".wsh",
+                                         L".hta", L".msi", L".reg", L".scr", L".pif", L".url"};
   const std::wstring lowered_name = Lower(name);
   for (const wchar_t* word : kWords) {
     if (lowered_name.find(word) != std::wstring::npos) {
@@ -101,6 +103,10 @@ bool Excluded(const std::wstring& name, const std::wstring& parsing) {
     }
   }
   const std::wstring lowered_parsing = Lower(parsing);
+  // A web shortcut in the Start menu would open a link without the https-only rule of open_url.
+  if (lowered_parsing.find(L"://") != std::wstring::npos) {
+    return true;
+  }
   for (const wchar_t* end : kEnds) {
     if (EndsWith(lowered_parsing, end)) {
       return true;
