@@ -470,15 +470,18 @@ class AskBrain extends ChangeNotifier {
     // The card shows exactly what SendMessage sends. Claude Code names the fields `to` and `message` (some versions
     // `recipient` and `content`, as the Mac reads them); both names of one field with different values would leave the
     // card unsure what goes: denied.
-    Object? one(String a, String b) {
+    // A session may be named two ways for the same one ("bin-42" and "bin-42 [eb4027]"): compared as shown.
+    Object? one(String a, String b, {String Function(String)? same}) {
       final first = input[a], second = input[b];
-      if (first != null && second != null && first != second) return _ambiguous;
-      return first ?? second;
+      if (first == null || second == null) return first ?? second;
+      if (first is String && second is String && (first == second || (same != null && same(first) == same(second)))) return first;
+      return _ambiguous;
     }
 
-    final to = one('to', 'recipient');
+    final to = one('to', 'recipient', same: AgentNames.display);
     final body = one('message', 'content');
-    if (identical(to, _ambiguous) || identical(body, _ambiguous)) return _deny('Nothing to send (the message was unclear).');
+    if (identical(to, _ambiguous)) return _deny('Nothing to send (the message was unclear: to/recipient differ).');
+    if (identical(body, _ambiguous)) return _deny('Nothing to send (the message was unclear: message/content differ).');
     final target = to is String ? AgentNames.display(to) : '';
     final message = body is String ? body : '';
     // The field names (never their values) say what didn't fit, should Claude Code's tool change again.
