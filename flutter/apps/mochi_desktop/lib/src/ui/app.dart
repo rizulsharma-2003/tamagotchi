@@ -10,6 +10,7 @@ import 'package:mochi_ui/mochi_ui.dart';
 import 'package:mochi_wire/mochi_wire.dart' show HookStatus;
 
 import '../core/desktop_settings.dart' show DesktopStyle;
+import '../core/ask_brain.dart' show AskStep;
 import '../core/ask_mochi.dart' show AskOutcome;
 import '../core/hotkeys.dart';
 import '../core/json_store.dart';
@@ -303,6 +304,23 @@ class DesktopAppState extends State<DesktopApp> {
   CompanionDirector get companion => _companion;
 
   /// Development: with a `stroll-debug` file in Mochi's folder, the stroll writes what it sees to `stroll.log` there.
+  /// Development: `MOCHI_DESKTOP_ASK=<a question>` asks Mochi once, 20 seconds after start, the way typing it would, and
+  /// writes how it went to the stroll-debug log (the steps the brain took and the start of the reply), for checking Ask
+  /// Mochi's brain on a PC without typing into it. An approval card it leads to still waits for Send.
+  void _askDemo(String? question) {
+    final text = question?.trim() ?? '';
+    if (text.isEmpty) return;
+    final log = _strollLog();
+    Timer(const Duration(seconds: 20), () async {
+      if (!mounted) return;
+      log?.call('ask demo: asking');
+      final outcome = await desktop.ask.ask(text);
+      final steps = [for (final step in desktop.ask.brain?.steps ?? const <AskStep>[]) step.text].join(' | ');
+      final reply = outcome.text.replaceAll('\n', ' ');
+      log?.call('ask demo: ${outcome.ok ? 'ok' : 'failed'} · brain ${desktop.ask.brain == null ? 'none' : 'present'} · steps: $steps · reply: ${reply.length > 300 ? '${reply.substring(0, 300)}…' : reply}');
+    });
+  }
+
   void Function(String)? _strollLog() {
     final folder = desktop.paths.home;
     if (!File('$folder${Platform.pathSeparator}stroll-debug').existsSync()) return null;
@@ -342,6 +360,7 @@ class DesktopAppState extends State<DesktopApp> {
     if (_mischief.supported) _stroll.stand = _mischief.stand;
     // X7's state word goes to the same stroll-debug log.
     desktop.reacts.log ??= _strollLog();
+    _askDemo(Platform.environment['MOCHI_DESKTOP_ASK']);
     // Adventures (W19): dropped off the taskbar, Mochi sets off from there; the tray's and the menu's Explore item follows.
     _stroll.onDropOff = (x, y) => desktop.settings.adventure.enabled && (_mischief.adventure?.dropped(x, y) ?? false);
     desktop.ask
