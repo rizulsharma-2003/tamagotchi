@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart' show TestWidgetsFlutterBinding;
 import 'package:flutter/foundation.dart' show Uint8List;
+import 'package:mochi_desktop/src/core/agent/cloud_token_vault.dart';
 import 'package:mochi_desktop/src/core/ask_mochi.dart' show ClipboardText, UrlOpener;
 import 'package:mochi_desktop/src/core/claude_cli.dart';
 import 'package:mochi_desktop/src/core/desktop_settings.dart';
@@ -747,6 +748,7 @@ class TestDesktop {
     ForegroundWindows? foregroundWindows,
     ScreenshotStore? screenshots,
     ClaudeRunner? agentClaude,
+    CloudTokenVault? cloudTokens,
     String? agentDebug,
     Duration agentDebugAfter = const Duration(seconds: 6),
     UrlOpener? opener,
@@ -816,6 +818,7 @@ class TestDesktop {
       foregroundWindows: foregroundWindows,
       screenshots: screenshots,
       agentClaude: agentClaude == null ? null : () => claudeInstalled ? agentClaude : null,
+      cloudTokens: cloudTokens,
       agentDebug: agentDebug,
       agentDebugAfter: agentDebugAfter,
       opener: opener,

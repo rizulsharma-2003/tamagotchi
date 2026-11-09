@@ -175,7 +175,7 @@ void main() {
       await room(tester, [phone, cloud]);
       t.api.listed = [linkPeer('dev_pc', 'host'), linkPeer('dev_droid', 'pocket'), linkPeer('dev_cloud', 'cloud')];
       await open(tester);
-      expect(find.textContaining('realme RMX3242 through Mochi Link'), findsOneWidget, reason: 'the phones by name');
+      expect(find.textContaining('pushes the news to realme RMX3242 through Mochi Link'), findsOneWidget, reason: 'the phones by name');
       await copy(tester);
       expect(find.text('Replace Mochi Cloud’s settings?'), findsOneWidget);
       await tester.tap(find.text('Replace'));

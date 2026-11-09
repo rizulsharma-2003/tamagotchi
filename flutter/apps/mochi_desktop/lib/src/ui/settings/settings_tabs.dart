@@ -129,7 +129,8 @@ enum SettingsTab {
         'away only when live activity',
     agent => 'gmail calendar notion mail email meetings tasks briefing morning vip vips done connections connectors connect check '
         'quiet hours interval often badge dot bubble tell notifications phones waiting for you pending recent forget cloud watcher '
-        'mochi cloud copy settings environment',
+        'mochi cloud copy settings environment fire url token trigger check now script google apps script script.google.com '
+        'mark read unread when done',
     notifications => 'alerts notifications toast toasts banner badge sounds sound volume keyboard taps quiet reactions '
         'celebrate finished needs you snag errors build test categories animate',
     desktop => 'desktop pet taskbar roam stroll walk window position show hide shortcut hotkey keyboard patch companion '

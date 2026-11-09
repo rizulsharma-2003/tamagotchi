@@ -52,7 +52,11 @@ class PrivacyPane extends StatelessWidget {
                   'Only while it’s on: a short Claude Haiku run reads new mail, coming events and your Notion tasks through the '
                   'connectors in your own Claude account, read only, and goes to Anthropic like any prompt. With “On my phones” '
                   'on, what $pet tells you (a mail’s sender, subject and a short gist, an event’s title and time, a task’s title) '
-                  'also goes to your phones, sealed, through your relay.',
+                  'also goes to your phones, sealed, through your relay. Its checks never send, change or delete anything. The one '
+                  'change it can make: with “Mark the email read in Gmail” on, when you mark mail done a short Claude run removes '
+                  'Gmail’s unread mark from those threads (thread ids go to Anthropic), and nothing else. If you save Mochi Cloud’s '
+                  'trigger, its token stays on this PC sealed with Windows Data Protection, and goes only to your phones, sealed, '
+                  'through your relay.',
             ),
             _Point(
               icon: Icons.hub_outlined,
@@ -108,6 +112,7 @@ class PrivacyPane extends StatelessWidget {
             InfoRow(label: 'Settings', value: desktop.paths.settingsFile, selectable: true),
             InfoRow(label: 'Events while Mochi was closed', value: desktop.paths.spoolFile, selectable: true),
             InfoRow(label: 'The link to your phones', value: link.vaultDescription),
+            InfoRow(label: 'Mochi Cloud’s trigger token', value: desktop.agent.cloudTriggerSaved ? desktop.agent.tokenStorage : 'None saved'),
             InfoRow(
               label: 'What the agent told you',
               value: desktop.agent.store is FileJsonStore ? (desktop.agent.store as FileJsonStore).path : 'In memory only',

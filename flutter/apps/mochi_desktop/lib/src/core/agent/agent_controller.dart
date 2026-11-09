@@ -11,16 +11,18 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:mochi_link/mochi_link.dart' show AgentDoneList, AgentNote, AgentPending, AgentSource;
+import 'package:mochi_link/mochi_link.dart' show AgentDoneList, AgentNote, AgentPending, AgentSource, CloudTrigger;
 
 import '../ask_mochi.dart' show AskOutcome, UrlOpener;
 import '../claude_cli.dart';
 import '../desktop_settings.dart';
 import '../json_store.dart';
 import '../notifications.dart' show AttentionLevel;
+import 'agent_cloud.dart';
 import 'agent_command.dart';
 import 'agent_news.dart';
 import 'agent_settings.dart';
+import 'cloud_token_vault.dart';
 
 /// What the agent shares with the phones (Mochi Link): the Mac's PhoneController, agent parts.
 abstract interface class AgentPhone {
@@ -39,6 +41,9 @@ abstract interface class AgentPhone {
 
   /// What's done on this PC (and everything it heard of): `macDone`.
   void publishMacDone(AgentDoneList list);
+
+  /// Mochi Cloud's "check now" trigger (`cloud`), for the phones' "Check now"; null takes it away.
+  void publishCloudTrigger(CloudTrigger? trigger);
 
   /// A notification with the card riding along. False when no phone can be reached.
   bool sendNews({required String title, required String body, AgentPending? pending, bool quietIfKnown = false});
@@ -77,11 +82,15 @@ class AgentController extends ChangeNotifier {
     void Function(String message)? log,
     bool Function()? lookingAtMochi,
     String Function()? petName,
+    CloudTokenVault? tokenVault,
     this.tickEvery = const Duration(seconds: 20),
     this.firstTickAfter = const Duration(seconds: 10),
     this.checkTimeout = const Duration(seconds: 180),
     this.probeTimeout = const Duration(seconds: 90),
+    this.markReadTimeout = const Duration(seconds: 120),
+    this.markReadRetry = const Duration(minutes: 10),
   }) : _runner = runner,
+       _vault = tokenVault ?? MemoryCloudTokenVault(),
        _clock = clock ?? DateTime.now,
        _zone = zone ?? (() => AgentZone('UTC', DateTime.now().timeZoneOffset)),
        _signInNotes = signInNotes,
@@ -100,6 +109,10 @@ class AgentController extends ChangeNotifier {
   final Duration checkTimeout;
   final Duration probeTimeout;
 
+  /// Marking mail read: one short run, and how long to wait before trying again after one that didn't work (the Mac's 600 s).
+  final Duration markReadTimeout;
+  final Duration markReadRetry;
+
   /// Mochi's speech bubble (the line, for how many seconds).
   final void Function(String line, int seconds) say;
   final ClaudeRunner? Function() _runner;
@@ -109,6 +122,10 @@ class AgentController extends ChangeNotifier {
   final void Function(String message)? _log;
   final bool Function()? _lookingAtMochi;
   final String Function() _petName;
+
+  /// Mochi Cloud's token (never in settings.json).
+  final CloudTokenVault _vault;
+  bool? _hasToken;
 
   AgentMemory _memory = AgentMemory();
   Timer? _timer;
@@ -126,6 +143,8 @@ class AgentController extends ChangeNotifier {
   Map<AgentSource, AgentConnection> _connections = {};
   bool _checkingConnections = false;
   bool _running = false;
+  bool _markingRead = false;
+  DateTime _lastMarkReadAttempt = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime? _lastRunAt;
   String? _lastResult;
   String? _lastError;
@@ -144,8 +163,8 @@ class AgentController extends ChangeNotifier {
   bool get checkingConnections => _checkingConnections;
   bool get running => _running;
 
-  /// A check, a briefing or a connections look is under way: only one at a time.
-  bool get busy => _running || _checkingConnections;
+  /// A check, a briefing, a connections look or a mark-read run is under way: only one at a time.
+  bool get busy => _running || _checkingConnections || _markingRead;
   DateTime? get lastRunAt => _lastRunAt;
   String? get lastResult => _lastResult;
   String? get lastError => _lastError;
@@ -184,6 +203,8 @@ class AgentController extends ChangeNotifier {
     settings.addListener(_settingsChanged);
     _connectedSub = phone.connected.listen((_) => _republish());
     publishPending(force: true);
+    // Mochi Pocket may have been reinstalled: the cloud's "check now" link is shared again.
+    _publishCloudTrigger();
     if (_last.enabled) _turnOn();
   }
 
@@ -265,6 +286,8 @@ class AgentController extends ChangeNotifier {
     if (_badge != null && (_lookingAtMochi?.call() ?? false)) _setBadge(null);
     if (_memory.prunePending(now: now)) _save();
     publishPending();
+    // Mail marked done that Gmail doesn't know yet (a failed run, or Gmail wasn't connected): try again every ten minutes.
+    if (now.difference(_lastMarkReadAttempt) > markReadRetry && _memory.threadsToMarkRead.isNotEmpty) _markReadIfNeeded();
     _nudgeBeforeMeetings();
     final until = _watchConnectionsUntil;
     if (until != null) {
@@ -378,6 +401,8 @@ class AgentController extends ChangeNotifier {
         await briefNow();
       case 'connections':
         await refreshConnections(forgetNotes: true);
+      case 'markread':
+        _markReadIfNeeded();
     }
   }
 
@@ -540,6 +565,7 @@ class AgentController extends ChangeNotifier {
     _save();
     publishPending(force: true);
     _publishMacDone();
+    _markReadIfNeeded();
     notifyListeners();
   }
 
@@ -553,7 +579,47 @@ class AgentController extends ChangeNotifier {
     publishPending(force: true);
     _publishMacDone();
     if (_memory.pending.isEmpty) _setBadge(null);
+    _markReadIfNeeded();
     notifyListeners();
+  }
+
+  /// Takes Gmail's unread mark off the mail you marked done: the one change Mochi makes in Gmail, and only with "Mark the
+  /// email read when I mark it done" on, the agent on, Gmail connected and nothing else running. One short Haiku run
+  /// allowed that single tool, for at most 20 threads. A thread counts as marked only when the run finished cleanly.
+  void _markReadIfNeeded() {
+    if (_disposed || !agent.enabled || !agent.markReadWhenDone || busy) return;
+    if (_connections[AgentSource.gmail] != AgentConnection.connected) return;
+    final threads = _memory.threadsToMarkRead.take(20).toList();
+    if (threads.isEmpty) return;
+    final runner = _runner();
+    if (runner == null) return;
+    unawaited(_markRead(runner, threads));
+  }
+
+  Future<void> _markRead(ClaudeRunner runner, List<String> threads) async {
+    final generation = _generation;
+    _markingRead = true;
+    _lastMarkReadAttempt = _clock();
+    _active = runner;
+    notifyListeners();
+    try {
+      final run = await runner.run(AgentCommand.markReadArguments, input: AgentCommand.markReadPrompt(threads), timeout: markReadTimeout);
+      if (identical(_active, runner)) _active = null;
+      if (generation != _generation || _disposed) return;
+      if (run.output.isEmpty || !AgentCommand.markReadSucceeded(run.output)) {
+        _log?.call('agent: mark read failed');
+        return;
+      }
+      final at = _now.roundToDouble();
+      for (final thread in threads) {
+        _memory.markedRead[thread] = at;
+      }
+      _save();
+      _log?.call('agent: marked ${threads.length} read');
+    } finally {
+      _markingRead = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   void _publishMacDone({bool force = false}) {
@@ -593,10 +659,62 @@ class AgentController extends ChangeNotifier {
   void _republish() {
     _publishedPending = null;
     publishPending(force: true);
+    _publishCloudTrigger();
     if (agent.enabled) {
       _publishMacDone(force: true);
       phoneDoneChanged();
     }
+  }
+
+  // MARK: Mochi Cloud's trigger
+
+  /// A Fire URL is saved and its token is in the vault.
+  bool get cloudTriggerSaved => agent.cloudFireURL.isNotEmpty && (_hasToken ??= _vault.load() != null);
+
+  /// How the token is kept, for Settings.
+  String get tokenStorage => _vault.description;
+
+  /// Stores Mochi Cloud's API trigger (the URL in settings, the token only in the vault) and shares it with the phones.
+  /// Null when it worked; otherwise what to tell the user.
+  String? saveCloudTrigger({required String url, required String token}) {
+    url = url.trim();
+    token = token.trim();
+    if (!AgentCloud.isFireURL(url)) return 'Paste the Fire URL from the task\u2019s API trigger (it ends in /fire).';
+    if (token.length <= 20 || token.contains(' ')) return 'Paste the token shown when you generated it.';
+    if (!_vault.save(token)) {
+      _hasToken = null;
+      return 'The token couldn\u2019t be saved with Windows Data Protection.';
+    }
+    _hasToken = true;
+    settings.agent = agent.copyWith(cloudFireURL: url);
+    phone.publishCloudTrigger(CloudTrigger(url: url, token: token));
+    _log?.call('agent: cloud trigger saved');
+    notifyListeners();
+    return null;
+  }
+
+  /// The Mochi Watcher (Google Apps Script) with this PC's trigger filled in; null until a trigger is saved.
+  String? watcherScript() {
+    final token = _vault.load();
+    if (token == null) return null;
+    return AgentCloud.watcherScript(fireURL: agent.cloudFireURL, token: token, vips: agent.vips, timeZone: _zone().name);
+  }
+
+  void removeCloudTrigger() {
+    _vault.delete();
+    _hasToken = false;
+    settings.agent = agent.copyWith(cloudFireURL: '');
+    phone.publishCloudTrigger(null);
+    _log?.call('agent: cloud trigger removed');
+    notifyListeners();
+  }
+
+  /// Shares the saved trigger (at launch, and when the link is back: a phone may have been reinstalled).
+  void _publishCloudTrigger() {
+    if (!cloudTriggerSaved) return;
+    final token = _vault.load();
+    if (token == null) return;
+    phone.publishCloudTrigger(CloudTrigger(url: agent.cloudFireURL, token: token));
   }
 
   // MARK: Forgetting and saving

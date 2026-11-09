@@ -126,11 +126,15 @@ void main() {
       await everyone(tester);
       await open(tester, pane: SettingsTab.phones);
       expect(find.text("Mochi on Rizul's iPhone and realme RMX3242: pairing, Claude’s summaries and talking to Mochi from a phone."), findsOneWidget);
-      for (final tab in [SettingsTab.assistant, SettingsTab.agent, SettingsTab.notifications]) {
+      for (final tab in [SettingsTab.assistant, SettingsTab.notifications]) {
         tester.state<DesktopAppState>(find.byType(DesktopApp)).settingsNavigation.tab = tab;
         await tester.pump(const Duration(milliseconds: 300));
         expect(find.text(SoonRow.tag), findsWidgets, reason: tab.title);
       }
+      // Sprint 2's W23b took the agent's last ones: marking mail read, Mochi Cloud's trigger and the Watcher.
+      tester.state<DesktopAppState>(find.byType(DesktopApp)).settingsNavigation.tab = SettingsTab.agent;
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text(SoonRow.tag), findsNothing);
       // Sprint 2's W19 (Adventures) took Fun's last one.
       tester.state<DesktopAppState>(find.byType(DesktopApp)).settingsNavigation.tab = SettingsTab.fun;
       await tester.pump(const Duration(milliseconds: 300));

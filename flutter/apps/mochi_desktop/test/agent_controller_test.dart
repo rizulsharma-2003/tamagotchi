@@ -8,9 +8,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mochi_desktop/src/core/agent/agent_cloud.dart';
 import 'package:mochi_desktop/src/core/agent/agent_command.dart';
 import 'package:mochi_desktop/src/core/agent/agent_controller.dart';
 import 'package:mochi_desktop/src/core/agent/agent_settings.dart';
+import 'package:mochi_desktop/src/core/agent/cloud_token_vault.dart';
 import 'package:mochi_desktop/src/core/claude_cli.dart';
 import 'package:mochi_desktop/src/core/desktop_settings.dart';
 import 'package:mochi_desktop/src/core/json_store.dart';
@@ -39,6 +41,7 @@ class Rig {
       log: log.add,
       lookingAtMochi: () => looking,
       petName: () => 'Mochi',
+      tokenVault: vault,
       // Real timers never fire inside these tests: ticks are called by hand.
       tickEvery: const Duration(hours: 5),
       firstTickAfter: const Duration(hours: 5),
@@ -56,6 +59,7 @@ class Rig {
   final AgentClaudeFake claude = AgentClaudeFake();
   final AgentPhoneFake phone = AgentPhoneFake();
   final OpenerFake opener = OpenerFake();
+  final MemoryCloudTokenVault vault = MemoryCloudTokenVault();
   final MemoryJsonStore store = MemoryJsonStore();
   final List<(String, int)> said = [];
   final List<String> log = [];
@@ -730,6 +734,378 @@ void main() {
     });
   });
 
+  group('Marking mail read (W23b)', () {
+    /// The agent is on and has seen two mails; connections are known.
+    Future<Rig> seen({AgentSettings? settings, bool gmail = true}) async {
+      final rig = Rig(settings: settings ?? onQuietly());
+      if (!gmail) rig.claude.probe = probeOutput(gmail: false);
+      rig.claude.check = digestOutput(emails: [mail('t1', reply: true), mail('t2', from: 'Google', urgency: 'low')]);
+      rig.controller.start();
+      await rig.controller.checkNow();
+      return rig;
+    }
+
+    Future<void> settle() async {
+      for (var i = 0; i < 8; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    AgentNote note(Rig rig, String id) => rig.controller.notes.firstWhere((each) => each.id == id);
+    Map<Object?, Object?> marked(Rig rig) => ((rig.store.json! as Map)['markedRead'] ?? {}) as Map<Object?, Object?>;
+
+    test('on by default, as on the Mac', () {
+      rig = Rig();
+      expect(const AgentSettings().markReadWhenDone, isTrue);
+      expect(AgentSettings.fromJson(const {}).markReadWhenDone, isTrue);
+    });
+
+    test('marking a mail done runs one short claude -p that may only call unlabel_thread, for that thread', () async {
+      rig = await seen();
+      rig.controller.markDone(note(rig, 'mail:t1'));
+      await settle();
+      final run = rig.claude.markReads.single;
+      expect(run.arguments, AgentCommand.markReadArguments);
+      expect(run.arguments.sublist(run.arguments.indexOf('--allowedTools')), ['--allowedTools', 'ToolSearch', 'mcp__claude_ai_Gmail__unlabel_thread']);
+      expect(run.input, contains('Thread ids: t1.'));
+      expect(run.input, isNot(contains('t2')));
+      expect(run.timeout, const Duration(seconds: 120));
+      expect(marked(rig).keys, ['t1']);
+      expect(rig.log, contains('agent: marked 1 read'));
+      // Marked once: nothing more to do, however often it ticks.
+      rig.advance(const Duration(minutes: 30));
+      rig.controller.tick();
+      await settle();
+      expect(rig.claude.markReads, hasLength(1));
+    });
+
+    test('no check, briefing or probe the agent runs ever allows that tool', () async {
+      rig = await seen();
+      rig.controller.markDone(note(rig, 'mail:t1'));
+      await settle();
+      await rig.controller.briefNow();
+      await rig.controller.refreshConnections();
+      expect(rig.claude.markReads, hasLength(1));
+      expect(rig.claude.checks, isNotEmpty);
+      for (final run in [...rig.claude.checks, ...rig.claude.probes]) {
+        expect(run.arguments, isNot(contains(AgentCommand.markReadTool)));
+        expect(run.arguments.any((argument) => argument.contains('unlabel')), isFalse);
+      }
+    });
+
+    test('only mail, only done: an event or a task marked done never starts a run', () async {
+      rig = Rig(settings: on());
+      rig.claude.check = digestOutput(
+        events: [meeting('e1', DateTime(2026, 11, 3, 10, 40))],
+        tasks: [
+          {'id': 'k1', 'title': 'A task'},
+        ],
+      );
+      rig.controller.start();
+      await rig.controller.checkNow();
+      for (final each in rig.controller.notes) {
+        rig.controller.markDone(each);
+      }
+      await settle();
+      expect(rig.controller.doneCount, greaterThan(0));
+      expect(rig.claude.markReads, isEmpty);
+    });
+
+    test('a thread a phone marked done is marked read too', () async {
+      rig = await seen();
+      rig.phone.phoneMarked({'mail:t2': rig.now.millisecondsSinceEpoch / 1000});
+      await settle();
+      expect(rig.claude.markReads.single.input, contains('Thread ids: t2.'));
+      expect(marked(rig).keys, ['t2']);
+    });
+
+    test('with the switch off it never runs, and turning it on lets the next tick catch up', () async {
+      rig = await seen(settings: onQuietly().copyWith(markReadWhenDone: false));
+      rig.controller.markDone(note(rig, 'mail:t1'));
+      await settle();
+      rig.advance(const Duration(minutes: 30));
+      rig.controller.tick();
+      await settle();
+      expect(rig.claude.markReads, isEmpty);
+      expect(marked(rig), isEmpty);
+      rig.set((settings) => settings.copyWith(markReadWhenDone: true));
+      rig.controller.tick();
+      await settle();
+      expect(rig.claude.markReads.single.input, contains('Thread ids: t1.'));
+    });
+
+    test('with the agent off it never runs (not on Done, not on a tick, not from the development switch)', () async {
+      rig = await seen();
+      rig.set((settings) => settings.copyWith(enabled: false));
+      rig.controller.markDone(note(rig, 'mail:t1'));
+      rig.advance(const Duration(minutes: 30));
+      rig.controller.tick();
+      await rig.controller.debugRun('markread');
+      await settle();
+      expect(rig.claude.markReads, isEmpty);
+      expect(rig.controller.isDone('mail:t1'), isTrue);
+      expect(rig.controller.ticking, isFalse);
+    });
+
+    test('with Gmail not connected it never runs', () async {
+      rig = Rig(settings: on());
+      rig.claude.probe = probeOutput(gmail: false);
+      rig.claude.check = digestOutput(events: [meeting('e1', DateTime(2026, 11, 3, 10, 40))]);
+      rig.controller.start();
+      await rig.controller.checkNow();
+      expect(rig.controller.connections[AgentSource.gmail], AgentConnection.unavailable);
+      rig.phone.phoneMarked({'mail:t1': rig.now.millisecondsSinceEpoch / 1000});
+      rig.advance(const Duration(minutes: 30));
+      rig.controller.tick();
+      await settle();
+      expect(rig.claude.markReads, isEmpty);
+    });
+
+    test('with no claude installed it never runs', () async {
+      rig = await seen();
+      rig.installed = false;
+      rig.controller.markDone(note(rig, 'mail:t1'));
+      await settle();
+      expect(rig.claude.markReads, isEmpty);
+    });
+
+    test('one run at a time: not while a check is going, not twice at once; the tick catches up afterwards', () async {
+      rig = await seen();
+      rig.claude.hold = Completer<ClaudeRun>();
+      final check = rig.controller.checkNow();
+      await settle();
+      expect(rig.controller.running, isTrue);
+      rig.controller.markDone(note(rig, 'mail:t1'));
+      await settle();
+      expect(rig.claude.markReads, isEmpty, reason: 'a check is going: no other run starts');
+      rig.claude.hold!.complete(ClaudeRun(exitCode: 0, output: rig.claude.check));
+      await check;
+      rig.claude.hold = null;
+      rig.controller.tick();
+      await settle();
+      expect(rig.claude.markReads, hasLength(1));
+      // Two at once: the second Done finds one running.
+      rig.claude.hold = Completer<ClaudeRun>();
+      rig.phone.phoneMarked({'mail:t2': rig.now.millisecondsSinceEpoch / 1000});
+      await settle();
+      expect(rig.controller.busy, isTrue);
+      rig.phone.phoneMarked({'mail:t2': 1, 'mail:t3': rig.now.millisecondsSinceEpoch / 1000});
+      await settle();
+      expect(rig.claude.markReads, hasLength(2), reason: 'the second is waiting on the first');
+      rig.claude.hold!.complete(ClaudeRun(exitCode: 0, output: rig.claude.markRead));
+      await settle();
+      expect(marked(rig).keys, containsAll(['t1', 't2']));
+    });
+
+    test('and no check or briefing starts while it is running', () async {
+      rig = await seen();
+      rig.claude.hold = Completer<ClaudeRun>();
+      rig.controller.markDone(note(rig, 'mail:t1'));
+      await settle();
+      expect(rig.controller.busy, isTrue);
+      final before = rig.claude.checks.length;
+      rig.advance(const Duration(minutes: 30));
+      rig.controller.tick();
+      await rig.controller.checkNow();
+      await rig.controller.refreshConnections();
+      expect(rig.claude.checks.length, before);
+      rig.claude.hold!.complete(ClaudeRun(exitCode: 0, output: rig.claude.markRead));
+      await settle();
+      expect(rig.controller.busy, isFalse);
+    });
+
+    test('a run that fails (an error, no output, a time-out) marks nothing, and is tried again after ten minutes, not before', () async {
+      rig = await seen();
+      rig.claude.markRead = jsonEncode({'type': 'result', 'is_error': true, 'result': 'Not allowed'});
+      rig.controller.markDone(note(rig, 'mail:t1'));
+      await settle();
+      expect(rig.claude.markReads, hasLength(1));
+      expect(marked(rig), isEmpty, reason: 'markedRead is set only when the run says it worked');
+      expect(rig.log, contains('agent: mark read failed'));
+
+      rig.advance(const Duration(minutes: 9, seconds: 59));
+      rig.controller.tick();
+      await settle();
+      expect(rig.claude.markReads, hasLength(1), reason: 'not before ten minutes');
+
+      rig.advance(const Duration(seconds: 2));
+      rig.claude.timedOut = true;
+      rig.controller.tick();
+      await settle();
+      expect(rig.claude.markReads, hasLength(2));
+      expect(marked(rig), isEmpty);
+      expect(rig.log.where((line) => line == 'agent: mark read failed'), hasLength(2));
+
+      rig.advance(const Duration(minutes: 10, seconds: 1));
+      rig.claude.timedOut = false;
+      rig.claude.markRead = '';
+      rig.controller.tick();
+      await settle();
+      expect(rig.claude.markReads, hasLength(3));
+      expect(marked(rig), isEmpty, reason: 'no output is not a success');
+
+      rig.advance(const Duration(minutes: 10, seconds: 1));
+      rig.claude.markRead = jsonEncode({'type': 'result', 'is_error': false, 'result': 'Marked 1 thread as read.'});
+      rig.controller.tick();
+      await settle();
+      expect(rig.claude.markReads, hasLength(4));
+      expect(marked(rig).keys, ['t1']);
+      expect(rig.log.last, 'agent: marked 1 read');
+    });
+
+    test('at most 20 threads a run, sorted; the rest on the next retry', () async {
+      rig = await seen();
+      final at = rig.now.millisecondsSinceEpoch / 1000;
+      rig.phone.phoneMarked({for (var i = 0; i < 25; i++) 'mail:m${i.toString().padLeft(2, '0')}': at});
+      await settle();
+      final first = rig.claude.markReads.single.input.split('Thread ids: ').last.split('. Finish').first.split(', ');
+      expect(first, hasLength(20));
+      expect(first.first, 'm00');
+      expect(first.last, 'm19');
+      expect(marked(rig).keys, hasLength(20));
+      rig.advance(const Duration(minutes: 11));
+      rig.controller.tick();
+      await settle();
+      expect(rig.claude.markReads, hasLength(2));
+      expect(rig.claude.markReads.last.input, contains('Thread ids: m20, m21, m22, m23, m24.'));
+      expect(marked(rig).keys, hasLength(25));
+    });
+
+    test('turning the agent off ends a run in progress and marks nothing', () async {
+      rig = await seen();
+      rig.claude.hold = Completer<ClaudeRun>();
+      rig.controller.markDone(note(rig, 'mail:t1'));
+      await settle();
+      expect(rig.controller.busy, isTrue);
+      rig.set((settings) => settings.copyWith(enabled: false));
+      await settle();
+      expect(rig.claude.stops, 1);
+      expect(rig.controller.busy, isFalse);
+      expect(marked(rig), isEmpty);
+    });
+
+    test('the log says outcomes only: no thread id', () async {
+      rig = await seen();
+      rig.controller.markDone(note(rig, 'mail:t1'));
+      await settle();
+      rig.claude.markRead = jsonEncode({'type': 'result', 'is_error': true, 'result': 'thread t2 refused'});
+      rig.controller.markDone(note(rig, 'mail:t2'));
+      rig.advance(const Duration(minutes: 11));
+      rig.controller.tick();
+      await settle();
+      for (final line in rig.log.where((line) => line.contains('mark'))) {
+        expect(line, matches(RegExp(r'^agent: (marked \d+ read|mark read failed)$')));
+      }
+      expect(rig.log.join('\n'), isNot(contains('t1')));
+    });
+  });
+
+  group('Mochi Cloud’s trigger (W23b)', () {
+    const url = 'https://api.anthropic.com/v1/claude_code/routines/trig_012eNQcMDqqHfiWcYGoXKjts/fire';
+    const token = 'sk-ant-oat01-abcDEF_1234567890';
+
+    test('Save checks the URL and the token first, with the Mac\'s words, and keeps nothing when it says no', () {
+      rig = Rig();
+      expect(rig.controller.saveCloudTrigger(url: 'https://example.com/fire', token: token), 'Paste the Fire URL from the task’s API trigger (it ends in /fire).');
+      expect(rig.controller.saveCloudTrigger(url: '', token: token), 'Paste the Fire URL from the task’s API trigger (it ends in /fire).');
+      expect(rig.controller.saveCloudTrigger(url: url, token: 'short'), 'Paste the token shown when you generated it.');
+      expect(rig.controller.saveCloudTrigger(url: url, token: 'sk-ant oat01 with spaces inside it'), 'Paste the token shown when you generated it.');
+      expect(rig.controller.saveCloudTrigger(url: url, token: ''), 'Paste the token shown when you generated it.');
+      expect(rig.vault.token, isNull);
+      expect(rig.settings.agent.cloudFireURL, '');
+      expect(rig.phone.triggers, isEmpty);
+      expect(rig.controller.cloudTriggerSaved, isFalse);
+    });
+
+    test('Save puts the token in the vault and the URL in settings: the token is nowhere in the settings, and goes to the phones', () {
+      rig = Rig();
+      expect(rig.controller.saveCloudTrigger(url: '  $url\n', token: ' $token '), isNull);
+      expect(rig.vault.token, token);
+      expect(rig.settings.agent.cloudFireURL, url);
+      expect(rig.controller.cloudTriggerSaved, isTrue);
+      expect(jsonEncode(rig.settings.agent.toJson()), isNot(contains(token)));
+      expect(jsonEncode(rig.settings.agent.toJson()), isNot(contains('sk-ant')));
+      expect(rig.phone.triggers.single!.url, url);
+      expect(rig.phone.triggers.single!.token, token);
+      expect(rig.log, ['agent: cloud trigger saved']);
+      expect(rig.log.join(), isNot(contains(token)));
+      expect(rig.log.join(), isNot(contains('anthropic')));
+    });
+
+    test('a vault that can\'t keep it: the Mac\'s message (for this PC), nothing saved or shared', () {
+      rig = Rig();
+      rig.vault.failing = true;
+      expect(rig.controller.saveCloudTrigger(url: url, token: token), 'The token couldn’t be saved with Windows Data Protection.');
+      expect(rig.settings.agent.cloudFireURL, '');
+      expect(rig.phone.triggers, isEmpty);
+      expect(rig.controller.cloudTriggerSaved, isFalse);
+    });
+
+    test('Remove takes the token, the URL and the phones\' copy away', () {
+      rig = Rig();
+      rig.controller.saveCloudTrigger(url: url, token: token);
+      rig.controller.removeCloudTrigger();
+      expect(rig.vault.token, isNull);
+      expect(rig.settings.agent.cloudFireURL, '');
+      expect(rig.controller.cloudTriggerSaved, isFalse);
+      expect(rig.phone.triggers.last, isNull, reason: 'cleared for the phones');
+      expect(rig.phone.triggers, hasLength(2));
+      expect(rig.controller.watcherScript(), isNull);
+      expect(rig.log, ['agent: cloud trigger saved', 'agent: cloud trigger removed']);
+    });
+
+    test('it is shared again at launch and whenever the link comes back; with nothing saved, never', () {
+      rig = Rig();
+      rig.controller.start();
+      rig.phone.linkCameBack();
+      expect(rig.phone.triggers, isEmpty, reason: 'nothing saved: nothing shared, nothing cleared');
+      rig.vault.token = token;
+      rig.set((settings) => settings.copyWith(cloudFireURL: url));
+      rig.phone.linkCameBack();
+      expect(rig.phone.triggers.single!.token, token);
+      rig.phone.linkCameBack();
+      expect(rig.phone.triggers, hasLength(2));
+    });
+
+    test('at launch: a saved trigger is shared once, even with the agent off', () async {
+      final saved = Rig(settings: const AgentSettings(cloudFireURL: url));
+      addTearDown(saved.close);
+      saved.vault.token = token;
+      saved.controller.start();
+      expect(saved.phone.triggers.single!.url, url);
+      expect(saved.controller.ticking, isFalse);
+      expect(saved.claude.runs, isEmpty);
+      rig = Rig();
+    });
+
+    test('a URL with no token behind it (the vault was cleared) is not "saved" and shares nothing', () {
+      rig = Rig(settings: const AgentSettings(cloudFireURL: url));
+      rig.controller.start();
+      expect(rig.controller.cloudTriggerSaved, isFalse);
+      expect(rig.controller.watcherScript(), isNull);
+      expect(rig.phone.triggers, isEmpty);
+    });
+
+    test('the Watcher Script: this PC\'s zone, the saved trigger and the VIPs, the Mac\'s text', () {
+      rig = Rig(settings: const AgentSettings(vips: ['Amogh', '@insideedge.club']));
+      expect(rig.controller.watcherScript(), isNull, reason: 'nothing saved yet');
+      rig.controller.saveCloudTrigger(url: url, token: token);
+      final script = rig.controller.watcherScript()!;
+      expect(script, AgentCloud.watcherScript(fireURL: url, token: token, vips: const ['Amogh', '@insideedge.club'], timeZone: 'Test/Zone'));
+      expect(script, contains("timeZone: 'Test/Zone'"));
+      expect(script, contains("token: '$token'"));
+      expect(script, contains('vips: ["Amogh","@insideedge.club"],'));
+      rig.set((settings) => settings.copyWith(vips: ['New VIP']));
+      expect(rig.controller.watcherScript(), contains('vips: ["New VIP"],'));
+    });
+
+    test('a token that could break the script gives no Watcher (the Save still works)', () {
+      rig = Rig();
+      expect(rig.controller.saveCloudTrigger(url: url, token: "abcdefghijklmnopqrstuvwxyz'; alert(1); '".replaceAll(' ', '')), isNull);
+      expect(rig.controller.watcherScript(), isNull);
+    });
+  });
+
   group('Privacy', () {
     test('the log holds counts and outcomes only: no subject, sender, title, gist, link or task', () async {
       rig = Rig(settings: on());
@@ -761,7 +1137,7 @@ void main() {
       for (final line in rig.log) {
         expect(
           line,
-          matches(RegExp(r'^agent: (connections (\w+=\w+ ?)+|(check|brief) (ok, \d+ mail, \d+ event, \d+ tasks|failed \([a-z ]+\)|skipped, [a-z ]+))$')),
+          matches(RegExp(r'^agent: (connections (\w+=\w+ ?)+|(check|brief) (ok, \d+ mail, \d+ event, \d+ tasks|failed \([a-z ]+\)|skipped, [a-z ]+)|marked \d+ read|mark read failed|cloud trigger (saved|removed))$')),
           reason: line,
         );
       }

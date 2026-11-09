@@ -1,7 +1,7 @@
 // Settings › Agent (the Mac's AgentSettingsView): Mochi keeps an eye on Gmail, Google Calendar and Notion through the
 // connectors in your own Claude account, and tells you what matters. The main switch, the connections, how often, quiet
-// hours and the morning briefing, who and how it tells you, VIPs, what it can see, Mochi Cloud's settings (W5), and what it
-// told you with Done on each note. Every control is a real widget: Tab reaches it, Space or Enter works it, and each row
+// hours and the morning briefing, who and how it tells you, VIPs, marking mail read when you mark it done (W23b), what it can
+// see, Mochi Cloud's settings (W5) with its Fire URL, token and Watcher Script (W23b), and what it told you with Done on each note. Every control is a real widget: Tab reaches it, Space or Enter works it, and each row
 // reads as one thing to a screen reader.
 
 import 'dart:async';
@@ -43,6 +43,17 @@ class _AgentPaneState extends State<AgentPane> {
 
   final TextEditingController _vip = TextEditingController();
 
+  /// Mochi Cloud's trigger: the Fire URL and the token (kept in this PC's vault once saved, never in the settings file).
+  final TextEditingController _fireUrl = TextEditingController();
+  final TextEditingController _fireToken = TextEditingController();
+  String? _triggerProblem;
+
+  /// What the last Copy Watcher Script said, and whether it worked.
+  ({bool ok, String text})? _watcher;
+
+  /// The VIPs changed since the page opened: a Watcher Script copied earlier doesn't know them.
+  bool _vipsChanged = false;
+
   AgentController get _agent => widget.host.desktop.agent;
   AgentSettings get _settings => widget.host.desktop.settings.agent;
 
@@ -58,6 +69,8 @@ class _AgentPaneState extends State<AgentPane> {
   @override
   void dispose() {
     _vip.dispose();
+    _fireUrl.dispose();
+    _fireToken.dispose();
     super.dispose();
   }
 
@@ -67,7 +80,44 @@ class _AgentPaneState extends State<AgentPane> {
     final vip = _vip.text.trim();
     _vip.clear();
     if (vip.isEmpty || _settings.vips.any((each) => each.toLowerCase() == vip.toLowerCase())) return;
+    _vipsChanged = true;
     _change((settings) => settings.copyWith(vips: [...settings.vips, vip]));
+  }
+
+  void _removeVip(String vip) {
+    _vipsChanged = true;
+    _change((settings) => settings.copyWith(vips: [for (final each in settings.vips) if (each != vip) each]));
+  }
+
+  void _saveTrigger() {
+    final problem = _agent.saveCloudTrigger(url: _fireUrl.text, token: _fireToken.text);
+    if (problem == null) _fireToken.clear();
+    setState(() => _triggerProblem = problem);
+  }
+
+  /// Copy Watcher Script (the Mac's copyWatcherScript): the script, with this PC's trigger, time zone and VIPs filled in.
+  Future<void> _copyWatcher() async {
+    final script = _agent.watcherScript();
+    if (script == null) {
+      setState(() => _watcher = (ok: false, text: 'Save Mochi Cloud’s Fire URL and token first.'));
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: script));
+    if (!mounted) return;
+    setState(
+      () => _watcher = (
+        ok: true,
+        text: 'Copied. At script.google.com: New project, paste over everything, pick “setup” next to Run, press Run and allow access.',
+      ),
+    );
+  }
+
+  void _removeTrigger() {
+    _agent.removeCloudTrigger();
+    setState(() {
+      _triggerProblem = null;
+      _watcher = null;
+    });
   }
 
   /// Copy Cloud Settings (the Mac's AgentController.copyCloudLinkSettings): Mochi Cloud joins this PC's room (in place
@@ -278,7 +328,7 @@ class _AgentPaneState extends State<AgentPane> {
                         IconButton(
                           tooltip: 'Remove $vip',
                           icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
-                          onPressed: () => _change((settings) => settings.copyWith(vips: [for (final each in settings.vips) if (each != vip) each])),
+                          onPressed: () => _removeVip(vip),
                         ),
                       ],
                     ),
@@ -302,6 +352,26 @@ class _AgentPaneState extends State<AgentPane> {
                       ),
                     ],
                   ),
+                ),
+                if (_vipsChanged && agent.cloudTriggerSaved)
+                  NoteRow(
+                    icon: Icons.sync_rounded,
+                    tint: context.palette.warning,
+                    text: 'Copy the Watcher Script again (below) and run “setup” once more, so Mochi Cloud knows your VIPs too.',
+                  ),
+              ],
+            ),
+            SettingsGroup(
+              title: 'When I mark something done',
+              children: [
+                ToggleRow(
+                  title: 'Mark the email read in Gmail',
+                  subtitle:
+                      'Tap ✓ on anything in “Waiting for you” on ${pair ? 'your phone' : phones} (or Done below) and it leaves the '
+                      'card on every device. With this on, $pet also removes Gmail’s unread mark from that thread — the only change '
+                      '$pet ever makes to your mail, and only for what you marked.',
+                  value: settings.markReadWhenDone,
+                  onChanged: (value) => _change((settings) => settings.copyWith(markReadWhenDone: value)),
                 ),
               ],
             ),
@@ -334,19 +404,6 @@ class _AgentPaneState extends State<AgentPane> {
               ],
             ),
             _cloudGroup(context),
-            SettingsGroup(
-              title: 'From the Mac',
-              children: const [
-                SoonRow(
-                  title: 'Mark the email read in Gmail',
-                  detail: 'When you mark something done, also remove Gmail’s unread mark from that email.',
-                ),
-                SoonRow(
-                  title: 'Mochi Cloud’s Check now and Mochi Watcher',
-                  detail: 'A Fire URL and token so a phone’s “Check now” can ask the cloud, and a small script that wakes it for real news.',
-                ),
-              ],
-            ),
             _recentGroup(context, settings, agent),
           ],
         );
@@ -445,8 +502,118 @@ class _AgentPaneState extends State<AgentPane> {
               tint: said.ok ? p.success : p.warning,
             ),
           ),
+        ..._triggerRows(context, names),
       ],
     );
+  }
+
+  /// Mochi Cloud's trigger (the Mac's Fire URL and token fields, Remove and Copy Watcher Script): fields until one is
+  /// saved, then what it does, Remove, and the Watcher. The token is kept in this PC's vault, never in the settings file.
+  List<Widget> _triggerRows(BuildContext context, String names) {
+    final host = widget.host;
+    final p = context.palette;
+    final opener = host.desktop.opener;
+    final theirs = names == LinkPeerNames.yourPhones ? 'your phones' : names;
+    final problem = _triggerProblem, watcher = _watcher;
+    final stored = _agent.tokenStorage.startsWith('Windows') ? 'sealed with Windows Data Protection' : 'in memory only (this build)';
+    if (_agent.cloudTriggerSaved) {
+      return [
+        Padding(
+          padding: rowPadding,
+          child: Row(
+            children: [
+              Expanded(
+                child: MergeSemantics(
+                  child: Row(
+                    children: [
+                      ExcludeSemantics(child: Icon(Icons.check_circle_rounded, size: 16, color: p.success)),
+                      const SizedBox(width: Space.s),
+                      Expanded(
+                        child: Text(
+                          'On $theirs, “Check now” can ask the cloud when this PC doesn’t answer',
+                          style: context.type.footnote.copyWith(color: p.success),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              TextButton(onPressed: _removeTrigger, child: const Text('Remove')),
+            ],
+          ),
+        ),
+        const TextRow(
+          'Mochi Watcher, a small script in your own Google account, wakes the cloud only when new mail or a calendar change '
+          'arrives (8:00–23:00), so Claude runs for real news instead of every hour.',
+          secondary: true,
+        ),
+        ActionsRow(
+          children: [
+            OutlinedButton(onPressed: () => unawaited(_copyWatcher()), child: const Text('Copy Watcher Script')),
+            OutlinedButton(
+              onPressed: opener == null ? null : () => opener.open(Uri.parse('https://script.google.com/home/projects/create')),
+              child: const Text('Open script.google.com'),
+            ),
+          ],
+        ),
+        if (watcher != null)
+          Semantics(
+            liveRegion: true,
+            child: NoteRow(
+              icon: watcher.ok ? Icons.content_paste_rounded : Icons.warning_amber_rounded,
+              text: watcher.text,
+              tint: watcher.ok ? p.success : p.warning,
+            ),
+          ),
+      ];
+    }
+    return [
+      Padding(
+        padding: rowPadding,
+        child: TextField(
+          controller: _fireUrl,
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.next,
+          autocorrect: false,
+          decoration: const InputDecoration(labelText: 'Fire URL (from the task’s API trigger)', isDense: true),
+        ),
+      ),
+      Padding(
+        padding: rowPadding,
+        child: TextField(
+          controller: _fireToken,
+          obscureText: true,
+          enableSuggestions: false,
+          autocorrect: false,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) {
+            if (_fireUrl.text.isNotEmpty && _fireToken.text.isNotEmpty) _saveTrigger();
+          },
+          decoration: const InputDecoration(labelText: 'Token', isDense: true),
+        ),
+      ),
+      ActionsRow(
+        children: [
+          ListenableBuilder(
+            listenable: Listenable.merge([_fireUrl, _fireToken]),
+            builder: (context, _) => FilledButton(
+              onPressed: _fireUrl.text.isEmpty || _fireToken.text.isEmpty ? null : _saveTrigger,
+              child: const Text('Save'),
+            ),
+          ),
+        ],
+      ),
+      if (problem != null)
+        Semantics(
+          liveRegion: true,
+          child: NoteRow(icon: Icons.warning_amber_rounded, text: problem, tint: p.warning),
+        ),
+      TextRow(
+        'The token can only start this one task. It’s kept on this PC, $stored, and shared with $theirs through Mochi Link, '
+        'end-to-end encrypted.',
+        secondary: true,
+      ),
+    ];
   }
 
   static IconData _icon(_Source source) => switch (source) {

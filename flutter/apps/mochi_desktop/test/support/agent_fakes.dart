@@ -47,6 +47,9 @@ class AgentClaudeFake implements ClaudeRunner, StoppableRunner {
   String check = digestOutput();
   String probe = probeOutput();
 
+  /// What a mark-read run prints (the Mac's run: a result line).
+  String markRead = jsonEncode({'type': 'result', 'is_error': false, 'result': 'Marked 1 thread as read.'});
+
   /// Probe outputs used first, one per probe run, before [probe].
   final List<String> probesFirst = [];
   bool timedOut = false;
@@ -57,7 +60,12 @@ class AgentClaudeFake implements ClaudeRunner, StoppableRunner {
   final List<({List<String> arguments, String input, Duration timeout})> runs = [];
 
   bool isProbe(List<String> arguments) => arguments.last == AgentConnections.probeSchema;
-  List<({List<String> arguments, String input, Duration timeout})> get checks => [for (final run in runs) if (!isProbe(run.arguments)) run];
+  bool isMarkRead(List<String> arguments) => arguments.contains(AgentCommand.markReadTool);
+  List<({List<String> arguments, String input, Duration timeout})> get checks => [
+    for (final run in runs)
+      if (!isProbe(run.arguments) && !isMarkRead(run.arguments)) run,
+  ];
+  List<({List<String> arguments, String input, Duration timeout})> get markReads => [for (final run in runs) if (isMarkRead(run.arguments)) run];
   List<({List<String> arguments, String input, Duration timeout})> get probes => [for (final run in runs) if (isProbe(run.arguments)) run];
 
   @override
@@ -66,6 +74,7 @@ class AgentClaudeFake implements ClaudeRunner, StoppableRunner {
     final waiting = hold;
     if (waiting != null) return waiting.future;
     if (timedOut) return const ClaudeRun(exitCode: -1, output: '', timedOut: true);
+    if (isMarkRead(arguments)) return ClaudeRun(exitCode: 0, output: markRead);
     if (isProbe(arguments) && probesFirst.isNotEmpty) return ClaudeRun(exitCode: 0, output: probesFirst.removeAt(0));
     return ClaudeRun(exitCode: 0, output: isProbe(arguments) ? probe : check);
   }
@@ -88,6 +97,9 @@ class AgentPhoneFake implements AgentPhone {
 
   final List<String> pendings = [];
   final List<AgentDoneList> macDones = [];
+
+  /// Every `cloud` publish, in order: the trigger, or null for "removed".
+  final List<CloudTrigger?> triggers = [];
   final List<({String title, String body, AgentPending? pending, bool quietIfKnown})> news = [];
   final StreamController<void> _doneChanged = StreamController.broadcast(sync: true);
   final StreamController<void> _connected = StreamController.broadcast(sync: true);
@@ -103,6 +115,9 @@ class AgentPhoneFake implements AgentPhone {
 
   @override
   void publishMacDone(AgentDoneList list) => macDones.add(list);
+
+  @override
+  void publishCloudTrigger(CloudTrigger? trigger) => triggers.add(trigger);
 
   @override
   bool sendNews({required String title, required String body, AgentPending? pending, bool quietIfKnown = false}) {

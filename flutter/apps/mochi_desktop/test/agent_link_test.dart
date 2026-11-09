@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_desktop/src/core/agent/agent_settings.dart';
+import 'package:mochi_desktop/src/core/agent/cloud_token_vault.dart';
 import 'package:mochi_desktop/src/core/notifications.dart' show AttentionLevel;
 import 'package:mochi_link/mochi_link.dart';
 
@@ -35,9 +36,9 @@ void main() {
   late AgentClaudeFake claude;
   tearDown(() => t.dispose());
 
-  Future<void> paired({String? debug, bool enabled = true, AgentSettings? agent, DateTime Function()? clock}) async {
+  Future<void> paired({String? debug, bool enabled = true, AgentSettings? agent, DateTime Function()? clock, CloudTokenVault? tokens}) async {
     claude = AgentClaudeFake();
-    t = TestDesktop.make(saved: hostCredentials, agentClaude: claude, agentDebug: debug, clock: clock);
+    t = TestDesktop.make(saved: hostCredentials, agentClaude: claude, agentDebug: debug, clock: clock, cloudTokens: tokens);
     if (enabled || agent != null) t.desktop.settings.agent = agent ?? const AgentSettings(enabled: true);
     await t.desktop.start();
     await settle();
@@ -315,6 +316,41 @@ void main() {
       await t.desktop.start();
       await Future<void>.delayed(const Duration(milliseconds: 250));
       expect(claude.runs, isEmpty, reason: 'without the switch nothing runs while the agent is off');
+    });
+  });
+  group('Mochi Cloud\u2019s trigger (W23b)', () {
+    const url = 'https://api.anthropic.com/v1/claude_code/routines/trig_012eNQcMDqqHfiWcYGoXKjts/fire';
+    const token = 'sk-ant-oat01-abcDEF_1234567890';
+
+    test('Save puts the trigger in the room (sealed `cloud` state) and Remove clears it; nothing else carries the token', () async {
+      final vault = MemoryCloudTokenVault();
+      await paired(enabled: false, tokens: vault);
+      expect(t.socket.sentFrames('put', 'cloud'), isEmpty, reason: 'nothing saved: nothing shared');
+      expect(t.desktop.agent.saveCloudTrigger(url: url, token: token), isNull);
+      await settle();
+      final shared = CloudTrigger.fromValue(t.socket.values(LinkKey.cloud).last)!;
+      expect((shared.url, shared.token), (url, token));
+      expect(jsonEncode(t.socket.sent).contains(token), isFalse, reason: 'sealed with the room key: never in the clear');
+      expect(jsonEncode(t.desktop.settings.agent.toJson()), isNot(contains(token)));
+
+      t.desktop.agent.removeCloudTrigger();
+      await settle();
+      expect(t.socket.values(LinkKey.cloud).last, isNull);
+      expect(vault.token, isNull);
+    });
+
+    test('a saved trigger is shared again when the link comes back', () async {
+      final vault = MemoryCloudTokenVault(token);
+      await paired(enabled: false, agent: const AgentSettings(cloudFireURL: url), tokens: vault);
+      expect(t.socket.values(LinkKey.cloud).map(CloudTrigger.fromValue).map((each) => each?.token), contains(token));
+      final count = t.sockets.length;
+      t.socket.drop();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await settle();
+      expect(t.sockets.length, greaterThan(count), reason: 'the link reconnected');
+      t.socket.sync(devices: [device('dev_pc', 'host'), device('dev_droid', 'pocket')]);
+      await settle();
+      expect(t.socket.values(LinkKey.cloud).map(CloudTrigger.fromValue).map((each) => each?.token), contains(token));
     });
   });
 }
