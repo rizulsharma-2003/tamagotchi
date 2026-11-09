@@ -18,6 +18,12 @@ inline UINT MochiShowMainMessage() {
   return message;
 }
 
+// What the second copy asks for in MochiShowMainMessage's WPARAM, from its command line (the Start-menu jump list's tasks
+// start `Mochi.exe --ask` and `Mochi.exe --explore`): the window only, Ask Mochi, or Explore.
+constexpr WPARAM kLaunchShow = 0;
+constexpr WPARAM kLaunchAsk = 1;
+constexpr WPARAM kLaunchExplore = 2;
+
 // The window message the toast click handler (toasts.cpp) posts with the click's argument (a heap std::wstring*).
 inline UINT MochiToastMessage() {
   static const UINT message = ::RegisterWindowMessageW(L"MochiToastActivated");

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LengthLimitingTextInputFormatter;
 import 'package:mochi_art/mochi_art.dart' show SeasonalEvent;
 import 'package:mochi_link/mochi_link.dart' show LinkStatus;
 import 'package:mochi_ui/mochi_ui.dart';
@@ -57,6 +58,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scroll = ScrollController();
 
+  /// Bumped each time Ask Mochi is asked for while this screen already shows: the question box takes the focus again.
+  final ValueNotifier<int> _focusAsk = ValueNotifier(0);
+
   MochiDesktop get desktop => widget.desktop;
   CompanionDirector get companion => widget.companion;
 
@@ -67,6 +71,14 @@ class _HomeScreenState extends State<HomeScreen> {
   void didUpdateWidget(HomeScreen old) {
     super.didUpdateWidget(old);
     if (widget.focusSession != null && widget.focusSession != old.focusSession) _revealFocused();
+    // Ask Mochi from the tray, a shortcut or the jump list while the window already shows: down to the box, with the focus.
+    if (widget.askFirst && !old.askFirst) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
+        _focusAsk.value++;
+      });
+    }
   }
 
   /// Scrolls to the focused session's card (down a screen at a time until the list has built it).
@@ -109,6 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
       timer.cancel();
     }
     _scroll.dispose();
+    _focusAsk.dispose();
     super.dispose();
   }
 
@@ -162,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: Space.m),
             const SectionTitle(title: 'Ask Mochi'),
             const SizedBox(height: Space.s),
-            AskBox(ask: desktop.ask, autofocus: widget.askFirst),
+            AskBox(ask: desktop.ask, autofocus: widget.askFirst, focusSignal: _focusAsk),
           ],
         ),
       );
@@ -372,14 +385,21 @@ class _ConnectCard extends StatelessWidget {
   }
 }
 
-/// Type a question for Mochi; answers (and what the phones asked) below, newest first.
+/// Type a question for Mochi; answers (and what the phones asked) below, newest first. "Ask about what I copied" (X15)
+/// reads the clipboard's text when pressed (never otherwise) and shows it here, to edit or remove, before anything is sent.
 class AskBox extends StatefulWidget {
-  const AskBox({super.key, required this.ask, this.autofocus = false});
+  const AskBox({super.key, required this.ask, this.autofocus = false, this.focusSignal, this.clipboard = const SystemClipboardText()});
 
   final AskMochi ask;
 
   /// Start with the focus in the question box (and scrolled into view).
   final bool autofocus;
+
+  /// Each change gives the question box the focus (Ask Mochi asked for again while the window shows).
+  final Listenable? focusSignal;
+
+  /// Where "Ask about what I copied" reads from.
+  final ClipboardText clipboard;
 
   @override
   State<AskBox> createState() => _AskBoxState();
@@ -387,22 +407,161 @@ class AskBox extends StatefulWidget {
 
 class _AskBoxState extends State<AskBox> {
   final TextEditingController _text = TextEditingController();
+  final TextEditingController _copied = TextEditingController();
   final FocusNode _focus = FocusNode();
+  final FocusNode _copiedFocus = FocusNode(debugLabel: 'Copied text');
   bool _hadApproval = false;
+
+  /// What the clipboard gave is showing (it can be edited or removed).
+  bool _attached = false;
+  bool _cut = false;
+  bool _reading = false;
+
+  /// Mochi's words when the clipboard had nothing to read.
+  String? _clipboardNote;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.focusSignal?.addListener(_takeFocus);
+  }
+
+  @override
+  void didUpdateWidget(AskBox old) {
+    super.didUpdateWidget(old);
+    if (old.focusSignal != widget.focusSignal) {
+      old.focusSignal?.removeListener(_takeFocus);
+      widget.focusSignal?.addListener(_takeFocus);
+    }
+  }
+
+  void _takeFocus() {
+    if (mounted) _focus.requestFocus();
+  }
 
   void _send() {
     final text = _text.text.trim();
-    if (text.isEmpty) return;
+    final copied = _attached ? _copied.text : null;
+    if (text.isEmpty && (copied == null || copied.trim().isEmpty)) return;
     _text.clear();
-    widget.ask.ask(text);
+    _removeCopied(refocus: false);
+    widget.ask.ask(text, copied: copied);
     _focus.requestFocus();
+  }
+
+  /// Reads the clipboard (only here, when the button is pressed): text only, at most [AskCopied.maxCharacters].
+  Future<void> _readClipboard() async {
+    if (_reading) return;
+    setState(() {
+      _reading = true;
+      _clipboardNote = null;
+    });
+    String? copied;
+    try {
+      copied = await widget.clipboard.read();
+    } on Object {
+      copied = null;
+    }
+    if (!mounted) return;
+    if (copied == null || copied.trim().isEmpty) {
+      setState(() {
+        _reading = false;
+        _clipboardNote =
+            "${widget.ask.petName} looks, but there's no text on your clipboard (it's empty, or it holds a picture or files). "
+            'Copy some text, then press the button again.';
+      });
+      return;
+    }
+    final limited = AskCopied.limit(copied);
+    setState(() {
+      _reading = false;
+      _attached = true;
+      _cut = limited.cut;
+      _copied.text = limited.text;
+    });
+    // On to the question about it.
+    _focus.requestFocus();
+  }
+
+  void _removeCopied({bool refocus = true}) {
+    if (!_attached && !refocus) return;
+    setState(() {
+      _attached = false;
+      _cut = false;
+      _clipboardNote = null;
+      _copied.clear();
+    });
+    if (refocus) _focus.requestFocus();
   }
 
   @override
   void dispose() {
+    widget.focusSignal?.removeListener(_takeFocus);
     _text.dispose();
+    _copied.dispose();
     _focus.dispose();
+    _copiedFocus.dispose();
     super.dispose();
+  }
+
+  Widget _copiedCard(BuildContext context, String pet) {
+    final p = context.palette;
+    return ListenableBuilder(
+      listenable: _copied,
+      builder: (context, _) {
+        final count = _copied.text.length;
+        return Container(
+          padding: const EdgeInsets.all(Space.s),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Radii.card),
+            border: Border.all(color: p.tint.withValues(alpha: 0.5)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.content_paste_rounded, size: 16, color: p.tint),
+                  const SizedBox(width: Space.xs),
+                  Expanded(
+                    child: Text(
+                      'What you copied · $count character${count == 1 ? '' : 's'}',
+                      style: context.type.footnote.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  IconButton(onPressed: _removeCopied, tooltip: 'Remove what I copied', icon: const Icon(Icons.close_rounded, size: 18)),
+                ],
+              ),
+              Semantics(
+                label: 'The text you copied. You can edit it before sending.',
+                child: TextField(
+                  controller: _copied,
+                  focusNode: _copiedFocus,
+                  minLines: 2,
+                  maxLines: 6,
+                  inputFormatters: [LengthLimitingTextInputFormatter(AskCopied.maxCharacters)],
+                  style: context.type.footnote,
+                  decoration: const InputDecoration(isDense: true, semanticCounterText: ''),
+                ),
+              ),
+              const SizedBox(height: Space.xs),
+              if (_cut)
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    'It was longer, so only the first ${AskCopied.maxCharacters} characters are here.',
+                    style: context.type.footnote.copyWith(color: p.warning),
+                  ),
+                ),
+              Text(
+                'Nothing leaves this PC until you press Send. $pet sees this with your question, and it is not saved.',
+                style: context.type.footnote.copyWith(color: p.inkSecondary),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -429,13 +588,42 @@ class _AskBoxState extends State<AskBox> {
                       autofocus: widget.autofocus,
                       onSubmitted: (_) => _send(),
                       textInputAction: TextInputAction.send,
-                      decoration: const InputDecoration(hintText: 'Ask Mochi, or try “status”', semanticCounterText: ''),
+                      decoration: InputDecoration(
+                        hintText: _attached ? 'Ask about what you copied' : 'Ask Mochi, or try “status”',
+                        semanticCounterText: '',
+                      ),
                     ),
                   ),
                   const SizedBox(width: Space.s),
                   IconButton.filled(onPressed: _send, tooltip: 'Send to Mochi', icon: const Icon(Icons.arrow_upward_rounded)),
                 ],
               ),
+              const SizedBox(height: Space.xs),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Semantics(
+                  button: true,
+                  label:
+                      'Ask about what I copied: reads the text on your clipboard now and adds it to your question. '
+                      'Nothing is sent until you press Send.',
+                  excludeSemantics: true,
+                  onTap: _reading ? null : _readClipboard,
+                  child: TextButton.icon(
+                    onPressed: _reading ? null : _readClipboard,
+                    icon: const Icon(Icons.content_paste_rounded, size: 18),
+                    label: const Text('Ask about what I copied'),
+                  ),
+                ),
+              ),
+              if (_clipboardNote != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: Space.xs),
+                  child: Semantics(
+                    liveRegion: true,
+                    child: NoteLabel(text: _clipboardNote!, icon: Icons.info_outline_rounded, tint: p.warning),
+                  ),
+                ),
+              if (_attached) ...[const SizedBox(height: Space.xs), _copiedCard(context, widget.ask.petName)],
               if (approval != null) ...[
                 const SizedBox(height: Space.m),
                 ApprovalCard(
@@ -470,7 +658,11 @@ class _AskBoxState extends State<AskBox> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              exchange.fromPhone ? '${exchange.text}  ·  from your phone' : exchange.text,
+                              [
+                                exchange.text,
+                                if (exchange.copiedCharacters > 0) 'with what you copied',
+                                if (exchange.fromPhone) 'from your phone',
+                              ].join('  ·  '),
                               style: context.type.footnote.copyWith(fontWeight: FontWeight.w700, color: p.ink),
                             ),
                             for (final step in exchange.steps.take(4))

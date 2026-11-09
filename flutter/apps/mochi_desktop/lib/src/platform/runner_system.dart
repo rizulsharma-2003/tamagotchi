@@ -14,6 +14,8 @@
 // click handler, a COM class), `toastShow` (XML, the AppUserModelID, a tag) and `toastSetting` (whether Windows lets
 // Mochi's notifications show).
 //
+// `buildJumpList` (X16) makes the Start menu's jump list: "Ask Mochi" and "Explore" tasks (windows/runner/jump_list.cpp).
+//
 // The runner registers shortcuts with RegisterHotKey on its own window (`registerHotKey`, `unregisterHotKey`), so Windows
 // tells Mochi only when one of its own combinations is pressed.
 
@@ -23,8 +25,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../core/hotkeys.dart';
+import '../core/jump_list.dart';
 
-class RunnerSystem implements HotkeyRegistrar {
+class RunnerSystem implements HotkeyRegistrar, JumpListService {
   RunnerSystem({MethodChannel? channel}) : _channel = channel ?? const MethodChannel('mochi/system') {
     _channel.setMethodCallHandler(_handle);
     unawaited(_readState());
@@ -123,6 +126,16 @@ class RunnerSystem implements HotkeyRegistrar {
   Future<int> toastSetting(String appId) async {
     try {
       return await _channel.invokeMethod<int>('toastSetting', {'appId': appId}) ?? -1;
+    } on Object {
+      return -1;
+    }
+  }
+
+  /// X16: the Start menu's jump list (`buildJumpList`; the runner's HRESULT, 0 when built, -1 when it can't be asked).
+  @override
+  Future<int> build() async {
+    try {
+      return await _channel.invokeMethod<int>('buildJumpList') ?? -1;
     } on Object {
       return -1;
     }

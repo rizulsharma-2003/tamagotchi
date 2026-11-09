@@ -51,8 +51,12 @@ Future<void> main(List<String> arguments) async {
   final open = environment['MOCHI_DESKTOP_OPEN'] ?? (installed ? 'settings' : (offerInstall ? 'main' : null));
   final pane =
       SettingsTab.values.where((tab) => tab.name == environment['MOCHI_DESKTOP_PANE']).firstOrNull ?? (installed ? SettingsTab.about : null);
+  // Started from the Start menu's jump list (`--ask`, `--explore`): it runs once Mochi has started. Other arguments are
+  // ignored.
+  final launched = LaunchRequest.fromArguments(arguments);
   unawaited(
     desktop.start().then((_) async {
+      if (launched != null) shell.launch(launched);
       // The demo's pairing screen shows a (made-up) code straight away; its Settings opens paired.
       if (demoMode && open == 'pairing') unawaited(desktop.link.showCode());
       if (demoMode && open == 'settings' && Platform.environment['MOCHI_DESKTOP_DEMO_PAIR'] != '0') {

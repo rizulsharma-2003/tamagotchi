@@ -19,6 +19,7 @@ import 'core/json_store.dart';
 import 'core/mischief.dart';
 import 'core/hook_setup.dart';
 import 'core/hotkeys.dart';
+import 'core/jump_list.dart';
 import 'core/pc_rhythm.dart';
 import 'core/pet_cues.dart';
 import 'core/purr.dart';
@@ -81,6 +82,7 @@ class MochiDesktop {
     SoundOutput? sound,
     UsageSampler? usage,
     HotkeyRegistrar? hotkeys,
+    JumpListService? jumpList,
     WorldStore? worldStore,
     JsonStore Function(String file)? stores,
     double Function()? uptime,
@@ -99,6 +101,7 @@ class MochiDesktop {
        installer = installer ?? SelfInstaller.unsupported(),
        toasts = toasts ?? const UnsupportedToasts(),
        _bridge = bridge ?? BridgeServer(paths) {
+    if (jumpList != null) this.jumpList = StartMenuJumpList(service: jumpList, installed: () => this.installer.installed);
     sounds = MochiSounds(output: sound ?? const SilentOutput(), volume: () => settings.soundVolume, clock: clock);
     // Claude's moments: Reactions posts their notifications and sounds (W1) and tells the views; Mochi's world animates
     // them from the hook events themselves.
@@ -374,6 +377,7 @@ class MochiDesktop {
       sound: Platform.isWindows ? Win32SoundOutput() : null,
       usage: system == null ? null : Win32Usage(system),
       hotkeys: system,
+      jumpList: system,
       worldStore: demoMode ? null : FileWorldStore(paths.join(paths.home, 'world.json')),
       stores: demoMode ? null : (file) => FileJsonStore(paths.join(paths.home, file)),
       // Mischief's native stage is the Windows runner's.
@@ -440,6 +444,9 @@ class MochiDesktop {
 
   /// Reacts to what you do (X7: music, calls, an editor coming to the front), read only while Mischief allows it.
   late final ReactsDirector reacts;
+
+  /// The Start menu's jump list (X16; null where there is none), built once at startup for the installed copy.
+  StartMenuJumpList? jumpList;
 
   /// The global shortcuts (Settings › Desktop Pet and Assistant).
   late final Hotkeys hotkeys;
@@ -532,6 +539,8 @@ class MochiDesktop {
     });
     settings.addListener(_shortcutsChanged);
     await hotkeys.start();
+    // Once, quick and local (the runner does it on the UI thread); only the installed copy has a Start-menu entry.
+    unawaited(jumpList?.buildOnce());
   }
 
   void _shortcutsChanged() => unawaited(hotkeys.apply());

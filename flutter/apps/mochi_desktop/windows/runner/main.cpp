@@ -19,7 +19,21 @@ constexpr const wchar_t kWindowTitle[] = L"Mochi";
 // Windows attributes toasts, the taskbar button and jump lists by it.
 constexpr const wchar_t kAppUserModelId[] = L"InsideEdge.Mochi";
 
-// Asks the copy that's already running to show its main window.
+// What this launch asks of the running copy besides showing its window: the jump list's tasks start `Mochi.exe --ask`
+// and `Mochi.exe --explore`. Any other argument is ignored.
+WPARAM LaunchRequestFromArguments() {
+  for (const std::string& argument : GetCommandLineArguments()) {
+    if (argument == "--ask") {
+      return kLaunchAsk;
+    }
+    if (argument == "--explore") {
+      return kLaunchExplore;
+    }
+  }
+  return kLaunchShow;
+}
+
+// Asks the copy that's already running to show its main window (and to open Ask Mochi, or set off exploring).
 void ShowRunningCopy() {
   HWND running = ::FindWindowW(kWindowClass, kWindowTitle);
   if (running == nullptr) {
@@ -30,7 +44,7 @@ void ShowRunningCopy() {
   // Let it come to the front: this process was just started by the user, so
   // it may hand its foreground right over.
   ::AllowSetForegroundWindow(process_id);
-  ::PostMessageW(running, MochiShowMainMessage(), 0, 0);
+  ::PostMessageW(running, MochiShowMainMessage(), LaunchRequestFromArguments(), 0);
 }
 
 }  // namespace

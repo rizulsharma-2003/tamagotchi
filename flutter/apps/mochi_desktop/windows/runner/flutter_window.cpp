@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "desktop_icons.h"
+#include "jump_list.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "media.h"
 #include "native_stage.h"
@@ -185,10 +186,16 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     return 0;
   }
 
-  // Mochi was launched again: show the main window instead of a second copy.
+  // Mochi was launched again: show the main window instead of a second copy. WPARAM is what the jump list's task asked
+  // for; Dart gets that task's own argument (`--ask`, `--explore`) and parses it, anything else is just the window.
   if (message == MochiShowMainMessage()) {
     if (instance_channel_) {
-      instance_channel_->InvokeMethod("showMain", nullptr);
+      if (wparam == kLaunchAsk || wparam == kLaunchExplore) {
+        instance_channel_->InvokeMethod(
+            "showMain", std::make_unique<flutter::EncodableValue>(std::string(wparam == kLaunchAsk ? "--ask" : "--explore")));
+      } else {
+        instance_channel_->InvokeMethod("showMain", nullptr);
+      }
     }
     return 0;
   }
@@ -322,6 +329,11 @@ void FlutterWindow::HandleSystemCall(const flutter::MethodCall<flutter::Encodabl
       ::UnregisterHotKey(GetHandle(), id);
     }
     result->Success();
+    return;
+  }
+  // X16: the Start menu's jump list (jump_list.cpp), built on this (the UI) thread; the HRESULT, 0 when built.
+  if (method == "buildJumpList") {
+    result->Success(flutter::EncodableValue(static_cast<int32_t>(mochi_jumplist::Build())));
     return;
   }
   if (method == "toastStart" && arguments != nullptr) {
