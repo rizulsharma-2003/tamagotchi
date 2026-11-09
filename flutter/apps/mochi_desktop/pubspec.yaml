@@ -4,7 +4,7 @@ description: >-
   follows your Claude Code sessions through Claude Code hooks, a Mochi Link room your iPhone or Android phone pairs
   with, and Ask Mochi through `claude -p`. Developed as a macOS build; the Windows parts sit behind interfaces.
 publish_to: none
-version: 0.2.7+9
+version: 0.2.8+10
 resolution: workspace
 
 environment:
