@@ -16,6 +16,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import 'ask_attach.dart' show HandOverPaths;
 import 'brain_session.dart';
 import 'mcp_core.dart';
 import 'paws_server.dart';
@@ -86,11 +87,21 @@ class BrainSetup {
 }
 
 class _Request {
-  _Request(this.text, {this.commandId});
+  _Request(this.text, {this.commandId, Iterable<String> handOver = const []}) {
+    for (final path in handOver) {
+      final normal = HandOverPaths.normalise(path);
+      if (normal != null) this.handOver.add(normal);
+    }
+  }
 
   final String text;
   final String? commandId;
   final Completer<BrainAnswer?> done = Completer();
+
+  /// The files handed over for this request (X13, X17), in [HandOverPaths.normalise]'s form: the only paths the brain's
+  /// `Read` may open while this request runs. It belongs to the request: [AskBrain._complete] empties it on every ending
+  /// (answer, failure, cancel, time out, a newer request, the app quitting), and `_current` is no longer this request then.
+  final Set<String> handOver = {};
 }
 
 class _Delegation {
@@ -224,7 +235,16 @@ class AskBrain extends ChangeNotifier {
   int get delegations => _delegations.length;
 
   /// Answers [request]. Null when the brain can't start (the one-off path answers instead); never throws.
-  Future<BrainAnswer?> ask(String request, {bool spoken = false, String? commandId, AskTarget? target}) async {
+  ///
+  /// [handOver]: the absolute paths of the files the user handed over with this request (dropped files, the screenshot they
+  /// approved). Claude Code may `Read` exactly these while this request runs, and nothing else.
+  Future<BrainAnswer?> ask(
+    String request, {
+    bool spoken = false,
+    String? commandId,
+    AskTarget? target,
+    List<String> handOver = const [],
+  }) async {
     if (_disposed) return null;
     final previous = _current;
     if (previous != null) {
@@ -233,7 +253,7 @@ class AskBrain extends ChangeNotifier {
     }
     final ready = setup();
     if (ready == null || ready.executable.isEmpty) return null;
-    final current = _current = _Request(request, commandId: commandId);
+    final current = _current = _Request(request, commandId: commandId, handOver: handOver);
     _steps = [];
     _idleTimer?.cancel();
     final message = target != null
@@ -288,6 +308,8 @@ class AskBrain extends ChangeNotifier {
   }
 
   void _complete(_Request request, BrainAnswer? answer) {
+    // Every ending comes through here: the files handed over for this request can't be read after it.
+    request.handOver.clear();
     if (!request.done.isCompleted) request.done.complete(answer);
   }
 
@@ -476,6 +498,7 @@ class AskBrain extends ChangeNotifier {
 
   /// The answer Claude Code's permission prompt tool expects: only `SendMessage`, only after the card says Send.
   Future<String> _approvalVerdict(Map<String, Object?> arguments) async {
+    if (arguments['tool_name'] == 'Read') return _readVerdict(arguments);
     if (arguments['tool_name'] != 'SendMessage') return _deny("Mochi only approves messages to the user's Claude sessions.");
     if (!messagingAllowed()) return _deny('The user turned off messages to their Claude sessions.');
     final input = arguments['input'] is Map ? Map<String, Object?>.from(arguments['input'] as Map) : <String, Object?>{};
@@ -509,6 +532,30 @@ class AskBrain extends ChangeNotifier {
     }
     final toolUse = arguments['tool_use_id'];
     if (toolUse is String) _approved[toolUse] = (projectKey: project?.key, name: project?.name, at: _clock());
+    return jsonEncode({'behavior': 'allow', 'updatedInput': input});
+  }
+
+  /// The only fields of a `Read` that are looked at (the rest only narrow what is read from the file).
+  static const Set<String> _readFields = {'file_path', 'offset', 'limit', 'pages'};
+
+  /// `Read`: allowed only for a file handed over with the request now running (X13, X17), and for nothing else: not another
+  /// path, a directory, a pattern, another request's file, with no request running, or when nothing was handed over.
+  /// Handing the file over was the consent (it was shown and attached before Send), so there is no card.
+  String _readVerdict(Map<String, Object?> arguments) {
+    final request = _current;
+    if (request == null || request.handOver.isEmpty) return _deny('No file was handed over with this request.');
+    final raw = arguments['input'];
+    if (raw is! Map) return _deny('That file was not handed over.');
+    final input = Map<String, Object?>.from(raw);
+    if (!input.keys.every(_readFields.contains)) return _deny('That file was not handed over.');
+    final path = input['file_path'];
+    final offset = input['offset'], limit = input['limit'], pages = input['pages'];
+    if (path is! String || (offset != null && offset is! num) || (limit != null && limit is! num) || (pages != null && pages is! String)) {
+      return _deny('That file was not handed over.');
+    }
+    final normal = HandOverPaths.normalise(path);
+    if (normal == null || !request.handOver.contains(normal)) return _deny('Only the files the user handed over can be read.');
+    log?.call('brain: read a handed-over file');
     return jsonEncode({'behavior': 'allow', 'updatedInput': input});
   }
 

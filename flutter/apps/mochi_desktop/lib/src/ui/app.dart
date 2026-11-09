@@ -391,6 +391,8 @@ class DesktopAppState extends State<DesktopApp> {
     _subscriptions.add(desktop.cues.listen(_noteActivity));
     _subscriptions.add(desktop.opens.listen(openFromNotification));
     _subscriptions.add(desktop.shortcuts.listen(shortcut));
+    // Files, text or a link dropped on Mochi (X13, X14): Ask Mochi opens, with them waiting in the question box.
+    _subscriptions.add(desktop.askWanted.listen((_) => openAsk()));
     // With Mochi's window or popover open you're looking already: no badge or Windows notification (the Mac's popover).
     desktop.reactions.lookingAtMochi = () => _surface == Surface.main || _surface == Surface.popover;
     desktop.sessions.addListener(_sessionsChanged);
@@ -779,6 +781,10 @@ class DesktopAppState extends State<DesktopApp> {
   }
 
   void _show(Surface surface) {
+    // Mochi's window or popover is coming up from the pet or from nothing: the window that has the focus now is the one
+    // "What's on my screen?" would picture (X17). One look, on this event only.
+    final comingUp = surface == Surface.main || surface == Surface.popover;
+    if (comingUp && _surface != Surface.main && _surface != Surface.popover) desktop.noteForeground();
     if (surface != Surface.popover) {
       _popover = null;
       _popoverClosing = false;

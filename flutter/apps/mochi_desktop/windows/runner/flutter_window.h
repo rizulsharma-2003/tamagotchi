@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "drop.h"
 #include "native_stage.h"
 #include "win32_window.h"
 
@@ -67,6 +68,9 @@ class FlutterWindow : public Win32Window {
   // `mochi/stage` (lib/src/platform/native_stage.dart): Mochi's native stage, windows of its own anywhere on screen.
   std::unique_ptr<mochi_stage::Stage> stage_;
   bool session_notifications_ = false;
+
+  // `mochi/drop` (lib/src/platform/file_drop.dart): the OLE drop target on the Flutter view (X13, X14).
+  std::unique_ptr<mochi_drop::Registration> drop_;
 
   // The console display: 0 off, 1 on, 2 dimmed (-1 not known yet); the session: 1 locked, 0 not (-1 not known).
   int display_state_ = -1;

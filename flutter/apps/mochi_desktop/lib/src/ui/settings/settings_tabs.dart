@@ -124,7 +124,7 @@ enum SettingsTab {
         'friendship hearts achievements progress level points unlock reset',
     claude => 'hooks connect sessions integration claude code helper bridge settings.json backup troubleshoot',
     assistant => 'ask mochi voice talk shortcut hotkey keyboard ctrl alt space quick commands model haiku sonnet brain '
-        'approvals',
+        'approvals drop file link screen screenshot window show my screen',
     phones => 'phones phone iphone android mochi pocket pair pairing link relay unpair test devices summaries talking '
         'away only when live activity',
     agent => 'gmail calendar notion mail meetings tasks briefing vip done cloud watcher mochi cloud copy settings environment',

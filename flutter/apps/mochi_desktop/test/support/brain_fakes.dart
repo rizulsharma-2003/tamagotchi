@@ -234,8 +234,8 @@ class BrainRig {
   }
 
   /// Starts a request and lets the brain come up: [answer] is its eventual result.
-  Future<Future<BrainAnswer?>> ask(String text, {String? commandId, AskTarget? target}) async {
-    final answer = brain.ask(text, commandId: commandId, target: target);
+  Future<Future<BrainAnswer?>> ask(String text, {String? commandId, AskTarget? target, List<String> handOver = const []}) async {
+    final answer = brain.ask(text, commandId: commandId, target: target, handOver: handOver);
     await settle();
     return answer;
   }
@@ -270,6 +270,24 @@ class BrainRig {
     );
     await settle();
     return channel;
+  }
+
+  /// Claude Code asks `approve` about [tool] with [input] (a Read, say); the verdict, decoded. Nothing waits on a card.
+  Future<Map<String, Object?>> approveTool(String tool, Object? input, {String toolUse = 'r1'}) async {
+    final channel = connect();
+    channel.send(
+      jsonEncode({
+        'jsonrpc': '2.0',
+        'id': 9,
+        'method': 'tools/call',
+        'params': {
+          'name': 'approve',
+          'arguments': {'tool_name': tool, 'tool_use_id': toolUse, 'input': input},
+        },
+      }),
+    );
+    await settle();
+    return verdict(channel);
   }
 
   /// The permission prompt tool's answer on [channel] (the JSON the brain reads).
