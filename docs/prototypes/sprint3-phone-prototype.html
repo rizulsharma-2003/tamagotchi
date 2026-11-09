@@ -24,44 +24,57 @@
   --wall-top: #FCE6D6; --wall-bottom: #F7D6C1; --floor: #E7C2A5; --rug: #F4A985; --desk: #B98A68; --desk-dark: #8E6447;
   --sky-top: #BFE0F2; --sky-bottom: #F9E2CF; --frame: #FFF8F1;
   --diff-add: rgba(29,115,70,.11); --diff-del: rgba(180,35,24,.09);
+  --glow: 20%; --knob: var(--surface); --track-off: var(--sunken); --stroke-strong: var(--stroke); --chip-ring: transparent;
+  --shadow-device: 0 30px 70px rgba(60,30,10,.28), inset 0 0 0 1px rgba(255,255,255,.08); --shadow-sheet: 0 -10px 30px rgba(0,0,0,.18); --shadow-pin: 0 2px 8px rgba(0,0,0,.25); --knob-shadow: 0 1px 3px rgba(0,0,0,.25);
+  --sheet-bg: linear-gradient(var(--bg-top), var(--bg-bottom)); --sheet-card: var(--surface); --grabber: var(--stroke);
+  --overlay-bg: color-mix(in srgb, var(--surface) 94%, transparent); --bar-bg: color-mix(in srgb, var(--surface) 90%, transparent);
+  --netstrip-bg: color-mix(in srgb, var(--warning) 12%, var(--surface)); --netstrip-edge: transparent; --parked-op: .78;
   --font: "Nunito", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --page: #0E0A08; --page-ink: #F8EEE6; --page-ink-2: #C4B2A5; --bezel: #000000;
-    --bg-top: #1C1511; --bg-bottom: #261B15; --surface: #2A201A; --sunken: #382B23; --stroke: #45362C;
-    --rim: rgba(255,255,255,.05);
-    --ink: #F8EEE6; --ink-2: #C4B2A5;
-    --peach: #F28C61; --tint: #F2895B; --on-tint: #2A1006;
+    --page: #000000; --page-ink: #F5F5F5; --page-ink-2: #A8A8A8; --bezel: #000000;
+    --bg-top: #000000; --bg-bottom: #000000; --surface: #0E0E0E; --sunken: #1F1F1F; --stroke: rgba(255,255,255,.12);
+    --rim: transparent;
+    --ink: #F5F5F5; --ink-2: #A3A3A3;
+    --peach: #F28C61; --tint: #F2895B; --on-tint: #160803;
     --success: #6BD39C; --warning: #F5A85E; --danger: #FF8F85; --vip: #E9B95C; --indigo: #A9A4FF;
-    --pet: #FF8DAA; --play: #79D6A0; --on-state: #1A120D;
-    --bubble: #4A2C1E; --focus: #8DB8FF; --note: #A9A4FF; --on-note: #14102E;
-    --toast-bg: #F8EEE6; --toast-fg: #2A201A; --toast-action: #B4471C;
-    --scrim: rgba(0,0,0,.5);
-    --shadow-card: 0 8px 22px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.4);
-    --shadow-float: 0 16px 34px rgba(0,0,0,.5), 0 2px 4px rgba(0,0,0,.4);
-    --wall-top: #3A2A22; --wall-bottom: #2E211A; --floor: #22180F; --rug: #6E3A26; --desk: #6B4A36; --desk-dark: #4D3426;
-    --sky-top: #141C38; --sky-bottom: #3A2A44; --frame: #4A3A30;
+    --pet: #FF8DAA; --play: #79D6A0; --on-state: #0A0A0A;
+    --bubble: #1F1F1F; --focus: #8DB8FF; --note: #A9A4FF; --on-note: #0B0820;
+    --toast-bg: #F5F5F5; --toast-fg: #0E0E0E; --toast-action: #A83F15;
+    --scrim: rgba(0,0,0,.65);
+    --shadow-card: 0 0 0 0 transparent;
+    --shadow-float: 0 0 0 1px rgba(255,255,255,.14);
+    --shadow-device: inset 0 0 0 1px rgba(255,255,255,.1); --shadow-sheet: 0 0 0 1px rgba(255,255,255,.14); --shadow-pin: none; --knob-shadow: none;
+    --glow: 0%; --knob: #F5F5F5; --track-off: #3A3A3A; --stroke-strong: rgba(255,255,255,.24); --chip-ring: rgba(255,255,255,.12);
+    --sheet-bg: #161616; --sheet-card: #1F1F1F; --grabber: rgba(255,255,255,.3);
+    --overlay-bg: #161616; --bar-bg: #0A0A0A; --netstrip-bg: #1F1F1F; --netstrip-edge: color-mix(in srgb, var(--warning) 45%, transparent); --parked-op: 1;
+    --wall-top: #211A17; --wall-bottom: #181311; --floor: #120E0C; --rug: #5A2F20; --desk: #5A4030; --desk-dark: #3E2B20;
+    --sky-top: #0B1230; --sky-bottom: #2A2036; --frame: #3A3029;
     --diff-add: rgba(107,211,156,.14); --diff-del: rgba(255,143,133,.13);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --page: #0E0A08; --page-ink: #F8EEE6; --page-ink-2: #C4B2A5; --bezel: #000000;
-  --bg-top: #1C1511; --bg-bottom: #261B15; --surface: #2A201A; --sunken: #382B23; --stroke: #45362C;
-  --rim: rgba(255,255,255,.05);
-  --ink: #F8EEE6; --ink-2: #C4B2A5;
-  --peach: #F28C61; --tint: #F2895B; --on-tint: #2A1006;
+  --page: #000000; --page-ink: #F5F5F5; --page-ink-2: #A8A8A8; --bezel: #000000;
+  --bg-top: #000000; --bg-bottom: #000000; --surface: #0E0E0E; --sunken: #1F1F1F; --stroke: rgba(255,255,255,.12);
+  --rim: transparent;
+  --ink: #F5F5F5; --ink-2: #A3A3A3;
+  --peach: #F28C61; --tint: #F2895B; --on-tint: #160803;
   --success: #6BD39C; --warning: #F5A85E; --danger: #FF8F85; --vip: #E9B95C; --indigo: #A9A4FF;
-  --pet: #FF8DAA; --play: #79D6A0; --on-state: #1A120D;
-  --bubble: #4A2C1E; --focus: #8DB8FF; --note: #A9A4FF; --on-note: #14102E;
-  --toast-bg: #F8EEE6; --toast-fg: #2A201A; --toast-action: #B4471C;
-  --scrim: rgba(0,0,0,.5);
-  --shadow-card: 0 8px 22px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.4);
-  --shadow-float: 0 16px 34px rgba(0,0,0,.5), 0 2px 4px rgba(0,0,0,.4);
-  --wall-top: #3A2A22; --wall-bottom: #2E211A; --floor: #22180F; --rug: #6E3A26; --desk: #6B4A36; --desk-dark: #4D3426;
-  --sky-top: #141C38; --sky-bottom: #3A2A44; --frame: #4A3A30;
+  --pet: #FF8DAA; --play: #79D6A0; --on-state: #0A0A0A;
+  --bubble: #1F1F1F; --focus: #8DB8FF; --note: #A9A4FF; --on-note: #0B0820;
+  --toast-bg: #F5F5F5; --toast-fg: #0E0E0E; --toast-action: #A83F15;
+  --scrim: rgba(0,0,0,.65);
+  --shadow-card: 0 0 0 0 transparent;
+  --shadow-float: 0 0 0 1px rgba(255,255,255,.14);
+  --shadow-device: inset 0 0 0 1px rgba(255,255,255,.1); --shadow-sheet: 0 0 0 1px rgba(255,255,255,.14); --shadow-pin: none; --knob-shadow: none;
+  --glow: 0%; --knob: #F5F5F5; --track-off: #3A3A3A; --stroke-strong: rgba(255,255,255,.24); --chip-ring: rgba(255,255,255,.12);
+  --sheet-bg: #161616; --sheet-card: #1F1F1F; --grabber: rgba(255,255,255,.3);
+  --overlay-bg: #161616; --bar-bg: #0A0A0A; --netstrip-bg: #1F1F1F; --netstrip-edge: color-mix(in srgb, var(--warning) 45%, transparent); --parked-op: 1;
+  --wall-top: #211A17; --wall-bottom: #181311; --floor: #120E0C; --rug: #5A2F20; --desk: #5A4030; --desk-dark: #3E2B20;
+  --sky-top: #0B1230; --sky-bottom: #2A2036; --frame: #3A3029;
   --diff-add: rgba(107,211,156,.14); --diff-del: rgba(255,143,133,.13);
   color-scheme: dark;
 }
@@ -93,7 +106,7 @@ button, input, textarea { font: inherit; color: inherit; }
 .device {
   width: 414px; height: calc(100vh - 56px); height: min(868px, calc(100dvh - 56px)); min-height: 660px;
   border-radius: 58px; background: var(--bezel); padding: 12px; position: relative;
-  box-shadow: 0 30px 70px rgba(60,30,10,.28), inset 0 0 0 1px rgba(255,255,255,.08);
+  box-shadow: var(--shadow-device);
 }
 .screen {
   position: relative; width: 100%; height: 100%; border-radius: 46px; overflow: hidden;
@@ -102,7 +115,7 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 .screen::before {
   content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
-  background: radial-gradient(420px 320px at 100% 0%, color-mix(in srgb, var(--peach) 20%, transparent), transparent 70%);
+  background: radial-gradient(420px 320px at 100% 0%, color-mix(in srgb, var(--peach) var(--glow), transparent), transparent 70%);
 }
 @media (max-width: 520px) {
   .device { width: 100%; height: calc(100vh - 88px); height: calc(100dvh - 88px); min-height: 560px; padding: 0; border-radius: 30px; background: none; box-shadow: var(--shadow-float); }
@@ -124,8 +137,8 @@ button, input, textarea { font: inherit; color: inherit; }
   border-radius: 999px; padding: 6px 14px 6px 6px; min-height: 44px; font-weight: 800; cursor: pointer;
   box-shadow: var(--shadow-card), inset 0 0 0 1px var(--stroke);
 }
-.switch .knob { width: 44px; height: 26px; border-radius: 999px; background: var(--sunken); position: relative; transition: background .2s; box-shadow: inset 0 0 0 1px var(--stroke); }
-.switch .knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
+.switch .knob { width: 44px; height: 26px; border-radius: 999px; background: var(--track-off); position: relative; transition: background .2s; box-shadow: inset 0 0 0 1px var(--stroke); }
+.switch .knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--knob); box-shadow: var(--knob-shadow); transition: transform .2s; }
 .switch[aria-checked="true"] .knob { background: var(--note); }
 .switch[aria-checked="true"] .knob::after { transform: translateX(18px); }
 .try { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 14.5px; color: var(--page-ink-2); }
@@ -145,7 +158,7 @@ button, input, textarea { font: inherit; color: inherit; }
 .island { position: absolute; left: 50%; top: 11px; width: 120px; height: 34px; margin-left: -60px; border-radius: 20px; background: #000; }
 .sb-icons { display: flex; gap: 6px; align-items: center; }
 .sb-icons svg { height: 12px; width: auto; }
-.netstrip { flex: none; display: flex; align-items: center; gap: 8px; margin: 0 12px 6px; padding: 8px 12px; border-radius: 14px; background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--ink); font-size: 13.5px; font-weight: 700; position: relative; z-index: 4; }
+.netstrip { flex: none; display: flex; align-items: center; gap: 8px; margin: 0 12px 6px; padding: 8px 12px; border-radius: 14px; background: var(--netstrip-bg); box-shadow: inset 0 0 0 1px var(--netstrip-edge); color: var(--ink); font-size: 13.5px; font-weight: 700; position: relative; z-index: 4; }
 .netstrip .ic { width: 18px; height: 18px; color: var(--warning); }
 .views { position: relative; flex: 1; min-height: 0; z-index: 1; }
 .view {
@@ -156,7 +169,7 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 .view::-webkit-scrollbar { display: none; }
 .view.active { opacity: 1; visibility: visible; transform: none; transition: opacity .22s ease, transform .26s cubic-bezier(.2,.8,.2,1), visibility 0s; }
-.vhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 6px 2px 14px; }
+.vhead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 6px 2px 14px; }
 .vhead h1, .dtitle h1 { font-size: 34px; font-weight: 900; margin: 0; line-height: 1.05; letter-spacing: -.01em; }
 .eyebrow { font-size: 12.5px; font-weight: 800; color: var(--ink-2); text-transform: uppercase; letter-spacing: .07em; }
 .host {
@@ -168,12 +181,14 @@ button, input, textarea { font: inherit; color: inherit; }
 .host .ic { width: 16px; height: 16px; color: var(--ink-2); }
 .asleep .host .dot { background: var(--ink-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink-2) 22%, transparent); }
 .host-state { color: var(--ink-2); font-weight: 700; }
-.head-actions { display: flex; gap: 8px; align-items: center; }
+.head-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.setbtn { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 14px 0 12px; border-radius: 999px; border: 0; background: var(--sunken); color: var(--ink); font-weight: 800; font-size: 14.5px; cursor: pointer; }
+.setbtn .ic { width: 18px; height: 18px; color: var(--tint); }
 .iconbtn { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--sunken); color: var(--tint); display: grid; place-items: center; cursor: pointer; }
 
 .tabbar {
   flex: none; position: relative; z-index: 6; display: grid; grid-template-columns: repeat(5, 1fr);
-  padding: 6px 6px 24px; background: color-mix(in srgb, var(--surface) 90%, transparent);
+  padding: 6px 6px 24px; background: var(--bar-bg);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: 1px solid var(--stroke);
 }
 @media (max-width: 520px) { .tabbar { padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); } }
@@ -229,11 +244,11 @@ button, input, textarea { font: inherit; color: inherit; }
 .btn-soft { background: var(--sunken); color: var(--ink); }
 .btn-ghost { background: transparent; color: var(--tint); padding: 0 10px; }
 .btn-danger { background: transparent; color: var(--danger); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--danger) 50%, transparent); }
-.btn-small { min-height: 36px; font-size: 14px; padding: 0 12px; border-radius: 12px; }
+.btn-small { min-height: 44px; font-size: 14px; padding: 0 12px; border-radius: 12px; }
 .btn-row { display: flex; gap: 10px; }
 .btn-row > .btn { flex: 1; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip { border: 0; min-height: 40px; padding: 0 14px; border-radius: 999px; background: var(--sunken); color: var(--ink); font-weight: 800; font-size: 14px; cursor: pointer; }
+.chip { border: 0; min-height: 44px; padding: 0 14px; border-radius: 999px; background: var(--sunken); box-shadow: inset 0 0 0 1px var(--chip-ring); color: var(--ink); font-weight: 800; font-size: 14px; cursor: pointer; }
 .chip[aria-pressed="true"] { background: var(--tint); color: var(--on-tint); }
 .chiprow { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; margin: 0 -2px; scrollbar-width: none; }
 .chiprow::-webkit-scrollbar { display: none; }
@@ -261,8 +276,8 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
 .meet { display: flex; gap: 12px; align-items: flex-start; }
 .meet h3 { margin: 0; font-size: 19px; font-weight: 900; }
 .meet .when { font-weight: 800; color: var(--tint); font-size: 14.5px; font-variant-numeric: tabular-nums; }
-.donebtn { flex: none; width: 44px; height: 44px; margin: -6px -8px -6px -6px; border: 0; background: none; display: grid; place-items: center; cursor: pointer; color: var(--success); }
-.donebtn span { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--stroke); display: grid; place-items: center; transition: background .15s, border-color .15s; }
+.donebtn { flex: none; min-width: 44px; height: 44px; margin: -6px -6px -6px 0; padding: 0 6px; border: 0; background: none; display: flex; gap: 6px; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-2); font-weight: 800; font-size: 13.5px; }
+.donebtn span { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--stroke-strong); display: grid; place-items: center; transition: background .15s, border-color .15s; color: var(--success); }
 .donebtn:hover span { border-color: var(--success); }
 .donebtn .ic { width: 14px; height: 14px; opacity: 0; }
 .donebtn:hover .ic { opacity: .6; }
@@ -304,15 +319,15 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
 .add { color: var(--success); font-weight: 800; font-size: 13px; font-variant-numeric: tabular-nums; }
 .del { color: var(--danger); font-weight: 800; font-size: 13px; font-variant-numeric: tabular-nums; }
 .replyform, .composer-form { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
-.field { flex: 1; min-width: 0; min-height: 46px; border: 1px solid var(--stroke); background: var(--sunken); border-radius: 16px; padding: 0 14px; font-size: 15.5px; outline: none; }
+.field { flex: 1; min-width: 0; min-height: 46px; border: 1px solid var(--stroke-strong); background: var(--sunken); border-radius: 16px; padding: 0 14px; font-size: 15.5px; outline: none; }
 .field:focus { border-color: var(--tint); }
 .sendbtn { flex: none; width: 46px; height: 46px; border-radius: 50%; border: 0; background: var(--tint); color: var(--on-tint); display: grid; place-items: center; cursor: pointer; }
 .sendbtn .ic { width: 20px; height: 20px; }
 
 /* Inbox */
-.list { display: flex; flex-direction: column; gap: 8px; position: relative; }
+.list { display: flex; flex-direction: column; gap: 10px; position: relative; }
 .swipe-wrap { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .28s ease, opacity .2s ease, margin .28s ease; }
-.swipe-wrap.gone { grid-template-rows: 0fr; opacity: 0; margin-top: -8px; }
+.swipe-wrap.gone { grid-template-rows: 0fr; opacity: 0; margin-top: -10px; }
 .swipe-clip { min-height: 0; overflow: hidden; border-radius: 20px; }
 .swipe { position: relative; }
 .swipe-actions { position: absolute; inset: 0 0 0 auto; width: 160px; display: flex; border-radius: 20px; overflow: hidden; }
@@ -324,7 +339,7 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
 .swipe-face.dragging { transition: none; cursor: grabbing; }
 .swipe.open .swipe-face { transform: translateX(-160px); }
 .row-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-.bundle { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 20px; background: var(--surface); border: 1px dashed var(--stroke); width: 100%; text-align: left; color: inherit; cursor: pointer; }
+.bundle { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 20px; background: var(--surface); border: 1px dashed var(--stroke-strong); width: 100%; text-align: left; color: inherit; cursor: pointer; }
 .bundle .ic.chev { transition: transform .2s; color: var(--ink-2); }
 .bundle[aria-expanded="true"] .ic.chev { transform: rotate(90deg); }
 .draft-text { margin: 8px 0 10px; padding: 10px 12px; border-radius: 14px; background: var(--sunken); font-size: 14.5px; }
@@ -344,13 +359,13 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
 .mrow .mini svg { width: 26px; height: 24px; margin-top: 4px; }
 .msg.mochi { max-width: 100%; background: var(--surface); border: 1px solid var(--stroke); border-bottom-left-radius: 6px; box-shadow: var(--shadow-card); }
 .msg.card-msg { padding: 14px; }
-.msg .quote { margin: 8px 0 12px; padding: 8px 10px; border-radius: 12px; background: var(--sunken); font-size: 14.5px; }
+.msg .quote { margin: 8px 0 12px; padding: 8px 10px; border-radius: 14px; background: var(--sunken); font-size: 14.5px; }
 .typing span { display: inline-block; width: 7px; height: 7px; margin: 0 2px; border-radius: 50%; background: var(--ink-2); animation: blink 1s infinite; }
 .typing span:nth-child(2) { animation-delay: .15s; } .typing span:nth-child(3) { animation-delay: .3s; }
 @keyframes blink { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
 .composer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 26px 86px 14px 16px; background: linear-gradient(transparent, var(--bg-bottom) 34%); }
 .composer .chiprow { margin-bottom: 6px; }
-.composer .chip { min-height: 36px; font-size: 13.5px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--stroke); }
+.composer .chip { min-height: 44px; font-size: 13.5px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--stroke); }
 .composer-form { margin-top: 0; }
 
 /* Mochi room */
@@ -389,8 +404,9 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
 .game { display: flex; gap: 10px; align-items: center; padding: 12px; border-radius: 20px; background: var(--surface); border: 1px solid var(--stroke); text-align: left; cursor: pointer; color: inherit; min-height: 60px; font-weight: 800; font-size: 14.5px; }
 .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
 .toggle-row + .toggle-row { border-top: 1px solid var(--stroke); }
-.mini-switch { flex: none; width: 50px; height: 30px; border-radius: 999px; border: 0; background: var(--sunken); position: relative; cursor: pointer; box-shadow: inset 0 0 0 1px var(--stroke); transition: background .2s; }
-.mini-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
+.mini-switch { flex: none; width: 50px; height: 30px; border-radius: 999px; border: 0; background: var(--track-off); position: relative; cursor: pointer; box-shadow: inset 0 0 0 1px var(--stroke); transition: background .2s; }
+.mini-switch::before { content: ""; position: absolute; inset: -7px -4px; }
+.mini-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--knob); box-shadow: var(--knob-shadow); transition: transform .2s; }
 .mini-switch[aria-checked="true"] { background: var(--success); }
 .mini-switch[aria-checked="true"]::after { transform: translateX(20px); }
 .sounds-like { margin-top: 8px; padding: 8px 12px; border-radius: 14px; background: var(--bubble); font-weight: 800; font-size: 14.5px; }
@@ -399,7 +415,7 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
 .banner {
   position: absolute; left: 10px; right: 10px; top: 54px; z-index: 30; display: flex; gap: 10px; align-items: flex-start;
   padding: 12px 14px; border-radius: 24px; border: 1px solid var(--stroke); cursor: pointer; text-align: left; color: var(--ink);
-  background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  background: var(--overlay-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   box-shadow: var(--shadow-float); transform: translateY(-160%); transition: transform .42s cubic-bezier(.2,.9,.3,1.15);
 }
 .banner.show { transform: none; }
@@ -416,17 +432,17 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
 }
 .toast.show { opacity: 1; transform: none; pointer-events: auto; }
 .toast .t-text { flex: 1; min-width: 0; }
-.toast button { flex: none; border: 0; background: none; color: var(--toast-action); font-weight: 900; min-height: 36px; padding: 0 8px; cursor: pointer; }
+.toast button { flex: none; border: 0; background: none; color: var(--toast-action); font-weight: 900; min-height: 44px; padding: 0 8px; cursor: pointer; }
 .scrim { position: absolute; inset: 0; z-index: 50; background: var(--scrim); opacity: 0; pointer-events: none; transition: opacity .25s; }
 .scrim.show { opacity: 1; pointer-events: auto; }
 .sheet {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 51; max-height: 90%; overflow-y: auto; overflow-x: hidden;
-  padding: 8px 16px 30px; border-radius: 30px 30px 0 0; background: linear-gradient(var(--bg-top), var(--bg-bottom));
-  box-shadow: 0 -10px 30px rgba(0,0,0,.18); transform: translateY(105%); visibility: hidden;
+  padding: 8px 16px 30px; border-radius: 30px 30px 0 0; background: var(--sheet-bg);
+  box-shadow: var(--shadow-sheet); transform: translateY(105%); visibility: hidden;
   transition: transform .34s cubic-bezier(.2,.8,.2,1), visibility 0s linear .34s;
 }
 .sheet.show { transform: none; visibility: visible; transition: transform .34s cubic-bezier(.2,.8,.2,1), visibility 0s; }
-.grabber { width: 40px; height: 5px; border-radius: 3px; background: var(--stroke); margin: 2px auto 12px; }
+.grabber { width: 40px; height: 5px; border-radius: 3px; background: var(--grabber); margin: 2px auto 12px; }
 .sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
 .sheet h2 { margin: 0; font-size: 23px; font-weight: 900; line-height: 1.15; }
 .sheet h3 { margin: 18px 4px 8px; font-size: 13px; font-weight: 900; color: var(--ink-2); text-transform: uppercase; letter-spacing: .07em; }
@@ -435,11 +451,15 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
 .bigmic .ic { width: 36px; height: 36px; }
 .bigmic.hot { animation: pulse 1.2s ease-in-out infinite; }
 .hostcard { display: flex; gap: 12px; align-items: center; }
-.parked { opacity: .78; border-style: dashed; }
-.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.qa { border: 0; border-radius: 18px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--stroke); min-height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; font-weight: 800; font-size: 13px; cursor: pointer; color: var(--ink); padding: 6px; text-align: center; }
+.parked { opacity: var(--parked-op); border-style: dashed; border-color: var(--stroke-strong); }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.grid4 .qa { min-height: 72px; padding: 6px 2px; font-size: 12.5px; overflow-wrap: anywhere; }
+@media (max-width: 340px) { .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.qa { border: 0; border-radius: 20px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--stroke); min-height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; font-weight: 800; font-size: 13px; cursor: pointer; color: var(--ink); padding: 6px; text-align: center; }
 .qa .ic { width: 22px; height: 22px; color: var(--tint); }
 .confirm { margin-top: 10px; }
+.sheet .card, .sheet .qa, .sheet .diff { background: var(--sheet-card); }
 .diff { margin: 0; border-radius: 16px; overflow-x: auto; background: var(--surface); border: 1px solid var(--stroke); font-family: var(--mono); font-size: 13px; line-height: 1.55; }
 .diff div { padding: 0 12px; white-space: pre; min-width: max-content; }
 .diff .h { color: var(--indigo); background: var(--sunken); padding-block: 4px; }
@@ -460,10 +480,11 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
 .note-pop { position: absolute; left: 12px; right: 12px; bottom: 168px; z-index: 70; padding: 14px 14px 12px; border-radius: 20px; background: var(--surface); border: 2px solid var(--note); box-shadow: var(--shadow-float); }
 .note-pop b { display: block; font-size: 15.5px; font-weight: 900; margin-bottom: 4px; }
 .note-pop p { margin: 0; font-size: 14px; color: var(--ink-2); }
-.note-pop .x { position: absolute; top: 4px; right: 4px; width: 40px; height: 40px; border: 0; background: none; color: var(--ink-2); cursor: pointer; display: grid; place-items: center; }
+.note-pop .x { position: absolute; top: 2px; right: 2px; width: 44px; height: 44px; border: 0; background: none; color: var(--ink-2); cursor: pointer; display: grid; place-items: center; }
 
 /* Design-note callouts */
-.nb { position: absolute; top: -10px; left: -8px; z-index: 20; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid var(--surface); background: var(--note); color: var(--on-note); font-weight: 900; font-size: 12.5px; display: grid; place-items: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.25); animation: pop .2s ease-out; }
+.nb { position: absolute; top: -10px; left: -8px; z-index: 20; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid var(--surface); background: var(--note); color: var(--on-note); font-weight: 900; font-size: 12.5px; display: grid; place-items: center; cursor: pointer; box-shadow: var(--shadow-pin); animation: pop .2s ease-out; }
+.nb::before { content: ""; position: absolute; inset: -9px; }
 .notes-on .screen [data-note] { outline: 2px dashed color-mix(in srgb, var(--note) 60%, transparent); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -570,6 +591,13 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
             </header>
             <div class="stack">
               <div id="today-approval" data-note="8"></div>
+
+              <nav class="grid4" aria-label="Quick actions" data-note="25">
+                <button class="qa" data-act="sheet" data-sheet="start"><svg class="ic"><use href="#i-plus"/></svg>New task</button>
+                <button class="qa" data-act="qpet"><svg class="ic" style="color: var(--pet)"><use href="#i-heart"/></svg>Pet</button>
+                <button class="qa" data-act="qplay"><svg class="ic" style="color: var(--play)"><use href="#i-ball"/></svg>Play</button>
+                <button class="qa" data-act="toast" data-text="Settings open here: Mochi Link, notifications, voice, Live Activity."><svg class="ic"><use href="#i-sliders"/></svg>Settings</button>
+              </nav>
 
               <article class="card" data-note="4">
                 <div class="brief">
@@ -702,7 +730,7 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
             <header class="vhead">
               <div><div class="eyebrow">Friendship 3 · with Patch</div><h1>Mochi</h1></div>
               <div class="head-actions">
-                <button class="iconbtn" data-act="toast" data-text="Settings open here: Mochi Link, notifications, voice, Live Activity." aria-label="Settings"><svg class="ic"><use href="#i-sliders"/></svg></button>
+                <button class="setbtn" data-act="toast" data-text="Settings open here: Mochi Link, notifications, voice, Live Activity."><svg class="ic"><use href="#i-sliders"/></svg>Settings</button>
                 <button class="host" data-act="host" data-note="3" aria-label="Your Mac: online. Open computer controls"><span class="dot"></span><span class="host-name">Mac</span><svg class="ic"><use href="#i-chevd"/></svg></button>
               </div>
             </header>
@@ -1003,6 +1031,7 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
     { n: 4, view: 'today', t: 'The briefing comes first', b: "Mochi's own words, at most 110 characters, with the meeting or person first (MOCHI_VOICE §4.4). Read aloud and “Checked by” stay: you trust a briefing more when you know who checked, and when. Tap Mochi to pet it." },
     { n: 5, view: 'today', t: 'Next meeting, one tap to Join', b: "Join is the main button. “Brief me” is the C2 meeting assistant: who's coming, your last emails with them, and related Notion docs." },
     { n: 6, view: 'today', t: 'Claude at a glance', b: 'One line per session, with a state pill that uses words, not just colour. Tapping a row opens that session in the Claude tab.' },
+    { n: 25, view: 'today', t: 'Quick actions', b: 'The most common jobs, one tap each from Today: start a task on the Mac, pet or play with Mochi, and settings. Ask Mochi is the button that floats on every screen, and the computer chip sits in the header.' },
     { n: 7, view: 'today', t: 'A preview, not a second inbox', b: "The top three things that need you, each with a done circle. The rest live in Inbox, so done and undone stay one list across the Mac, iPhone and Android (C9)." },
     { n: 8, view: 'today claude', t: 'Approvals (B1)', b: "The exact command, quoted; who's asking and on which computer; and the default (“Denied in 10 min”). Deny and Allow are the same size, with Deny on the left. Risky commands such as git push need Face ID. The toast says what was sent, not what Claude did. A pending approval also sits at the top of Today: it's the only thing with a timer." },
     { n: 9, view: 'claude', t: 'Grouped by computer', b: 'Sessions sit under “On your Mac”. When multi-host returns, a PC group appears below it with no new navigation.' },
@@ -1011,7 +1040,7 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
     { n: 12, view: 'claude', t: 'Session detail', b: "What it's doing, the steps, the files changed, and suggested replies (from the turn summary's “next”). Stop takes two taps (B4). Commit & push waits until Claude finishes (B3)." },
     { n: 13, view: 'claude', t: 'Diff viewer (stub)', b: "One file at a time, unified, in large text. Changes go back to Claude (“Ask Claude to change…”); the phone never edits code itself." },
     { n: 14, view: 'inbox', t: 'One inbox for mail, meetings and Notion', b: 'Filter chips instead of tabs inside the tab. “Needs you” comes first, in the briefing\'s order: meetings, then people (VIP star), then Notion.' },
-    { n: 15, view: 'inbox', t: 'Swipe, with visible buttons', b: "Swipe left for Snooze and Done; swipe further to finish. A tap shows the same buttons, so nothing depends on a hidden gesture (VoiceOver and TalkBack users get them as actions)." },
+    { n: 15, view: 'inbox', t: 'Swipe, with visible buttons', b: "Snooze and Done are buttons on every row. Swiping left shows the same two, and swiping further finishes, so nothing depends on a hidden gesture (VoiceOver and TalkBack users get them as actions)." },
     { n: 16, view: 'inbox', t: 'Quieter mail, bundled', b: 'Newsletters and receipts become one row (C5, the smart digest). They never buzz the phone.' },
     { n: 17, view: 'inbox', t: 'Drafts in your voice', b: "Written by Mochi Cloud as you (MOCHI_VOICE §7), with [placeholders] for what Mochi doesn't know. Nothing is sent until you send it in Gmail." },
     { n: 18, view: 'inbox', t: 'Follow-ups (C3)', b: "Things Mochi is watching for you, and when it will tell you." },
@@ -1101,11 +1130,12 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
 
   function itemRow(it) {
     const src = SRC[it.src];
-    const extra = it.join ? `<div class="row-actions"><button class="btn btn-primary btn-small" data-act="join">${ic('video')}Join</button></div>`
-      : it.reply ? `<div class="row-actions"><button class="btn btn-soft btn-small" data-act="draft" data-id="${it.id}">Draft reply</button></div>` : '';
+    const main = it.join ? `<button class="btn btn-primary btn-small" data-act="join">${ic('video')}Join</button>`
+      : it.reply ? `<button class="btn btn-soft btn-small" data-act="draft" data-id="${it.id}">Draft reply</button>` : '';
+    const extra = `<div class="row-actions">${main}<button class="btn btn-soft btn-small" data-act="snooze" data-id="${it.id}" aria-label="Snooze ${esc(it.who)}">${ic('clock')}Snooze</button><button class="btn btn-soft btn-small" data-act="done" data-id="${it.id}" aria-label="Mark ${esc(it.who)} done">${ic('check')}Done</button></div>`;
     return `<div class="swipe-wrap" data-id="${it.id}"><div class="swipe-clip"><div class="swipe">
       <div class="swipe-actions"><button class="sa sa-snooze" data-act="snooze" data-id="${it.id}" tabindex="-1">${ic('clock')}Snooze</button><button class="sa sa-done" data-act="done" data-id="${it.id}" tabindex="-1">${ic('check')}Done</button></div>
-      <div class="swipe-face" tabindex="0" data-swipe aria-label="${esc(it.who)}. Press Enter for Done and Snooze">
+      <div class="swipe-face" tabindex="0" data-swipe aria-label="${esc(it.who)}. Swipe left for Snooze and Done, or use the buttons">
         <span class="tile" style="--c: ${src.c}">${ic(src.icon)}</span>
         <div class="row-main"><div class="row-top"><span class="row-title">${it.vip ? '<svg class="star" aria-label="VIP"><use href="#i-star"/></svg>' : ''}${esc(it.who)}</span><span class="time">${it.when}</span></div>
         ${it.subj ? `<div class="row-subj">${esc(it.subj)}</div>` : ''}<div class="row-sub">${esc(it.what)}</div>${extra}</div>
@@ -1141,7 +1171,7 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
       const src = SRC[i.src];
       return `<div class="row"><span class="tile" style="--c: ${src.c}">${ic(src.icon)}</span>
         <div class="row-main"><div class="row-title">${i.vip ? '<svg class="star" aria-label="VIP"><use href="#i-star"/></svg>' : ''}${esc(i.who)}</div><div class="row-sub">${esc(i.subj || i.what)}</div></div>
-        <button class="donebtn" data-act="done" data-id="${i.id}" aria-label="Mark ${esc(i.who)} done"><span>${ic('check')}</span></button></div>`;
+        <button class="donebtn" data-act="done" data-id="${i.id}" aria-label="Mark ${esc(i.who)} done"><span>${ic('check')}</span>Done</button></div>`;
     }).join('') : `<p class="fine" style="padding: 8px 0">All clear. Mochi will tell you when something comes in.</p>`;
   }
 
@@ -1590,6 +1620,8 @@ pre.cmd { margin: 10px 0 0; padding: 10px 12px; border-radius: 14px; background:
     awake: (el) => { const on = el.getAttribute('aria-checked') !== 'true'; el.setAttribute('aria-checked', String(on)); toast(on ? "Your Mac stays awake while Claude runs." : "Your Mac sleeps on its usual schedule. Mochi warns you if Claude is still running."); },
     asleep: (el) => { S.asleep = !S.asleep; if (!S.asleep) S.queued = 0; el.setAttribute('aria-checked', String(S.asleep)); render(); toast(S.asleep ? 'Pretending your Mac is asleep.' : 'Your Mac is awake again. Anything queued has been sent.'); },
     pet: () => { animate($('#room-mochi'), 'wiggle'); hearts($('#room-mochi')); say(pick(LINES.pet)); },
+    qpet: () => { const av = $('[data-act="pet-avatar"]'); animate(av, 'wiggle'); hearts(av); toast('Petted Mochi.'); },
+    qplay: () => { animate($('[data-act="pet-avatar"]'), 'hop'); toast('Played with Mochi.'); },
     'pet-avatar': (el) => { animate(el, 'wiggle'); hearts(el); },
     play: () => { animate($('#room-mochi'), 'hop'); animate($('#ball'), 'go'); say(pick(LINES.play)); },
     treat: () => { animate($('#treat'), 'go'); setTimeout(() => animate($('#room-mochi'), 'hop'), still() ? 0 : 600); say(pick(LINES.treat)); },
