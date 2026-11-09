@@ -17,6 +17,7 @@ import 'package:flutter/foundation.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_wire/mochi_wire.dart';
 
+import '../core/ask_brain.dart' show AskTarget, PhoneApprovals;
 import '../core/ask_mochi.dart';
 import '../core/desktop_settings.dart';
 import '../core/pet_cues.dart';
@@ -59,7 +60,7 @@ PetLook petLook(DesktopSettings settings, {int friendshipLevel = 0}) => PetLook(
   friendshipLevel: friendshipLevel,
 );
 
-class PhoneSync {
+class PhoneSync implements PhoneApprovals {
   PhoneSync({
     required this.host,
     required this.sessions,
@@ -333,8 +334,11 @@ class PhoneSync {
         };
         if (cue != null) _cue(cue);
       case LinkKey.verdict:
-        // No approvals on Windows yet: nothing asked for one.
-        break;
+        // The answer to the approval card mirrored to the phones: only for that card, and only while phones may ask.
+        final verdict = LinkVerdict.fromValue(message.value);
+        if (verdict == null || !settings.acceptCommands || verdict.id != _pendingApprovalId) return;
+        _pendingApprovalId = null;
+        ask.brain?.answerFromPhone(verdict.id, allow: verdict.allow);
       default:
         break;
     }
@@ -355,13 +359,42 @@ class PhoneSync {
       return;
     }
     _reply(command.id, null, working: true);
-    if (command.project != null) {
-      // A reply to one Claude session: on the Mac that goes through an approval card into the session. Not yet here.
-      _reply(command.id, "Mochi on Windows can't pass messages to a Claude session yet. Reply on the PC for now.", ok: false);
-      return;
-    }
-    final outcome = await ask.ask(text, spoken: !command.typed, fromPhone: true);
+    // A reply written for one Claude session goes to that session, through an approval card here and on your phone.
+    final project = command.project;
+    final outcome = await ask.ask(
+      text,
+      spoken: !command.typed,
+      fromPhone: true,
+      commandId: command.id,
+      target: project == null ? null : AskTarget(project: project, sessionId: command.session),
+    );
     _reply(command.id, outcome.text, ok: outcome.ok);
+  }
+
+  /// The approval card's id while it is also on the phones.
+  String? _pendingApprovalId;
+
+  /// A card is on the phones (until it is cleared, whoever answered).
+  bool _cardOnPhones = false;
+
+  /// Shows Mochi's approval card on the phones too; the first answer (here or there) wins.
+  @override
+  void mirror({required String id, required String commandId, required String target, String? project, required String message}) {
+    if (!host.paired) return;
+    _pendingApprovalId = id;
+    _cardOnPhones = true;
+    host.set(
+      ApprovalRequest(id: id, command: commandId, target: target, project: project, message: message, at: _now).toValue(),
+      LinkKey.approval,
+    );
+  }
+
+  @override
+  void clear() {
+    if (!_cardOnPhones) return;
+    _cardOnPhones = false;
+    _pendingApprovalId = null;
+    host.set(null, LinkKey.approval);
   }
 
   void _reply(String id, String? text, {bool ok = true, bool working = false}) {

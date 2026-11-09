@@ -15,6 +15,7 @@ import 'wire_text.dart';
 ///     mochi_hook claude-hook [EventName]   reads the hook's JSON on stdin and passes a sanitized summary to the app
 ///     mochi_hook report <build|test|milestone|commit> <passed|failed|reached> [--label TEXT]
 ///     mochi_hook ping                      is the app listening?
+///     mochi_hook paws                      (started by Mochi itself: PawsRelay, in bin/mochi_hook.dart)
 ///     mochi_hook --version
 ///
 /// `claude-hook` never writes to stdout and always exits 0, so it can neither block Claude Code nor put anything into
