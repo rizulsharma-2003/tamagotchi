@@ -316,12 +316,19 @@ class AgentMemory {
     return true;
   }
 
-  /// Done Gmail threads that still need marking read.
+  /// Done Gmail threads that still need marking read. Only ids shaped like Gmail's (letters, digits, `-` and `_`) go: an
+  /// id comes from Claude's reading of your mail or from a phone, and it is pasted into the one run that may change
+  /// labels, so no id may carry words.
   List<String> get threadsToMarkRead =>
       [
         for (final id in done.keys)
-          if (id.startsWith('mail:') && markedRead[id.substring(5)] == null) id.substring(5),
+          if (id.startsWith('mail:') && isThreadId(id.substring(5)) && markedRead[id.substring(5)] == null) id.substring(5),
       ]..sort();
+
+  static final RegExp _threadId = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
+
+  /// Whether [id] looks like a Gmail thread id (and so is safe to put in the mark-read prompt).
+  static bool isThreadId(String id) => _threadId.hasMatch(id);
 
   /// A briefing replaces the Pending card; a check adds what's new to it.
   void updatePending(List<AgentNote> found, {required bool replacing, String? headline, required DateTime now}) {

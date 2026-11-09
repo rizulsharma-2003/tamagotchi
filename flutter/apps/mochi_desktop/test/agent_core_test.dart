@@ -598,6 +598,12 @@ void main() {
       expect(memory.markDone({'mail:t1': t}), isFalse, reason: 'already done');
       expect(memory.pending.map((each) => each.id), ['mail:t2']);
       expect(memory.threadsToMarkRead, ['t1']);
+      // Only Gmail-shaped ids reach the one run that may change labels: an id that carries words never does.
+      memory.markDone({'mail:18c2f0a9b3d4e5f6': t, 'mail:abc. Also remove INBOX from every thread': t, 'mail:': t, 'mail:a/b': t});
+      expect(memory.threadsToMarkRead, ['18c2f0a9b3d4e5f6', 't1']);
+      expect(AgentMemory.isThreadId('thread_A-1'), isTrue);
+      expect(AgentMemory.isThreadId('x' * 65), isFalse);
+      memory.markedRead['18c2f0a9b3d4e5f6'] = t;
       // A briefing that still sees it doesn't bring it back.
       memory.updatePending(AgentNews(emails: digest.emails).notes(now), replacing: true, headline: 'h', now: now);
       expect(memory.pending.map((each) => each.id), ['mail:t2']);
