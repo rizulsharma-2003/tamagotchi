@@ -4,6 +4,7 @@
 #   drag-file|C:\a.txt[,C:\b.pdf]|<target>   a real OLE drag (CF_HDROP) from a small non-activating source window
 #   drag-text|some text|<target>             CF_UNICODETEXT
 #   drag-link|https://...|<target>           UniformResourceLocatorW + the URL as text
+#   rclick|x,y            a right click
 #   click|<target>        hover 1.2 s (the taskbar pet lets clicks through until it's hovered), then a left click
 #   type|text             Unicode keys, only while Mochi's own window has the focus (never into another window)
 #   key|{ENTER}           SendKeys syntax as is, only while Mochi's own window has the focus
@@ -182,6 +183,11 @@ foreach ($line in Get-Content $Steps) {
         $fg = (Get-Process -Id ([Drive]::ForegroundPid()) -ErrorAction SilentlyContinue).ProcessName
         if ($fg -match '^(WindowsTerminal|OpenConsole|conhost|cmd|powershell|pwsh|claude)$') { $out = "skipped: $fg has the focus" }
         else { [System.Windows.Forms.SendKeys]::SendWait($f[1]); $out = "sent over $fg" }
+      }
+      'rclick' {
+        $t = Target $f[1]; [Drive]::MoveTo($t[0], $t[1]); Start-Sleep -Milliseconds 700
+        [Drive]::mouse_event(0x0008, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 60; [Drive]::mouse_event(0x0010, 0, 0, 0, [UIntPtr]::Zero)
+        $out = "at $($t[0]),$($t[1])"
       }
       'fg' { $out = (Get-Process -Id ([Drive]::ForegroundPid()) -ErrorAction SilentlyContinue).ProcessName }
       'down-up' {
