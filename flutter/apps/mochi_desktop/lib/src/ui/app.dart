@@ -526,6 +526,8 @@ class DesktopAppState extends State<DesktopApp> {
         openDecorate();
       case ShellAction.explore:
         explore();
+      case ShellAction.ask:
+        openAsk();
       // On the taskbar (roaming it, or playing in its spot) is where you'll see Mochi: the pet shows too.
       case ShellAction.roamTaskbar:
         desktop.settings

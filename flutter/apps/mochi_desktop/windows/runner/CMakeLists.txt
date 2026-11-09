@@ -9,6 +9,7 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME} WIN32
   "desktop_icons.cpp"
   "flutter_window.cpp"
+  "jump_list.cpp"
   "main.cpp"
   "media.cpp"
   "native_stage.cpp"
@@ -43,6 +44,8 @@ target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "wtsapi32.lib" "shell32.lib" "runtimeobject.lib")
 # Desktop icon play (X5): the shell's COM view of the desktop (CoCreateInstance, VariantInit, the CLSIDs).
 target_link_libraries(${BINARY_NAME} PRIVATE "ole32.lib" "oleaut32.lib" "uuid.lib")
+# The Start menu jump list (X16): InitPropVariantFromString and PKEY_Title.
+target_link_libraries(${BINARY_NAME} PRIVATE "propsys.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

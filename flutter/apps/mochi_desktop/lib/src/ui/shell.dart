@@ -26,6 +26,10 @@ enum Surface { pet, popover, main, hidden }
 /// What the tray menu (and the pet's menu) can ask for.
 enum ShellAction {
   showMain,
+
+  /// "Ask Mochi…" (X16): Mochi's window with the question box focused. The tray, the shortcut, the popover and the Start
+  /// menu's jump list all come to the same place.
+  ask,
   closeWindow,
   pair,
   settings,
@@ -47,12 +51,37 @@ enum ShellAction {
 
   /// The popover lost the focus (a click somewhere else): it closes, as a flyout does.
   dismissPopover,
+
   /// A verified update is waiting: install it now (Mochi quits and starts again).
   restartToUpdate,
 
   /// The main window was resized (a drag on its edge ended): remember the size.
   windowResized,
   quit,
+}
+
+/// What a launch argument asks the running Mochi for (X16): the Start menu's jump list starts `Mochi.exe --ask` or
+/// `Mochi.exe --explore`. A second launch hands its argument to the first copy (windows/runner/main.cpp,
+/// flutter_window.cpp); a first launch has it in `main`'s arguments. Anything else is ignored.
+abstract final class LaunchRequest {
+  static const String askFlag = '--ask';
+  static const String exploreFlag = '--explore';
+
+  /// The action for one argument (null: nothing, an unknown argument).
+  static ShellAction? parse(Object? argument) => switch (argument) {
+    askFlag => ShellAction.ask,
+    exploreFlag => ShellAction.explore,
+    _ => null,
+  };
+
+  /// The first argument of [arguments] that asks for something.
+  static ShellAction? fromArguments(Iterable<String> arguments) {
+    for (final argument in arguments) {
+      final action = parse(argument);
+      if (action != null) return action;
+    }
+    return null;
+  }
 }
 
 /// An edge or corner of the window, for resizing it by hand.
@@ -162,7 +191,27 @@ abstract final class SurfaceSizes {
 class NativeShell with WindowListener, TrayListener implements DesktopShell {
   NativeShell();
 
-  final StreamController<ShellAction> _actions = StreamController.broadcast();
+  late final StreamController<ShellAction> _actions = StreamController.broadcast(onListen: _flushLaunch);
+
+  // A launch argument that came before the app listened (the first launch: `main` knows it before the first frame).
+  ShellAction? _pendingLaunch;
+
+  /// A launch argument's request (a first start with `--ask` or `--explore`): runs at once if the app is listening, else
+  /// when it starts to.
+  void launch(ShellAction action) {
+    if (_actions.hasListener) {
+      _actions.add(action);
+    } else {
+      _pendingLaunch = action;
+    }
+  }
+
+  void _flushLaunch() {
+    final action = _pendingLaunch;
+    _pendingLaunch = null;
+    if (action != null) scheduleMicrotask(() => _actions.add(action));
+  }
+
   Surface _surface = Surface.hidden;
   PetWindow? _petWindow;
   DesktopStyle _style = DesktopStyle.roam;
@@ -207,7 +256,8 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
     await windowManager.setAsFrameless();
     await windowManager.setPreventClose(true);
     _instance.setMethodCallHandler((call) async {
-      if (call.method == 'showMain') _actions.add(ShellAction.showMain);
+      // `showMain`, with the second launch's argument when it had one (`--ask`, `--explore`; anything else: just the window).
+      if (call.method == 'showMain') _actions.add(LaunchRequest.parse(call.arguments) ?? ShellAction.showMain);
     });
     if (Platform.isWindows) _petWindow = Win32PetWindow(await windowManager.getId());
     await _initTray();
@@ -244,6 +294,7 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   static List<MenuItem> trayItems({required DesktopStyle style, bool updateReady = false, bool focusing = false, String? explore}) => [
     if (updateReady) ...[MenuItem(key: ShellAction.restartToUpdate.name, label: 'Restart to Update'), MenuItem.separator()],
     MenuItem(key: ShellAction.showMain.name, label: 'Show Mochi'),
+    MenuItem(key: ShellAction.ask.name, label: 'Ask Mochi…'),
     MenuItem(key: ShellAction.pair.name, label: 'Pair a Phone…'),
     MenuItem(key: ShellAction.settings.name, label: 'Settings'),
     MenuItem.separator(),

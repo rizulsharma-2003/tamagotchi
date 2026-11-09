@@ -9,11 +9,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart' show TestWidgetsFlutterBinding;
 import 'package:flutter/foundation.dart' show Uint8List;
+import 'package:mochi_desktop/src/core/ask_mochi.dart' show ClipboardText;
 import 'package:mochi_desktop/src/core/claude_cli.dart';
 import 'package:mochi_desktop/src/core/desktop_settings.dart';
 import 'package:mochi_desktop/src/core/desktop_world.dart';
 import 'package:mochi_desktop/src/core/hook_setup.dart';
 import 'package:mochi_desktop/src/core/hotkeys.dart';
+import 'package:mochi_desktop/src/core/jump_list.dart';
 import 'package:mochi_desktop/src/core/json_store.dart';
 import 'package:mochi_desktop/src/core/pc_rhythm.dart';
 import 'package:mochi_desktop/src/core/session_store.dart';
@@ -219,6 +221,7 @@ class FakeShell implements DesktopShell {
   /// Each show's always-on-top and exact frame (the desktop pet).
   final List<({bool onTop, PixelRect? frame})> forms = [];
   final StreamController<ShellAction> controller = StreamController.broadcast();
+
   /// Where Mochi lives, each time the tray's ticks changed.
   final List<DesktopStyle> trayStyles = [];
 
@@ -639,6 +642,34 @@ class FakeHotkeys implements HotkeyRegistrar {
   Stream<int> get pressed => _pressed.stream;
 }
 
+/// The runner's jump list: how often it was asked, and what it answers (an HRESULT; 0 built).
+class FakeJumpList implements JumpListService {
+  int builds = 0;
+  int answer = 0;
+  bool throws = false;
+
+  @override
+  Future<int> build() async {
+    builds++;
+    if (throws) throw StateError('no runner');
+    return answer;
+  }
+}
+
+/// A clipboard that counts how often it is read (X15).
+class FakeClipboard implements ClipboardText {
+  FakeClipboard([this.text]);
+
+  String? text;
+  int reads = 0;
+
+  @override
+  Future<String?> read() async {
+    reads++;
+    return text;
+  }
+}
+
 /// A desktop wired from fakes in a temporary folder.
 class TestDesktop {
   TestDesktop._(
@@ -702,6 +733,7 @@ class TestDesktop {
     bool stage = true,
     bool Function()? fullScreen,
     Stream<void>? sessionEnding,
+    JumpListService? jumpList,
   }) {
     final stores = {for (final entry in files.entries) entry.key: MemoryJsonStore(entry.value)};
     final temp = Directory.systemTemp.createTempSync('mochi_desktop_test');
@@ -755,6 +787,7 @@ class TestDesktop {
       sound: sound,
       usage: usage,
       hotkeys: hotkeys,
+      jumpList: jumpList,
       worldStore: store,
       stores: (file) => stores.putIfAbsent(file, MemoryJsonStore.new),
       uptime: uptime ?? testSeconds,
