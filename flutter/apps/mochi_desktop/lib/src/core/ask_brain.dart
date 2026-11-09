@@ -481,7 +481,13 @@ class AskBrain extends ChangeNotifier {
     final to = one('to', 'recipient', same: AgentNames.display);
     final body = one('message', 'content');
     if (identical(to, _ambiguous)) return _deny('Nothing to send (the message was unclear: to/recipient differ).');
-    if (identical(body, _ambiguous)) return _deny('Nothing to send (the message was unclear: message/content differ).');
+    if (identical(body, _ambiguous)) {
+      // Their shape only (never their text): what Claude Code put beside the message.
+      final m = input['message'], c = input['content'];
+      String shape(Object? v) => v is String ? 'text of ${v.length}' : (v is Map ? 'object {${v.keys.join(', ')}}' : (v is List ? 'list of ${v.length}' : v.runtimeType.toString()));
+      final holds = m is String && c is String && c.contains(m);
+      return _deny('Nothing to send (the message was unclear: message is ${shape(m)}, content is ${shape(c)}${holds ? ', content holds the message' : ''}).');
+    }
     final target = to is String ? AgentNames.display(to) : '';
     final message = body is String ? body : '';
     // The field names (never their values) say what didn't fit, should Claude Code's tool change again.
