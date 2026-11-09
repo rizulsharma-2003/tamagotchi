@@ -162,7 +162,23 @@ void main() {
       vault.delete();
       expect(vault.load(), isNull);
       expect(directory.listSync(recursive: true), isEmpty);
-    });
+    }, skip: Platform.isWindows ? 'Windows uses DPAPI (the next test)' : false);
+
+    test('on Windows the token is sealed with DPAPI: saved, read back, not in the clear, removed', () {
+      final directory = Directory.systemTemp.createTempSync('cloud_vault');
+      addTearDown(() => directory.deleteSync(recursive: true));
+      final vault = platformCloudTokenVault(BridgePaths(directory.path, windows: true));
+      expect(vault, isA<DpapiCloudTokenVault>());
+      final token = 'mochi-test-token-${'z' * 24}';
+      expect(vault.save(token), isTrue);
+      final file = File((vault as DpapiCloudTokenVault).path);
+      expect(file.existsSync(), isTrue);
+      expect(utf8.decode(file.readAsBytesSync(), allowMalformed: true), isNot(contains('mochi-test-token')), reason: 'sealed, not in the clear');
+      expect(DpapiCloudTokenVault(file.path).load(), token, reason: 'a fresh vault (as after a restart) opens it');
+      vault.delete();
+      expect(file.existsSync(), isFalse);
+      expect(vault.load(), isNull);
+    }, skip: Platform.isWindows ? false : 'DPAPI exists only on Windows');
 
     test('a vault that has nothing (or can\'t be opened) says null', () {
       final directory = Directory.systemTemp.createTempSync('cloud_vault');
