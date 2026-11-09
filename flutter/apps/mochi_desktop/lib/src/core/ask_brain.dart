@@ -464,8 +464,11 @@ class AskBrain extends ChangeNotifier {
     if (arguments['tool_name'] != 'SendMessage') return _deny("Mochi only approves messages to the user's Claude sessions.");
     if (!messagingAllowed()) return _deny('The user turned off messages to their Claude sessions.');
     final input = arguments['input'] is Map ? Map<String, Object?>.from(arguments['input'] as Map) : <String, Object?>{};
-    final to = input['to'] ?? input['recipient'];
-    final body = input['message'] ?? input['content'];
+    // The card shows exactly what SendMessage sends: its `to` and its `message`. Any other field that could carry a
+    // recipient or text (a `recipient`, a `content`) means the card might not show what goes: denied.
+    if (input.containsKey('recipient') || input.containsKey('content')) return _deny('Nothing to send.');
+    final to = input['to'];
+    final body = input['message'];
     final target = to is String ? AgentNames.display(to) : '';
     final message = body is String ? body : '';
     if (target.isEmpty || message.isEmpty || _current == null) return _deny('Nothing to send.');
