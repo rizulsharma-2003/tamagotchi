@@ -24,6 +24,7 @@
 | 2026-11-08 | Windows extras, batch 1: **N1** Mochi's native stage (C++ layered windows directed from Dart) · the **Mischief** frame (Settings › Mischief, one master switch off by default, a switch per extra, `MischiefGate`) · **X10** full-screen celebrations · **X4** cursor buddy · **X9** sticky notes (checked on the Windows VM). **X8** multi-monitor roaming built (not yet checked on the VM; the VM has one display) |
 | 2026-11-08 | **W19** explore the desktop (the Mac's adventure planner ported to mochi_world; Mochi walks window tops, sits on the taskbar, climbs a screen edge and hops home) · **X1** title-bar walker (it holds on when you drag the window it stands on, and falls when you snap, minimise or close it): both built, not yet checked on the Windows VM |
 | Parked | Multi-host rooms (docs/MULTI_HOST_PLAN.md), by the user's decision; with it **W6** (a Live Activity from a PC: the iPhone isn't paired with the PC) |
+| Parked | **The Mac port of X13, X14 and X17** (2026-11-09, by the user's decision; to pick up after Windows): drop a file, text or a link on Mochi in the menu bar or on Mochi's window, and "What's on my screen?". Today they exist only on Windows. On the Mac: an `NSDraggingDestination` on the menu-bar pet and the window, the same Read gate (Read only for the files handed over with the request now running), and the window picture through ScreenCaptureKit, which needs macOS's Screen Recording permission. The phones' versions are Sprint 3's B8 and B9. |
 
 ## Where Sprint 1 left us
 
