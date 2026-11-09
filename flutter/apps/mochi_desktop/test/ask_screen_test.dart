@@ -31,27 +31,43 @@ ScreenGrab _seen(String app) => ScreenGrab.seen(png: FakeCapturer.png, app: app)
 
 void main() {
   group('which window', () {
-    test('the last window that is an app is remembered; Mochi\'s own, the desktop and nothing are not', () {
+    test('the window you were using: an app\'s foreground window, else the one under Mochi\'s, else none', () {
       final windows = FakeForegroundWindows();
       final memory = ForegroundMemory(windows);
       expect(memory.hwnd, 0);
       windows.window = const ForegroundWindow(_chrome, ForegroundKind.app);
       memory.note();
       expect(memory.hwnd, _chrome);
+      // Mochi's own window has the focus (the taskbar press): the window under it is the one.
+      windows
+        ..window = const ForegroundWindow(0x9, ForegroundKind.ours)
+        ..used = const ForegroundWindow(_notepad, ForegroundKind.app);
+      memory.note();
+      expect(memory.hwnd, _notepad, reason: 'taken from lastUsed, not kept from before');
+      // Nothing found: not the old one either.
       for (final other in [
-        const ForegroundWindow(0x9, ForegroundKind.ours),
         const ForegroundWindow(0x8, ForegroundKind.shell),
         const ForegroundWindow(0, ForegroundKind.app),
         null,
       ]) {
-        windows.window = other;
+        windows
+          ..window = other
+          ..used = other;
         memory.note();
-        expect(memory.hwnd, _chrome, reason: '$other is not a window you were using');
+        expect(memory.hwnd, 0, reason: '$other is not a window you were using');
       }
-      windows.window = const ForegroundWindow(_notepad, ForegroundKind.app);
+      expect(windows.lastUsedReads, 5, reason: 'one look per event, nothing else');
+    });
+
+    test('a second opening never reuses the first\'s window', () {
+      final windows = FakeForegroundWindows(const ForegroundWindow(_chrome, ForegroundKind.app));
+      final memory = ForegroundMemory(windows)..note();
+      expect(memory.hwnd, _chrome);
+      windows
+        ..window = const ForegroundWindow(0x9, ForegroundKind.ours)
+        ..used = null;
       memory.note();
-      expect(memory.hwnd, _notepad, reason: 'the latest wins');
-      expect(windows.reads, 6, reason: 'one read per event, nothing else');
+      expect(memory.hwnd, 0);
     });
 
     test('program names are cleaned for the card and the prompt', () {
@@ -259,7 +275,7 @@ void main() {
     late AskMochi ask;
     late DesktopSettings settings;
 
-    Future<void> pumpBox(WidgetTester tester, {bool enabled = false}) async {
+    Future<void> pumpBox(WidgetTester tester, {bool enabled = false, AskDraft? draft}) async {
       rig = BrainRig();
       addTearDown(rig.brain.dispose);
       settings = DesktopSettings(MemorySettingsDocument())..showScreen = enabled;
@@ -272,6 +288,7 @@ void main() {
         cue: (_) {},
         brainFactory: (self) => rig.brain,
         screenshots: store,
+        draft: draft,
         log: rig.logs.add,
         clock: () => DateTime(2026, 11, 9, 10),
       );
@@ -592,20 +609,20 @@ void main() {
       await tester.runAsync(t.desktop.start);
       await tester.pumpWidget(DesktopApp(desktop: t.desktop, shell: FakeShell(), library: Future<PoseLibrary?>.value()));
       await tester.pump(const Duration(milliseconds: 100));
-      expect(windows.reads, 0, reason: 'nothing at startup, nothing on a timer');
+      expect(windows.lastUsedReads, 0, reason: 'nothing at startup, nothing on a timer');
       final state = tester.state<DesktopAppState>(find.byType(DesktopApp));
       state.openAsk();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 800));
       expect(state.surface, Surface.main);
       expect(t.desktop.foreground.hwnd, _notepad);
-      expect(windows.reads, 1);
+      expect(windows.lastUsedReads, 1);
       // Mochi's own window has the focus now; asking again, or going to Settings, doesn't look again.
       windows.window = const ForegroundWindow(0x77, ForegroundKind.ours);
       state.openAsk();
       state.open(MainPage.settings);
       await tester.pump(const Duration(milliseconds: 300));
-      expect(windows.reads, 1);
+      expect(windows.lastUsedReads, 1);
       expect(t.desktop.foreground.hwnd, _notepad);
     });
 

@@ -406,7 +406,6 @@ class _AssistantPaneState extends State<AssistantPane> {
             ActionsRow(
               children: [PaneLink(host: host, tab: SettingsTab.phones)],
             ),
-            ActionsRow(children: [PaneLink(host: host, tab: SettingsTab.phones)]),
           ],
         ),
         SettingsGroup(

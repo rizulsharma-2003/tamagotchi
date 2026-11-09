@@ -174,7 +174,7 @@ class MochiDesktop {
       clock: clock,
       brainSetup: brainSetup,
       messagingAllowed: () => settings.messageSessions,
-      log: kDebugMode ? (message) => debugPrint('Mochi: $message') : null,
+      log: _askLog,
       screenshots: screenshots,
     );
     // "What's on my screen?" (X17): the window you were using before Mochi's came up, a picture of only that window when
@@ -446,6 +446,23 @@ class MochiDesktop {
     ask.draft.accept(payload);
     if (!_askWanted.isClosed) _askWanted.add(null);
   }
+
+  /// Ask Mochi's step log: the console in a debug build, and the stroll-debug log (a `stroll-debug` file in Mochi's folder,
+  /// checked at each line so the switch works without a restart) in any build. Lines carry no path, name, question,
+  /// answer, link or copied text.
+  void _askLog(String message) {
+    if (kDebugMode) debugPrint('Mochi: $message');
+    try {
+      final folder = paths.home;
+      if (!File('$folder${Platform.pathSeparator}stroll-debug').existsSync()) return;
+      File('$folder${Platform.pathSeparator}stroll.log').writeAsStringSync('${DateTime.now().toIso8601String()} $message\n', mode: FileMode.append);
+    } on Object {
+      // Diagnostics only.
+    }
+  }
+
+  /// Mochi's window or popover went away: a picture taken but not sent, and the drop notice, don't outlive the opening.
+  void windowClosed() => ask.windowClosed();
 
   void _screenSwitch() => ask.peek?.settingsChanged();
 

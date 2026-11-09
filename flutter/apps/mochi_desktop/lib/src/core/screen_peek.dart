@@ -43,7 +43,7 @@ class NoWindowCapturer implements WindowCapturer {
   Future<ScreenGrab> capture(int hwnd) async => const ScreenGrab.failed(ScreenFailure.failed);
 }
 
-/// The last window you were using that isn't one of Mochi's: noted when Mochi's window or popover comes up (events that
+/// The window you were using as Mochi's came up (see [ForegroundWindows.lastUsed]): noted when Mochi's window or popover comes up (events that
 /// already happen), never polled. The shell's desktop and taskbar and Mochi's own windows are not remembered.
 class ForegroundMemory {
   ForegroundMemory(this._windows);
@@ -56,8 +56,9 @@ class ForegroundMemory {
 
   /// Mochi's window or popover is coming up: look once at what has the focus.
   void note() {
-    final window = _windows.read();
-    if (window != null && window.kind == ForegroundKind.app && window.hwnd != 0) _hwnd = window.hwnd;
+    // Always replaced: a window from an earlier opening never survives (0: Mochi then says it doesn't know the window).
+    final window = _windows.lastUsed();
+    _hwnd = window != null && window.kind == ForegroundKind.app ? window.hwnd : 0;
   }
 }
 

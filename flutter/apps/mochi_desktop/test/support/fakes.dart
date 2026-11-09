@@ -934,9 +934,21 @@ class FakeForegroundWindows implements ForegroundWindows {
   /// How many times it was read.
   int reads = 0;
 
+  /// What [lastUsed] answers (the window under Mochi's, as the test sets it).
+  ForegroundWindow? used;
+
+  /// How many times [lastUsed] was asked.
+  int lastUsedReads = 0;
+
   @override
   ForegroundWindow? read() {
     reads++;
     return window;
+  }
+
+  @override
+  ForegroundWindow? lastUsed() {
+    lastUsedReads++;
+    return used ?? window;
   }
 }
