@@ -7,10 +7,12 @@
 #include <flutter/method_channel.h>
 
 #include <cstdint>
+#include <map>
 #include <memory>
 
 #include "drop.h"
 #include "native_stage.h"
+#include "pc_actions.h"
 #include "win32_window.h"
 
 // The window message a second copy of Mochi posts to the first before it exits (main.cpp): "show the main window".
@@ -34,6 +36,10 @@ inline UINT MochiToastMessage() {
 // The window message desktop_icons.cpp's worker posts when it has an answer (X5); the UI thread completes the method
 // channel's pending result then.
 constexpr UINT kDesktopIconsDone = WM_APP + 5;
+
+// The window message pc_actions.cpp's worker posts when it has an answer (W9), with the request's number in WPARAM; the UI
+// thread completes that request's method channel result then.
+constexpr UINT kPcActionsDone = WM_APP + 6;
 
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
@@ -83,6 +89,12 @@ class FlutterWindow : public Win32Window {
   void AskIcons(bool move, const flutter::EncodableMap* arguments,
                 std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void AnswerIcons();
+
+  // W9: the pending results of Ask Mochi's PC actions (apps, volume, tasks), by the request's number; each is completed on the
+  // UI thread when pc_actions.cpp's worker answers.
+  std::map<uint32_t, std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>> pc_results_;
+  void AskPc(const mochi_pc::Job& job, std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void AnswerPc(uint32_t token);
 
   void HandleSystemCall(const flutter::MethodCall<flutter::EncodableValue>& call,
                         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
