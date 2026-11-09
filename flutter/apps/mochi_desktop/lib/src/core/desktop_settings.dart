@@ -195,6 +195,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   bool _acceptCommands = true;
   bool _messageSessions = true;
   bool _showScreen = false;
+  bool _pcControl = true;
   String _model = 'haiku';
   Offset? _petPosition;
   Size? _mainWindowSize;
@@ -288,6 +289,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _acceptCommands = flag('acceptCommands', true);
     _messageSessions = flag('messageSessions', true);
     _showScreen = flag('showScreen', false);
+    _pcControl = flag('pcControl', true);
     _model = json['model'] == 'sonnet' ? 'sonnet' : 'haiku';
     final position = json['petPosition'];
     _petPosition = position is List && position.length == 2 && position.every((value) => value is num)
@@ -476,6 +478,12 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   /// were using, on a preview card, sent only when you press Send. Off at first; the button is hidden while it's off.
   bool get showScreen => _showScreen;
   set showScreen(bool value) => _set(() => _showScreen = value);
+
+  /// "Let Mochi use my PC" (W9): Ask Mochi may open apps and links, bring windows forward, press music keys, change the
+  /// volume and run the user's own `\Mochi\` Task Scheduler tasks. On at first, like the Mac. Off: the brain's PC tools and
+  /// the quick commands answer that it's off.
+  bool get pcControl => _pcControl;
+  set pcControl(bool value) => _set(() => _pcControl = value);
 
   /// The model Ask Mochi uses: haiku (fast) or sonnet.
   String get model => _model;
@@ -826,6 +834,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'acceptCommands': _acceptCommands,
     'messageSessions': _messageSessions,
     'showScreen': _showScreen,
+    'pcControl': _pcControl,
     'model': _model,
     if (_petPosition != null) 'petPosition': [_petPosition!.dx, _petPosition!.dy],
     if (_mainWindowSize != null) 'mainWindowSize': [_mainWindowSize!.width, _mainWindowSize!.height],

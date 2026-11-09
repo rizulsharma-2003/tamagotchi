@@ -184,7 +184,7 @@ class BrainRig {
       model: () => 'haiku',
       petName: () => 'Mochi',
       context: () => 'Time Mon 10:00. Mochi sees no Claude sessions right now.',
-      tools: (name, arguments) async => PawsResult('ran $name'),
+      tools: (name, arguments) async => tools == null ? PawsResult('ran $name') : tools!(name, arguments),
       messagingAllowed: () => messaging,
       spawn: (launch, environment) async {
         launches.add(launch);
@@ -206,6 +206,9 @@ class BrainRig {
   late final SessionStore sessions;
   late final AskBrain brain;
   final bool spawnFails;
+
+  /// What the brain's tools do (a test points it at [AskMochi.brainTool]); 'ran <name>' until then.
+  Future<PawsResult> Function(String name, Map<String, Object?> arguments)? tools;
   final List<BrainLaunch> launches = [];
   final List<Map<String, String>> environments = [];
   final List<FakeBrainProcess> processes = [];

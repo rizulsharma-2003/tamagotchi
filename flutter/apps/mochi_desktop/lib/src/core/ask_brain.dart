@@ -102,6 +102,9 @@ class _Request {
   /// `Read` may open while this request runs. It belongs to the request: [AskBrain._complete] empties it on every ending
   /// (answer, failure, cancel, time out, a newer request, the app quitting), and `_current` is no longer this request then.
   final Set<String> handOver = {};
+
+  /// The PC actions done for this request so far (AskBrain.maxPcActions at most).
+  int pcActions = 0;
 }
 
 class _Delegation {
@@ -148,7 +151,8 @@ class AskBrain extends ChangeNotifier {
         );
   }
 
-  /// Exactly these four, and no others (the PC actions of the Mac come in W9).
+  /// Exactly these, and no others: the brain's own (approve, mochi, claude_sessions), links, and the Mac's PC actions as
+  /// they are on Windows (W9; `run_task` and `list_tasks` stand in for the Mac's Shortcuts). Nothing types, clicks or closes.
   static const List<McpTool> toolSpecs = [
     McpTool(
       name: BrainLaunch.approvalTool,
@@ -172,7 +176,57 @@ class AskBrain extends ChangeNotifier {
       properties: {'url': ('string', 'The https URL')},
       required: ['url'],
     ),
+    McpTool(
+      name: 'open_app',
+      description: 'Open an app by name, or switch to it if it is running.',
+      properties: {'name': ('string', 'App name, e.g. Slack or Visual Studio Code')},
+      required: ['name'],
+    ),
+    McpTool(name: 'list_apps', description: 'Names of the apps that are running now (the programs with taskbar windows).'),
+    McpTool(
+      name: 'focus_window',
+      description:
+          "Bring a window to the front. Give the app and/or words from the window's title; the title is matched on this PC and never shown to you.",
+      properties: {'app': ('string', 'App name (optional)'), 'title': ('string', 'Words from the window title (optional)')},
+    ),
+    McpTool(
+      name: 'show_project',
+      description: 'Bring forward the window a Claude session works in (its editor or terminal), by project or session name.',
+      properties: {'project': ('string', 'Project folder or session name, e.g. mac-Tamagotchi')},
+      required: ['project'],
+    ),
+    McpTool(
+      name: 'media',
+      description: 'Press a music key: play/pause, next or previous (whatever is playing).',
+      properties: {'action': ('string', 'play_pause, next or previous')},
+      required: ['action'],
+      enumValues: {
+        'action': ['play_pause', 'next', 'previous'],
+      },
+    ),
+    McpTool(
+      name: 'set_volume',
+      description: "Change this PC's volume: a level 0–100, or up/down/mute/unmute.",
+      properties: {'level': ('number', '0–100 (optional)'), 'change': ('string', 'up, down, mute or unmute (optional)')},
+      enumValues: {
+        'change': ['up', 'down', 'mute', 'unmute'],
+      },
+    ),
+    McpTool(
+      name: 'run_task',
+      description: "Run one of the user's own Task Scheduler tasks from their Mochi folder, by its exact name.",
+      properties: {'name': ('string', 'Task name')},
+      required: ['name'],
+    ),
+    McpTool(name: 'list_tasks', description: "Names of the tasks in the user's Mochi folder in Task Scheduler."),
   ];
+
+  /// The tools that do something on the PC, at most [maxPcActions] of them for one request. The lists, `mochi` and
+  /// `claude_sessions` don't count.
+  static const Set<String> pcActionTools = {'open_app', 'open_url', 'focus_window', 'show_project', 'media', 'set_volume', 'run_task'};
+
+  /// The most PC actions one request may do (W9): a sixth is refused, so a brain that loops or is led astray stops.
+  static const int maxPcActions = 5;
 
   final SessionStore sessions;
 
@@ -476,7 +530,24 @@ class AskBrain extends ChangeNotifier {
 
   Future<PawsResult> _perform(String name, Map<String, Object?> arguments) async {
     if (name == BrainLaunch.approvalTool) return PawsResult(await _approvalVerdict(arguments));
-    return tools(name, arguments);
+    if (!pcActionTools.contains(name)) return tools(name, arguments);
+    // A PC action is only ever for a request the user is waiting on, and at most five per request.
+    final request = _current;
+    if (request == null) return const PawsResult('Nothing is being asked right now.', isError: true);
+    if (request.pcActions >= maxPcActions) {
+      log?.call('brain: action limit reached');
+      return const PawsResult("That's a lot at once, so I stopped. Ask me again.", isError: true);
+    }
+    request.pcActions++;
+    PawsResult result;
+    try {
+      result = await tools(name, arguments);
+    } on Object {
+      result = const PawsResult("That didn't work.", isError: true);
+    }
+    // The tool's name and whether it worked, never what it was asked or what it found.
+    log?.call('brain: action $name ${result.isError ? 'failed' : 'ok'}');
+    return result;
   }
 
   static String _deny(String message) => jsonEncode({'behavior': 'deny', 'message': message});
