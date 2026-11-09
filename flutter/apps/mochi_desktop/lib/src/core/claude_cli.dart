@@ -104,13 +104,40 @@ abstract interface class ClaudeRunner {
   Future<ClaudeRun> run(List<String> arguments, {required String input, Duration timeout});
 }
 
+/// A runner that can end whatever it has running (the agent's checks stop when Mochi quits or the agent is turned off).
+abstract interface class StoppableRunner {
+  void stop();
+}
+
 /// The real one: a child process in a private, empty working folder with a cleaned environment.
-class ProcessClaudeRunner implements ClaudeRunner {
+class ProcessClaudeRunner implements ClaudeRunner, StoppableRunner {
   ProcessClaudeRunner({required this.executable, required this.workingDirectory, required this.environment});
 
   final String executable;
   final String workingDirectory;
   final Map<String, String> environment;
+
+  final Set<Process> _active = {};
+
+  /// Ends every run in progress (each `run` then returns as a failed one).
+  @override
+  void stop() {
+    for (final process in List.of(_active)) {
+      _terminate(process);
+    }
+  }
+
+  /// Ends [process]; through npm's cmd.exe shim the whole tree (`taskkill /T`), or `claude`'s own child would live on.
+  void _terminate(Process process) {
+    if (_viaShell && Platform.isWindows) {
+      try {
+        Process.runSync('taskkill', ['/PID', '${process.pid}', '/T', '/F']);
+      } on Object {
+        // Falls back to ending the shell itself.
+      }
+    }
+    process.kill();
+  }
 
   /// npm's `claude.cmd` shim needs cmd.exe; the native `claude.exe` runs directly, with Dart quoting each argument.
   bool get _viaShell {
@@ -130,6 +157,7 @@ class ProcessClaudeRunner implements ClaudeRunner {
       includeParentEnvironment: false,
       runInShell: _viaShell,
     );
+    _active.add(process);
     final out = StringBuffer();
     final err = StringBuffer();
     final reading = Future.wait([
@@ -157,10 +185,11 @@ class ProcessClaudeRunner implements ClaudeRunner {
       timeout,
       onTimeout: () {
         timedOut = true;
-        process.kill();
+        _terminate(process);
         return -1;
       },
     );
+    _active.remove(process);
     await reading.timeout(const Duration(seconds: 2), onTimeout: () => const []);
     final tail = err.toString();
     return ClaudeRun(

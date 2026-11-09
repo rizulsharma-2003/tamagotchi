@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_wire/mochi_wire.dart';
 
+import 'core/agent/agent_command.dart' show AgentConnections, AgentZone;
+import 'core/agent/agent_controller.dart';
 import 'core/ask_attach.dart' show DropPayload;
 import 'core/ask_brain.dart' show BrainSetup;
 import 'core/ask_mochi.dart';
@@ -20,6 +22,7 @@ import 'core/json_store.dart';
 import 'core/mischief.dart';
 import 'core/hook_setup.dart';
 import 'core/hotkeys.dart';
+import 'core/notifications.dart' show AttentionLevel;
 import 'core/jump_list.dart';
 import 'core/pc_rhythm.dart';
 import 'core/pc_actions.dart';
@@ -37,6 +40,7 @@ import 'core/streaks.dart';
 import 'core/toasts.dart';
 import 'core/turn_summaries.dart';
 import 'demo.dart';
+import 'link/agent_phone.dart';
 import 'link/link_host.dart';
 import 'link/phone_sync.dart';
 import 'platform/credential_vault.dart';
@@ -48,6 +52,7 @@ import 'platform/reacts_readers.dart';
 import 'platform/runner_system.dart';
 import 'platform/startup.dart';
 import 'platform/system.dart';
+import 'platform/time_zone.dart';
 import 'platform/win32_alerts.dart';
 import 'platform/win32_install.dart';
 import 'platform/win32_usage.dart';
@@ -76,6 +81,10 @@ class MochiDesktop {
     required this.link,
     required this.motion,
     required ClaudeRunner? Function() claude,
+    ClaudeRunner? Function()? agentClaude,
+    File Function()? agentSignInNotes,
+    this.agentDebug,
+    this.agentDebugAfter = const Duration(seconds: 6),
     this.opener,
     PcActions? pc,
     this.folders,
@@ -107,6 +116,8 @@ class MochiDesktop {
     ForegroundWindows? foregroundWindows,
     ScreenshotStore? screenshots,
   }) : _claude = claude,
+       _agentClaude = agentClaude ?? claude,
+       _agentSignInNotes = agentSignInNotes,
        _locateClaude = locateClaude,
        startup = startup ?? const UnsupportedStartup(),
        updater = updater ?? Updater.unsupported(),
@@ -212,6 +223,26 @@ class MochiDesktop {
       resting: () => rhythm.resting,
       friendship: () => world.world.progress.friendshipLevel,
     );
+    // Mochi's agent (W23a): mail, meetings and tasks from your Claude connectors, told as Settings › Agent says. Nothing runs
+    // while it's off. "What's pending?" (typed or from a phone) asks it.
+    agent = AgentController(
+      settings: settings,
+      store: store('agent.json'),
+      runner: _agentClaude,
+      phone: LinkAgentPhone(link),
+      say: (line, seconds) {
+        world.world.say(line, duration: seconds.toDouble());
+        world.noteChanged();
+      },
+      opener: opener,
+      clock: clock,
+      zone: () => AgentZone(TimeZoneName.current(), DateTime.now().timeZoneOffset),
+      signInNotes: _agentSignInNotes,
+      log: _askLog,
+      lookingAtMochi: () => reactions.lookingAtMochi(),
+    );
+    ask.agentNews = agent.answer;
+    addExitHook(agent.stop);
     // Ask Mochi's brain: approvals also show on the phones, a delivered prompt's follow-up is Mochi's bubble, and quitting
     // (or Windows ending the session) declines a pending card and stops the helper session.
     ask.brain
@@ -315,6 +346,19 @@ class MochiDesktop {
       );
     }
 
+    // The agent's own `claude`: the same program with its environment (connectors ready before the model looks; never an API key).
+    ClaudeRunner? agentClaude() {
+      claude();
+      final found = executable;
+      if (found == null) return null;
+      return AgentClaude.runner(
+        executable: found,
+        workingDirectory: paths.assistantDirectory,
+        baseEnvironment: environment,
+        windows: Platform.isWindows,
+      );
+    }
+
     // Mochi's brain needs a native `claude` (not npm's cmd shim) and the helper that relays its tools; without either the
     // one-off path answers.
     BrainSetup? brainSetup() {
@@ -395,6 +439,9 @@ class MochiDesktop {
       link: link,
       motion: SystemMotion(),
       claude: claude,
+      agentClaude: agentClaude,
+      agentSignInNotes: demoMode ? null : () => AgentConnections.signInNotesFile(environment, windows: Platform.isWindows),
+      agentDebug: environment['MOCHI_DESKTOP_AGENT'],
       brainSetup: brainSetup,
       opener: const SystemUrlOpener(),
       pc: systemPcActions(),
@@ -440,6 +487,24 @@ class MochiDesktop {
   final SystemMotion motion;
   late final AskMochi ask;
   late final PhoneSync phone;
+
+  /// Mochi's agent (W23a): Gmail, Google Calendar and Notion through your Claude connectors, told in the bubble, with the
+  /// badge and on the phones.
+  late final AgentController agent;
+
+  /// `MOCHI_DESKTOP_AGENT=check|brief|connections` (development): runs that once, shortly after the start, whether or not the
+  /// agent is on, and logs counts and outcomes only.
+  final String? agentDebug;
+  final Duration agentDebugAfter;
+  Timer? _agentDebugTimer;
+
+  /// The dot on Mochi and the tray: Claude's badge or the agent's, the higher of the two (the Mac's `MenuBarStatus.badge`).
+  AttentionLevel? get badgeLevel {
+    final claude = reactions.badge?.level, news = agent.badge;
+    if (claude == null) return news;
+    if (news == null) return claude;
+    return claude.index >= news.index ? claude : news;
+  }
 
   /// The last window you were using that isn't Mochi's (X17).
   late final ForegroundMemory foreground;
@@ -557,6 +622,8 @@ class MochiDesktop {
   /// "Install Mochi": this copy into the install folder, so it can update itself.
   final SelfInstaller installer;
   final ClaudeRunner? Function() _claude;
+  final ClaudeRunner? Function() _agentClaude;
+  final File Function()? _agentSignInNotes;
   final String? Function()? _locateClaude;
   final BridgeServer _bridge;
 
@@ -601,6 +668,11 @@ class MochiDesktop {
     _drainSpool();
     await link.start();
     phone.start();
+    agent.start();
+    final debug = agentDebug;
+    if (debug != null && const {'check', 'brief', 'connections'}.contains(debug)) {
+      _agentDebugTimer = Timer(agentDebugAfter, () => unawaited(agent.debugRun(debug)));
+    }
     _prune = Timer.periodic(const Duration(minutes: 1), (_) {
       sessions.prune();
       reactions.pruned();
@@ -732,6 +804,8 @@ class MochiDesktop {
     _prune?.cancel();
     _greeting?.cancel();
     updater.stop();
+    _agentDebugTimer?.cancel();
+    agent.dispose();
     phone.stop();
     settings.removeListener(_shortcutsChanged);
     settings.removeListener(_screenSwitch);

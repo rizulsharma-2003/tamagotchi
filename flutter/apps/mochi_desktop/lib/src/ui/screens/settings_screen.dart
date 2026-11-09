@@ -15,6 +15,7 @@ import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_ui/mochi_ui.dart';
 
 import '../settings/panes_app.dart';
+import '../settings/panes_agent.dart';
 import '../settings/panes_claude.dart';
 import '../settings/panes_mischief.dart';
 import '../settings/panes_pet.dart';

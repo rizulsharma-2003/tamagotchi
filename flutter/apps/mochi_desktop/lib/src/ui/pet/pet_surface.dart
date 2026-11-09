@@ -107,6 +107,8 @@ class _PetSurfaceState extends State<PetSurface> {
     widget.desktop.hotkeys.addListener(_shortcutsChanged);
     // A call (X7) hides the speech bubbles, and ending it brings them back.
     widget.desktop.reacts.addListener(_worldSays);
+    // The agent's news puts a dot beside Mochi.
+    widget.desktop.agent.addListener(_worldSays);
     _shortcutsChanged();
   }
 
@@ -186,6 +188,7 @@ class _PetSurfaceState extends State<PetSurface> {
     widget.desktop.world.toastNow.removeListener(_worldSays);
     widget.desktop.hotkeys.removeListener(_shortcutsChanged);
     widget.desktop.reacts.removeListener(_worldSays);
+    widget.desktop.agent.removeListener(_worldSays);
     _bubbleTimer?.cancel();
     super.dispose();
   }
@@ -363,7 +366,7 @@ class _PetSurfaceState extends State<PetSurface> {
                             deskAccessory: settings.deskAccessory,
                             burst: onTaskbar,
                             rhythm: widget.desktop.rhythm,
-                            badge: widget.desktop.reactions.badge?.level,
+                            badge: widget.desktop.badgeLevel,
                             purr: widget.desktop.purr,
                           season: () => widget.desktop.holidays.event,
                             umbrella: onTaskbar ? widget.umbrella : null,

@@ -46,6 +46,15 @@ class PrivacyPane extends StatelessWidget {
                   'summaries on, Claude’s closing message) goes to Anthropic like any prompt.',
             ),
             _Point(
+              icon: Icons.inbox_rounded,
+              title: '$pet’s agent${desktop.settings.agent.enabled ? '' : ' (off)'}',
+              text:
+                  'Only while it’s on: a short Claude Haiku run reads new mail, coming events and your Notion tasks through the '
+                  'connectors in your own Claude account, read only, and goes to Anthropic like any prompt. With “On my phones” '
+                  'on, what $pet tells you (a mail’s sender, subject and a short gist, an event’s title and time, a task’s title) '
+                  'also goes to your phones, sealed, through your relay.',
+            ),
+            _Point(
               icon: Icons.hub_outlined,
               title: 'Your Mochi Link relay${link.paired || desktop.installer.installed ? '' : ' (not in use: no phone is paired)'}',
               text:
@@ -99,6 +108,11 @@ class PrivacyPane extends StatelessWidget {
             InfoRow(label: 'Settings', value: desktop.paths.settingsFile, selectable: true),
             InfoRow(label: 'Events while Mochi was closed', value: desktop.paths.spoolFile, selectable: true),
             InfoRow(label: 'The link to your phones', value: link.vaultDescription),
+            InfoRow(
+              label: 'What the agent told you',
+              value: desktop.agent.store is FileJsonStore ? (desktop.agent.store as FileJsonStore).path : 'In memory only',
+              selectable: desktop.agent.store is FileJsonStore,
+            ),
             InfoRow(label: 'Claude Code backups', value: desktop.paths.backupsDirectory, selectable: true),
             InfoRow(label: '$pet’s world', value: desktop.world.file ?? 'In memory only', selectable: desktop.world.file != null),
             NoteRow(

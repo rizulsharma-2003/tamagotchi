@@ -298,6 +298,10 @@ class AskMochi extends ChangeNotifier {
   AskOutcome Function()? explore;
   AskOutcome Function()? comeHome;
 
+  /// "What's pending?" (W23a), set by the app: Mochi's agent looks at the day and says it (the Mac's
+  /// `AgentController.answer`). Null: the agent isn't wired (tests of everything else).
+  Future<AskOutcome> Function()? agentNews;
+
   /// The rest of Mochi's tricks, set by the app: `games`, `recap`, `decorate`, `focus_start` (with minutes), `focus_stop`.
   final Map<String, AskOutcome Function(int? minutes)> tricks = {};
 
@@ -378,7 +382,9 @@ class AskMochi extends ChangeNotifier {
       case InteractCommand(:final kind):
         return _interact(kind);
       case SimpleCommand.agentNews:
-        return const AskOutcome("My agent (mail, calendar and Notion) isn't on Windows yet.", ok: false);
+        final agent = agentNews;
+        if (agent == null) return const AskOutcome("My agent (mail, calendar and Notion) isn't here right now.", ok: false);
+        return agent();
       case SiteCommand(:final url):
         if (!_pcAllowed()) return const AskOutcome(pcOff, ok: false);
         final opener = _opener;

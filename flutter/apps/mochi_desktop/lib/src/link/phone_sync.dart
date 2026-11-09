@@ -7,8 +7,10 @@
 // - sealed `alert`s for finished turns (title = project, subtitle "Claude finished", body = the summary, userInfo
 //   {session, project, card}, category `claude-turn`, thread = the session).
 //
-// Not on Windows yet (v2): Live Activities (`liveActivity`, `activityEnded`), the agent (`agent`, `macDone`, agent
-// news), approvals (`approval`/`verdict`), and commands addressed to one Claude session.
+// The agent's share (`agent`, `macDone`, `phoneDone`, agent news) is in agent_phone.dart.
+//
+// Not on Windows yet (v2): Live Activities (`liveActivity`, `activityEnded`), approvals (`approval`/`verdict`), and
+// commands addressed to one Claude session.
 
 import 'dart:async';
 import 'dart:io';
