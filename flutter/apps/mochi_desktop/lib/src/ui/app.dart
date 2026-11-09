@@ -785,6 +785,8 @@ class DesktopAppState extends State<DesktopApp> {
     // "What's on my screen?" would picture (X17). One look, on this event only.
     final comingUp = surface == Surface.main || surface == Surface.popover;
     if (comingUp && _surface != Surface.main && _surface != Surface.popover) desktop.noteForeground();
+    final wasUp = _surface == Surface.main || _surface == Surface.popover;
+    if (wasUp && !comingUp) desktop.windowClosed();
     if (surface != Surface.popover) {
       _popover = null;
       _popoverClosing = false;

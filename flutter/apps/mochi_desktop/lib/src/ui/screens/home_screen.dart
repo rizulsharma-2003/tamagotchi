@@ -57,6 +57,16 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+/// The line under the chips: what leaves, and what Claude may do with it (only files, only links, or both).
+@visibleForTesting
+String dropWording({required int files, required int links}) {
+  const lead = 'Nothing leaves this PC until you press Send.';
+  if (links == 0) return '$lead Claude Code reads only the files you dropped, for this question.';
+  final link = links == 1 ? 'the link' : 'the links';
+  if (files == 0) return '$lead Claude may open $link for this question.';
+  return '$lead Claude Code reads only the ${files == 1 ? 'file' : 'files'} you dropped and may open $link, for this question.';
+}
+
 class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scroll = ScrollController();
 
@@ -854,7 +864,7 @@ class _AskBoxState extends State<AskBox> {
                   _chips(context),
                   const SizedBox(height: Space.xs),
                   Text(
-                    'Nothing leaves this PC until you press Send. Claude Code reads only the files you dropped, for this question.',
+                    dropWording(files: _draft.files.length, links: _draft.links.length),
                     style: context.type.footnote.copyWith(color: p.inkSecondary),
                   ),
                 ],

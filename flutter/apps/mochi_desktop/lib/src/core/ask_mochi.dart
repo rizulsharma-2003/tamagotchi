@@ -216,6 +216,14 @@ class AskMochi extends ChangeNotifier {
   /// "What's on my screen?" (X17), set by the app (null: not here). The Ask box shows its button only while it's on.
   ScreenPeek? peek;
 
+  /// Mochi's window or popover went away: a picture taken but not sent (and its note) and the drop notice are dropped.
+  /// A picture already sent with a running request is a file this class deletes when that request ends; untouched here.
+  /// Dropped files, text and links and the typed draft stay.
+  void windowClosed() {
+    peek?.remove();
+    draft.clearNote();
+  }
+
   /// Where the picture is written for Claude Code to read, and deleted when the request ends (null: it can't be sent).
   final ScreenshotStore? screenshots;
   final void Function(String message)? _log;
