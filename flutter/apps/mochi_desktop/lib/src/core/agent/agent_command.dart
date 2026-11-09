@@ -103,6 +103,42 @@ abstract final class AgentCommand {
     schema,
   ];
 
+  /// The one tool the agent may use to change anything in Gmail: take a label off a thread. Only the mark-read run is
+  /// allowed it, and only with "Mark the email read when I mark it done" on (the Mac's `markReadTool`).
+  static const String markReadTool = 'mcp__claude_ai_Gmail__unlabel_thread';
+
+  /// A run that may only remove the UNREAD label from the threads the user marked done: the flags of a check, but with
+  /// this one tool allowed and no read tool. No check ever allows [markReadTool].
+  static List<String> get markReadArguments => [
+    '-p',
+    '--model',
+    model,
+    '--output-format',
+    'json',
+    '--setting-sources',
+    'project',
+    '--no-session-persistence',
+    '--permission-mode',
+    'dontAsk',
+    '--tools',
+    'ToolSearch',
+    '--allowedTools',
+    'ToolSearch',
+    markReadTool,
+  ];
+
+  /// Thread ids only (at most 20): nothing else about the mail goes into the prompt.
+  static String markReadPrompt(List<String> threadIds) =>
+      'Mark these Gmail threads as read: for each thread id, call unlabel_thread with labelIds ["UNREAD"]. Do nothing else; '
+      'if the tool isn\'t loaded yet, use tool search to load it. Thread ids: ${threadIds.join(', ')}. '
+      'Finish with one line saying how many you marked.';
+
+  /// The mark-read run finished without an error (the Mac's `markReadSucceeded`).
+  static bool markReadSucceeded(String output) {
+    final result = _resultObject(output);
+    return result != null && result['is_error'] != true && result['result'] != null;
+  }
+
   /// The user's claude.ai connectors load in `-p` runs only when asked for, and otherwise connect in the background,
   /// racing the model, which then finds no tools. Waiting for them first makes every run see them. An API key in the
   /// environment would bill the run to the API instead of the user's subscription: never pass one on.

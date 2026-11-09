@@ -7,6 +7,7 @@ import 'package:mochi_wire/mochi_wire.dart';
 
 import 'core/agent/agent_command.dart' show AgentConnections, AgentZone;
 import 'core/agent/agent_controller.dart';
+import 'core/agent/cloud_token_vault.dart';
 import 'core/ask_attach.dart' show DropPayload;
 import 'core/ask_brain.dart' show BrainSetup;
 import 'core/ask_mochi.dart';
@@ -43,6 +44,7 @@ import 'demo.dart';
 import 'link/agent_phone.dart';
 import 'link/link_host.dart';
 import 'link/phone_sync.dart';
+import 'platform/cloud_token_vault.dart';
 import 'platform/credential_vault.dart';
 import 'platform/file_drop.dart';
 import 'platform/pc_platform.dart';
@@ -83,6 +85,7 @@ class MochiDesktop {
     required ClaudeRunner? Function() claude,
     ClaudeRunner? Function()? agentClaude,
     File Function()? agentSignInNotes,
+    CloudTokenVault? cloudTokens,
     this.agentDebug,
     this.agentDebugAfter = const Duration(seconds: 6),
     this.opener,
@@ -118,6 +121,7 @@ class MochiDesktop {
   }) : _claude = claude,
        _agentClaude = agentClaude ?? claude,
        _agentSignInNotes = agentSignInNotes,
+       _cloudTokens = cloudTokens,
        _locateClaude = locateClaude,
        startup = startup ?? const UnsupportedStartup(),
        updater = updater ?? Updater.unsupported(),
@@ -238,6 +242,7 @@ class MochiDesktop {
       clock: clock,
       zone: () => AgentZone(TimeZoneName.current(), DateTime.now().timeZoneOffset),
       signInNotes: _agentSignInNotes,
+      tokenVault: _cloudTokens,
       log: _askLog,
       lookingAtMochi: () => reactions.lookingAtMochi(),
     );
@@ -441,6 +446,7 @@ class MochiDesktop {
       claude: claude,
       agentClaude: agentClaude,
       agentSignInNotes: demoMode ? null : () => AgentConnections.signInNotesFile(environment, windows: Platform.isWindows),
+      cloudTokens: demoMode ? MemoryCloudTokenVault() : platformCloudTokenVault(paths),
       agentDebug: environment['MOCHI_DESKTOP_AGENT'],
       brainSetup: brainSetup,
       opener: const SystemUrlOpener(),
@@ -624,6 +630,7 @@ class MochiDesktop {
   final ClaudeRunner? Function() _claude;
   final ClaudeRunner? Function() _agentClaude;
   final File Function()? _agentSignInNotes;
+  final CloudTokenVault? _cloudTokens;
   final String? Function()? _locateClaude;
   final BridgeServer _bridge;
 

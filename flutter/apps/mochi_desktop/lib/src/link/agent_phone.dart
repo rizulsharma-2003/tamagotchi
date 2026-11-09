@@ -3,6 +3,7 @@
 // and Android) works unchanged against a Windows host:
 //
 // - state `agent`: the Pending card (a JSON string; `enabled` false when the agent is off or "On my phones" is);
+// - state `cloud`: Mochi Cloud's trigger (`{url, token}`), for a phone's "Check now"; cleared when it's removed;
 // - state `macDone`: what's done on this PC (a JSON string; this PC writes `macDone`, as the Mac does);
 // - state `phoneDone` (phone to PC): what a phone marked done; each side keeps the union;
 // - a sealed `alert` for news: title and body, category and thread `mochi-agent`, and in `userInfo` `kind: agent`,
@@ -43,6 +44,12 @@ class LinkAgentPhone implements AgentPhone {
   void publishMacDone(AgentDoneList list) {
     if (!host.paired) return;
     host.set(list.toValue(), LinkKey.macDone);
+  }
+
+  @override
+  void publishCloudTrigger(CloudTrigger? trigger) {
+    if (!host.paired) return;
+    host.set(trigger?.toValue(), LinkKey.cloud);
   }
 
   @override
