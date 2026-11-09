@@ -46,6 +46,9 @@ String probeOutput({bool gmail = true, bool calendar = true, bool notion = true}
 class AgentClaudeFake implements ClaudeRunner, StoppableRunner {
   String check = digestOutput();
   String probe = probeOutput();
+
+  /// Probe outputs used first, one per probe run, before [probe].
+  final List<String> probesFirst = [];
   bool timedOut = false;
 
   /// When set, a run waits for it (a check that is still going).
@@ -63,6 +66,7 @@ class AgentClaudeFake implements ClaudeRunner, StoppableRunner {
     final waiting = hold;
     if (waiting != null) return waiting.future;
     if (timedOut) return const ClaudeRun(exitCode: -1, output: '', timedOut: true);
+    if (isProbe(arguments) && probesFirst.isNotEmpty) return ClaudeRun(exitCode: 0, output: probesFirst.removeAt(0));
     return ClaudeRun(exitCode: 0, output: isProbe(arguments) ? probe : check);
   }
 

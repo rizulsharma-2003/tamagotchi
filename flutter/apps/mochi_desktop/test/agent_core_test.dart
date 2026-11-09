@@ -35,6 +35,8 @@ String result({String headline = 'h', List<Object?> emails = const [], List<Obje
   'structured_output': {'headline': headline, 'emails': emails, 'events': events, 'tasks': tasks},
 });
 
+const probeOutputForCore = '{"type":"result","subtype":"success","is_error":false,"structured_output":{"gmail":true,"calendar":true,"notion":true}}';
+
 void main() {
   group('Settings', () {
     test('off by default, with the Mac’s defaults', () {
@@ -265,6 +267,10 @@ void main() {
       expect(states[AgentSource.calendar], AgentConnection.unavailable);
       expect(states[AgentSource.notion], AgentConnection.connected);
       expect(AgentConnections.parse('{"type":"result","is_error":true,"result":"x"}'), isNull);
+      expect(AgentConnections.answeredWithoutSchema('{"type":"result","subtype":"success","is_error":false,"result":"words"}'), isTrue);
+      expect(AgentConnections.answeredWithoutSchema('{"type":"result","is_error":true,"result":"x"}'), isFalse);
+      expect(AgentConnections.answeredWithoutSchema(probeOutputForCore), isFalse);
+      expect(AgentConnections.probePrompt, contains('no tool search tool at all, no connector is available'));
       final arguments = AgentConnections.probeArguments;
       expect(arguments, contains('dontAsk'));
       expect(arguments.any((argument) => argument.startsWith('mcp__')), isFalse, reason: 'the probe may look, never call');

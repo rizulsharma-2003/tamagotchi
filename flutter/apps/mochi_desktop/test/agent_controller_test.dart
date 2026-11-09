@@ -633,6 +633,22 @@ void main() {
       expect(rig.controller.checkingConnections, isFalse);
     });
 
+    test('a probe answered in words, not the form, is asked once more (the Windows VM, with no connectors)', () async {
+      rig = Rig();
+      const words = '{"type":"result","subtype":"success","is_error":false,"result":"I have no tool search tool, so I can\'t tell."}';
+      rig.claude.probesFirst.add(words);
+      rig.claude.probe = probeOutput(gmail: false, calendar: false, notion: false);
+      await rig.controller.refreshConnections();
+      expect(rig.claude.probes, hasLength(2));
+      expect(rig.controller.connections[AgentSource.gmail], AgentConnection.unavailable);
+      expect(rig.log, ['agent: connections answered without the form, asking again', 'agent: connections gmail=unavailable calendar=unavailable notion=unavailable']);
+      // Only once: two answers in words are a failure, as before.
+      rig.claude.probesFirst.addAll([words, words]);
+      await rig.controller.refreshConnections();
+      expect(rig.claude.probes, hasLength(4));
+      expect(rig.log.last, 'agent: connections failed');
+    });
+
     test('a probe that fails explains itself', () async {
       rig = Rig();
       rig.claude.probe = '{"type":"result","is_error":true,"result":"Not logged in"}';

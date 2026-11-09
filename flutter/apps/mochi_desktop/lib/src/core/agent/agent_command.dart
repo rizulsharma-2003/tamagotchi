@@ -491,11 +491,19 @@ abstract final class AgentConnections {
       'Find out which of these connectors\' tools are available to you, using tool search only: Gmail (tools named '
       'mcp__claude_ai_Gmail__…), Google Calendar (mcp__claude_ai_Google_Calendar__…) and Notion (mcp__claude_ai_Notion__…). '
       'Connectors can take a few seconds to connect: if one isn\'t found, search for it once more. Don\'t call any of their tools. '
+      'If you have no tool search tool at all, no connector is available: answer false for each. '
       'Reply with the JSON only: true for each connector with at least one tool available.';
 
   static const String probeSchema =
       '{"type":"object","additionalProperties":false,"required":["gmail","calendar","notion"],'
       '"properties":{"gmail":{"type":"boolean"},"calendar":{"type":"boolean"},"notion":{"type":"boolean"}}}';
+
+  /// Whether the probe finished cleanly but Claude answered in words instead of the JSON (seen on a PC with no connectors:
+  /// without any, Claude Code has no tool search, and Haiku sometimes won't fill in the form). Worth one more try.
+  static bool answeredWithoutSchema(String output) {
+    final result = _resultObject(output);
+    return result != null && result['is_error'] != true && result['subtype'] == 'success' && result['structured_output'] == null;
+  }
 
   /// Each source's state from the probe's output; null when the run failed.
   static Map<AgentSource, AgentConnection>? parse(String output) {

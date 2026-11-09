@@ -318,8 +318,14 @@ class AgentController extends ChangeNotifier {
       final notes = _signInNotes;
       if (forgetNotes && notes != null) AgentConnections.forgetSignInNotes(notes());
       _lastConnectionCheck = _clock();
-      final run = await runner.run(AgentConnections.probeArguments, input: AgentConnections.probePrompt, timeout: probeTimeout);
+      var run = await runner.run(AgentConnections.probeArguments, input: AgentConnections.probePrompt, timeout: probeTimeout);
       if (generation != _generation || _disposed) return;
+      // A clean run answered in words, not the form: once more (seen on the Windows VM, which had no connectors).
+      if (AgentConnections.answeredWithoutSchema(run.output)) {
+        _log?.call('agent: connections answered without the form, asking again');
+        run = await runner.run(AgentConnections.probeArguments, input: AgentConnections.probePrompt, timeout: probeTimeout);
+        if (generation != _generation || _disposed) return;
+      }
       final states = run.output.isEmpty ? null : AgentConnections.parse(run.output);
       if (states == null) {
         _lastError = run.timedOut
