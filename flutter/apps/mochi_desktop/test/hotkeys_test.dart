@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mochi_art/pose_tracks.dart';
 import 'package:mochi_desktop/src/core/desktop_settings.dart';
 import 'package:mochi_desktop/src/core/hotkeys.dart';
+import 'package:mochi_desktop/src/platform/foreground_window.dart';
 import 'package:mochi_desktop/src/ui/app.dart';
 import 'package:mochi_desktop/src/ui/settings/settings_kit.dart';
 import 'package:mochi_desktop/src/ui/settings/shortcut_row.dart';
@@ -138,6 +139,35 @@ void main() {
       t.hotkeys.press(MochiShortcut.ask);
       await tester.pump(const Duration(milliseconds: 300));
       expect((state.surface, state.page), (Surface.main, MainPage.home));
+      t.hotkeys.press(MochiShortcut.ask);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(state.surface, Surface.pet);
+    });
+  });
+
+  group('the Ask shortcut with Mochi\'s window behind another', () {
+    // Made outside the test's fake time, as the other groups do, so the desktop's own timers don't count as left pending.
+    late FakeForegroundWindows windows;
+    late TestDesktop t;
+    setUp(() {
+      windows = FakeForegroundWindows(const ForegroundWindow(0x1001, ForegroundKind.app));
+      t = TestDesktop.make(clock: () => noon, foregroundWindows: windows);
+    });
+    tearDown(() => t.dispose());
+
+    testWidgets('it brings the window back instead of closing it; with the focus, it closes it (VM, 11-09)', (tester) async {
+      await tester.runAsync(t.desktop.start);
+      await tester.pumpWidget(DesktopApp(desktop: t.desktop, shell: FakeShell(), library: Future<PoseLibrary?>.value()));
+      await tester.pump(const Duration(milliseconds: 100));
+      final state = tester.state<DesktopAppState>(find.byType(DesktopApp));
+      t.hotkeys.press(MochiShortcut.ask);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect((state.surface, state.page), (Surface.main, MainPage.home));
+      // Notepad has the focus, Mochi's window is behind it: the shortcut shows it again.
+      t.hotkeys.press(MochiShortcut.ask);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect((state.surface, state.page), (Surface.main, MainPage.home));
+      windows.window = const ForegroundWindow(0x9, ForegroundKind.ours);
       t.hotkeys.press(MochiShortcut.ask);
       await tester.pump(const Duration(milliseconds: 300));
       expect(state.surface, Surface.pet);

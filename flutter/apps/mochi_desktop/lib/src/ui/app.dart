@@ -217,13 +217,8 @@ class DesktopAppState extends State<DesktopApp> {
     shell: widget.shell,
     settings: desktop.settings,
     folder: desktop.paths.join(desktop.paths.home, 'tray'),
-    mood: () => PetMood.of(
-      desktop.sessions,
-      now: desktop.sessions.now,
-      lastActivity: _lastActivity,
-      rhythm: desktop.rhythm,
-      asleep: desktop.world.asleep,
-    ),
+    mood: () =>
+        PetMood.of(desktop.sessions, now: desktop.sessions.now, lastActivity: _lastActivity, rhythm: desktop.rhythm, asleep: desktop.world.asleep),
     cues: desktop.cues,
     motion: desktop.motion,
     rhythm: desktop.rhythm,
@@ -317,7 +312,9 @@ class DesktopAppState extends State<DesktopApp> {
       final outcome = await desktop.ask.ask(text);
       final steps = [for (final step in desktop.ask.brain?.steps ?? const <AskStep>[]) step.text].join(' | ');
       final reply = outcome.text.replaceAll('\n', ' ');
-      log?.call('ask demo: ${outcome.ok ? 'ok' : 'failed'} · brain ${desktop.ask.brain == null ? 'none' : 'present'} · steps: $steps · reply: ${reply.length > 300 ? '${reply.substring(0, 300)}…' : reply}');
+      log?.call(
+        'ask demo: ${outcome.ok ? 'ok' : 'failed'} · brain ${desktop.ask.brain == null ? 'none' : 'present'} · steps: $steps · reply: ${reply.length > 300 ? '${reply.substring(0, 300)}…' : reply}',
+      );
     });
   }
 
@@ -344,9 +341,11 @@ class DesktopAppState extends State<DesktopApp> {
       // The PC's rhythm, the badge and Windows notifications too, every 15 seconds (development only).
       _rhythmLog = Timer.periodic(const Duration(seconds: 15), (_) {
         final reactions = desktop.reactions;
-        log('rhythm: ${desktop.rhythm.activity} resting=${desktop.rhythm.resting} away=${desktop.rhythm.away} '
-            'napping=${desktop.rhythm.nap.asleep} · toasts ${desktop.toasts.availability.name}, ${reactions.bannersPosted} shown · '
-            'sounds ${desktop.sounds.played} · badge ${reactions.badge?.kind.name}');
+        log(
+          'rhythm: ${desktop.rhythm.activity} resting=${desktop.rhythm.resting} away=${desktop.rhythm.away} '
+          'napping=${desktop.rhythm.nap.asleep} · toasts ${desktop.toasts.availability.name}, ${reactions.bannersPosted} shown · '
+          'sounds ${desktop.sounds.played} · badge ${reactions.badge?.kind.name}',
+        );
       });
       final previous = FlutterError.onError;
       FlutterError.onError = (details) {
@@ -473,10 +472,7 @@ class DesktopAppState extends State<DesktopApp> {
       return AskOutcome(DesktopAdventure.say(AdventureStart.started, pet, null));
     }
     final start = adventure.explore();
-    return AskOutcome(
-      DesktopAdventure.say(start, pet, adventure.why),
-      ok: start == AdventureStart.started || start == AdventureStart.headingHome,
-    );
+    return AskOutcome(DesktopAdventure.say(start, pet, adventure.why), ok: start == AdventureStart.started || start == AdventureStart.headingHome);
   }
 
   /// "Come home" to Ask Mochi.
@@ -766,13 +762,14 @@ class DesktopAppState extends State<DesktopApp> {
   }
 
   /// One of Mochi's global shortcuts: show or hide the desktop pet (the Mac's ⌃⌥⌘P), or Ask Mochi (the Mac's ⌥Space:
-  /// the question box, or closing it again).
+  /// the question box, or closing it again). It closes Mochi's window only while you're using it: when the window is
+  /// behind another one (after "switch to Notepad", say), the shortcut brings it back with the box ready (seen on the VM).
   void shortcut(MochiShortcut shortcut) {
     switch (shortcut) {
       case MochiShortcut.pet:
         desktop.settings.showPet = !desktop.settings.showPet;
       case MochiShortcut.ask:
-        if (_surface == Surface.main && _page == MainPage.home) {
+        if (_surface == Surface.main && _page == MainPage.home && desktop.mochiFocused() != false) {
           closeMain();
         } else {
           openAsk();
@@ -1079,9 +1076,7 @@ class _MainSurface extends StatelessWidget {
             onBack: page == MainPage.home ? null : back,
             onPair: page == MainPage.home ? () => state.open(MainPage.pairing) : null,
             onSettings: settingsPage ? null : () => state.open(MainPage.settings),
-            trailing: settingsPage
-                ? _ClaudeStatusPill(desktop: desktop, onTap: () => state.settingsNavigation.tab = SettingsTab.claude)
-                : null,
+            trailing: settingsPage ? _ClaudeStatusPill(desktop: desktop, onTap: () => state.settingsNavigation.tab = SettingsTab.claude) : null,
           ),
           Expanded(
             child: switch (page) {
@@ -1140,14 +1135,14 @@ class _MainSurface extends StatelessWidget {
         child: ResizeEdges(
           onResize: (edge) => unawaited(state.widget.shell.startResizing(edge)),
           child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: settingsPage
-              ? ListenableBuilder(
-                  listenable: state.settingsNavigation,
-                  builder: (context, child) => SettingsBackdrop(tab: state.settingsNavigation.tab, child: child!),
-                  child: column,
-                )
-              : MochiBackground(child: column),
+            borderRadius: BorderRadius.circular(14),
+            child: settingsPage
+                ? ListenableBuilder(
+                    listenable: state.settingsNavigation,
+                    builder: (context, child) => SettingsBackdrop(tab: state.settingsNavigation.tab, child: child!),
+                    child: column,
+                  )
+                : MochiBackground(child: column),
           ),
         ),
       ),

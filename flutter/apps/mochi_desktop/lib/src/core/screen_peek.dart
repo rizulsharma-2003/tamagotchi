@@ -55,6 +55,12 @@ class ForegroundMemory {
   /// The remembered window (0: none).
   int get hwnd => _hwnd;
 
+  /// Whether one of Mochi's own windows has the focus now (null: it can't be told). Read once, on the Ask shortcut.
+  bool? mochiFocused() {
+    final window = _windows.read();
+    return window == null ? null : window.kind == ForegroundKind.ours;
+  }
+
   /// Mochi's window or popover is coming up: look once at what has the focus.
   void note() {
     // Always replaced: a window from an earlier opening never survives (0: Mochi then says it doesn't know the window).
@@ -75,13 +81,9 @@ abstract final class AppNames {
 
 /// The button and its preview card. The Ask box shows both from here.
 class ScreenPeek extends ChangeNotifier {
-  ScreenPeek({
-    required this.memory,
-    required this.capturer,
-    required bool Function() enabled,
-    String Function()? petName,
-  }) : _enabled = enabled,
-       _petName = petName ?? (() => 'Mochi') {
+  ScreenPeek({required this.memory, required this.capturer, required bool Function() enabled, String Function()? petName})
+    : _enabled = enabled,
+      _petName = petName ?? (() => 'Mochi') {
     _was = enabled();
   }
 
@@ -126,13 +128,14 @@ class ScreenPeek extends ChangeNotifier {
         if (png != null && png.isNotEmpty) {
           preview = ScreenPreview(png: png, app: AppNames.clean(grab.app));
         } else {
-          note = "$pet couldn't see that window (${switch (grab.failure) {
-            ScreenFailure.minimised => 'it is minimised',
-            ScreenFailure.cloaked => "it isn't showing",
-            ScreenFailure.noWindow => 'it is gone',
-            ScreenFailure.ours || ScreenFailure.shell => 'it is part of Windows or Mochi',
-            _ => 'Windows would not let me'
-          }}).";
+          note =
+              "$pet couldn't see that window (${switch (grab.failure) {
+                ScreenFailure.minimised => 'it is minimised',
+                ScreenFailure.cloaked => "it isn't showing",
+                ScreenFailure.noWindow => 'it is gone',
+                ScreenFailure.ours || ScreenFailure.shell => 'it is part of Windows or Mochi',
+                _ => 'Windows would not let me',
+              }}).";
         }
       } on Object {
         note = "$pet couldn't see that window.";

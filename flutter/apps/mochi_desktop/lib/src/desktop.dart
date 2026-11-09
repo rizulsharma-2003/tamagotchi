@@ -274,10 +274,12 @@ class MochiDesktop {
       }
     }
     if (running.isEmpty) return null;
-    return Future.wait(running).timeout(exitWait).then<void>(
-      (_) {},
-      onError: (Object _) => debugPrint('Mochi: quitting before an exit task finished (its journal finishes it at the next start)'),
-    );
+    return Future.wait(running)
+        .timeout(exitWait)
+        .then<void>(
+          (_) {},
+          onError: (Object _) => debugPrint('Mochi: quitting before an exit task finished (its journal finishes it at the next start)'),
+        );
   }
 
   /// Runs the exit hooks now (quitting, or the session ending).
@@ -474,6 +476,9 @@ class MochiDesktop {
 
   /// Mochi's window or popover is coming up: remember which window had the focus (X17). Called on that event only.
   void noteForeground() => foreground.note();
+
+  /// Whether Mochi's own window has the focus now (null: it can't be told).
+  bool? mochiFocused() => foreground.mochiFocused();
 
   /// How Mochi answers Claude's moments: animations, the badge, Windows notifications and sounds (Settings ›
   /// Notifications).
@@ -676,8 +681,12 @@ class MochiDesktop {
   void markMilestone() {
     final now = sessions.now;
     final primary = sessions.primary;
-    final event = WireEvent(id: 'manual-${now.microsecondsSinceEpoch}', ts: now.microsecondsSinceEpoch / 1e6, origin: WireOrigin.report, event: 'Report')
-      ..report = const WireReport(kind: 'milestone', status: 'reached', label: 'Marked by you');
+    final event = WireEvent(
+      id: 'manual-${now.microsecondsSinceEpoch}',
+      ts: now.microsecondsSinceEpoch / 1e6,
+      origin: WireOrigin.report,
+      event: 'Report',
+    )..report = const WireReport(kind: 'milestone', status: 'reached', label: 'Marked by you');
     if (primary != null && primary.isLive) {
       event
         ..session = primary.id
