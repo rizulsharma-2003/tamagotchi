@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "desktop_icons.h"
+#include "drop.h"
 #include "jump_list.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "media.h"
@@ -132,6 +133,9 @@ bool FlutterWindow::OnCreate() {
       [this](const auto& call, auto result) { HandleSystemCall(call, std::move(result)); });
   // `mochi/stage`: Mochi's native stage (native_stage.h), windows of its own anywhere on any display.
   stage_ = std::make_unique<mochi_stage::Stage>(flutter_controller_->engine()->messenger());
+  // `mochi/drop`: files, text and links dropped on Mochi (drop.h), an OLE drop target on the Flutter view.
+  drop_ = std::make_unique<mochi_drop::Registration>(flutter_controller_->view()->GetNativeWindow(),
+                                                     flutter_controller_->engine()->messenger());
   // Windows sends the display's state right away, and again whenever it changes.
   display_notification_ = ::RegisterPowerSettingNotification(GetHandle(), &kConsoleDisplayState, DEVICE_NOTIFY_WINDOW_HANDLE);
   session_notifications_ = ::WTSRegisterSessionNotification(GetHandle(), NOTIFY_FOR_THIS_SESSION) != FALSE;
@@ -159,6 +163,7 @@ void FlutterWindow::OnDestroy() {
     icons_result_ = nullptr;
   }
   stage_ = nullptr;
+  drop_ = nullptr;
   if (display_notification_ != nullptr) {
     ::UnregisterPowerSettingNotification(display_notification_);
     display_notification_ = nullptr;

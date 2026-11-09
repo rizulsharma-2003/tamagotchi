@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_wire/mochi_wire.dart';
 
+import 'core/ask_attach.dart' show DropPayload;
 import 'core/ask_brain.dart' show BrainSetup;
 import 'core/ask_mochi.dart';
 import 'core/brain_session.dart' show BrainEnvironment, ProcessBrain;
@@ -24,6 +25,7 @@ import 'core/pc_rhythm.dart';
 import 'core/pet_cues.dart';
 import 'core/purr.dart';
 import 'core/reacts.dart';
+import 'core/screen_peek.dart';
 import 'core/recap.dart';
 import 'core/room.dart';
 import 'core/reactions.dart';
@@ -37,6 +39,9 @@ import 'demo.dart';
 import 'link/link_host.dart';
 import 'link/phone_sync.dart';
 import 'platform/credential_vault.dart';
+import 'platform/file_drop.dart';
+import 'platform/foreground_window.dart';
+import 'platform/screen_capture.dart';
 import 'platform/reacts_readers.dart';
 import 'platform/runner_system.dart';
 import 'platform/startup.dart';
@@ -94,6 +99,10 @@ class MochiDesktop {
     ForegroundApps? foregroundApps,
     ReactsForce? reactsForce,
     Stream<void>? sessionEnding,
+    DropSource? drops,
+    WindowCapturer? windowCapturer,
+    ForegroundWindows? foregroundWindows,
+    ScreenshotStore? screenshots,
   }) : _claude = claude,
        _locateClaude = locateClaude,
        startup = startup ?? const UnsupportedStartup(),
@@ -166,7 +175,25 @@ class MochiDesktop {
       brainSetup: brainSetup,
       messagingAllowed: () => settings.messageSessions,
       log: kDebugMode ? (message) => debugPrint('Mochi: $message') : null,
+      screenshots: screenshots,
     );
+    // "What's on my screen?" (X17): the window you were using before Mochi's came up, a picture of only that window when
+    // you press the button, and only while Settings › Assistant has it on.
+    foreground = ForegroundMemory(foregroundWindows ?? const NoForegroundWindow());
+    ask.peek = ScreenPeek(
+      memory: foreground,
+      capturer: windowCapturer ?? const NoWindowCapturer(),
+      enabled: () => settings.showScreen,
+      petName: () => settings.petName,
+    );
+    settings.addListener(_screenSwitch);
+    // A picture left by a request that never ended (a crash, a power cut) goes at startup.
+    screenshots?.sweep();
+    // Files, text and links dropped on Mochi (X13, X14) wait in the Ask box for the user; Ask Mochi opens with them.
+    if (drops != null) {
+      _subscriptions.add(drops.hovering.listen((over) => ask.draft.hovering = over));
+      _subscriptions.add(drops.drops.listen(_dropped));
+    }
     phone = PhoneSync(
       host: link,
       sessions: sessions,
@@ -387,6 +414,10 @@ class MochiDesktop {
       media: systemMedia(),
       mic: systemMic(),
       foregroundApps: systemForegroundApp(),
+      drops: Platform.isWindows && !demoMode ? RunnerDrops() : null,
+      windowCapturer: systemWindowCapturer(),
+      foregroundWindows: systemForegroundWindow(),
+      screenshots: demoMode ? null : FolderScreenshotStore(paths.assistantDirectory),
       reactsForce: ReactsForce.from(environment['MOCHI_DESKTOP_REACTS']),
       // Windows ending the session puts back any window the nudges moved (X2).
       sessionEnding: system?.sessionEnding,
@@ -401,6 +432,25 @@ class MochiDesktop {
   final SystemMotion motion;
   late final AskMochi ask;
   late final PhoneSync phone;
+
+  /// The last window you were using that isn't Mochi's (X17).
+  late final ForegroundMemory foreground;
+
+  final StreamController<void> _askWanted = StreamController.broadcast(sync: true);
+
+  /// Something was dropped on Mochi: open Ask Mochi, where it is waiting.
+  Stream<void> get askWanted => _askWanted.stream;
+
+  void _dropped(DropPayload payload) {
+    ask.draft.hovering = false;
+    ask.draft.accept(payload);
+    if (!_askWanted.isClosed) _askWanted.add(null);
+  }
+
+  void _screenSwitch() => ask.peek?.settingsChanged();
+
+  /// Mochi's window or popover is coming up: remember which window had the focus (X17). Called on that event only.
+  void noteForeground() => foreground.note();
 
   /// How Mochi answers Claude's moments: animations, the badge, Windows notifications and sounds (Settings ›
   /// Notifications).
@@ -652,6 +702,7 @@ class MochiDesktop {
     updater.stop();
     phone.stop();
     settings.removeListener(_shortcutsChanged);
+    settings.removeListener(_screenSwitch);
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }
@@ -674,5 +725,6 @@ class MochiDesktop {
     await _cues.close();
     await _opens.close();
     await _shortcuts.close();
+    await _askWanted.close();
   }
 }

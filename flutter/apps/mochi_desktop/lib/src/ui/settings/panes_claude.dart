@@ -377,6 +377,25 @@ class _AssistantPaneState extends State<AssistantPane> {
           ],
         ),
         SettingsGroup(
+          title: 'Files, links and your screen',
+          children: [
+            TextRow(
+              'Drop a file, some text or a link on $pet (on the taskbar, or on the question box in Mochi’s window) and ask '
+              'about it. What you drop shows in the question box first, and nothing leaves this PC until you press Send. '
+              'A file goes to Claude Code, which reads only the files you dropped for that one question.',
+            ),
+            ToggleRow(
+              title: 'Let me show $pet my screen',
+              subtitle:
+                  'Adds a “What’s on my screen?” button to the question box. It takes one picture of the window you were '
+                  'using before Mochi came up (never the whole screen, never by itself), shows it to you, and only goes '
+                  'after you press Send. The picture is deleted when the question is done. Off at first.',
+              value: settings.showScreen,
+              onChanged: (value) => settings.showScreen = value,
+            ),
+          ],
+        ),
+        SettingsGroup(
           title: 'From your phones',
           children: [
             StatusRow(
@@ -404,7 +423,8 @@ class _AssistantPaneState extends State<AssistantPane> {
               'What you ask goes to Claude (Anthropic) like any prompt, with the names and states of your Claude sessions. '
               '$pet keeps the conversation in memory only (nothing is saved) and stops its helper Claude after 10 quiet '
               'minutes. The helper can search the web, open https links, run $pet’s tricks and, only after your Send, message a '
-              'Claude session. It can’t read files, run commands or change anything else on this PC. Without a helper tool '
+              'Claude session. It can read only the files you drop on $pet (or the one window you show it) for that one question, '
+              'and can’t run commands or change anything else on this PC. Without a helper tool '
               'or a native Claude Code, $pet answers with a one-off web-search-only claude -p.',
               secondary: true,
             ),

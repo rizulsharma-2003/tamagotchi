@@ -37,9 +37,9 @@ void main() {
       expect(after('--name'), 'mochi');
       expect(after('--model'), 'haiku');
       expect(after('--setting-sources'), 'project');
-      expect(after('--settings'), '{"permissions":{"ask":["SendMessage"]}}');
+      expect(after('--settings'), '{"permissions":{"ask":["SendMessage","Read"]}}');
       expect(after('--permission-mode'), 'default');
-      expect(after('--tools'), 'ListAgents,SendMessage,WebSearch');
+      expect(after('--tools'), 'ListAgents,SendMessage,WebSearch,Read');
       expect(args.sublist(args.indexOf('--allowedTools') + 1, args.indexOf('--allowedTools') + 4), [
         'ListAgents',
         'WebSearch',

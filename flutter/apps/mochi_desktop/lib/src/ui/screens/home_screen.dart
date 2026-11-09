@@ -6,8 +6,10 @@ import 'package:mochi_art/mochi_art.dart' show SeasonalEvent;
 import 'package:mochi_link/mochi_link.dart' show LinkStatus;
 import 'package:mochi_ui/mochi_ui.dart';
 
+import '../../core/ask_attach.dart';
 import '../../core/ask_brain.dart' show AskStepState;
 import '../../core/ask_mochi.dart';
+import '../../core/screen_peek.dart' show ScreenPeek;
 import '../../core/sessions.dart';
 import '../../desktop.dart';
 import '../pet/companion_director.dart';
@@ -385,8 +387,10 @@ class _ConnectCard extends StatelessWidget {
   }
 }
 
-/// Type a question for Mochi; answers (and what the phones asked) below, newest first. "Ask about what I copied" (X15)
-/// reads the clipboard's text when pressed (never otherwise) and shows it here, to edit or remove, before anything is sent.
+/// Type a question for Mochi; answers (and what the phones asked) below, newest first. What you hand Mochi shows here first,
+/// to edit or remove, and nothing is sent before Send: "Ask about what I copied" (X15) reads the clipboard's text when
+/// pressed (never otherwise); files, text and links dropped on Mochi arrive as chips and a text box (X13, X14); and
+/// "What's on my screen?" (X17, only while Settings has it on) shows a picture of one window on a preview card.
 class AskBox extends StatefulWidget {
   const AskBox({super.key, required this.ask, this.autofocus = false, this.focusSignal, this.clipboard = const SystemClipboardText()});
 
@@ -405,6 +409,9 @@ class AskBox extends StatefulWidget {
   State<AskBox> createState() => _AskBoxState();
 }
 
+/// Whose words the text attachment holds.
+enum _TextKind { copied, dropped }
+
 class _AskBoxState extends State<AskBox> {
   final TextEditingController _text = TextEditingController();
   final TextEditingController _copied = TextEditingController();
@@ -412,18 +419,39 @@ class _AskBoxState extends State<AskBox> {
   final FocusNode _copiedFocus = FocusNode(debugLabel: 'Copied text');
   bool _hadApproval = false;
 
-  /// What the clipboard gave is showing (it can be edited or removed).
+  /// A text is attached (copied from the clipboard, or dropped): it can be edited or removed.
   bool _attached = false;
+  _TextKind _kind = _TextKind.copied;
   bool _cut = false;
   bool _reading = false;
 
   /// Mochi's words when the clipboard had nothing to read.
   String? _clipboardNote;
 
+  /// How many files and links the draft had when it last changed (more of them: the question box takes the focus).
+  int _draftCount = 0;
+
+  AskDraft get _draft => widget.ask.draft;
+  ScreenPeek? get _peek => widget.ask.peek;
+
   @override
   void initState() {
     super.initState();
     widget.focusSignal?.addListener(_takeFocus);
+    _draft.addListener(_draftChanged);
+    _peek?.addListener(_peekChanged);
+    // Dropped on Mochi's pet window: Ask Mochi opened with it already waiting.
+    final waiting = _draft.takeText();
+    if (waiting != null) _adopt(waiting);
+    _draftCount = _draft.files.length + _draft.links.length;
+  }
+
+  void _adopt(({String text, bool cut}) dropped) {
+    _attached = true;
+    _kind = _TextKind.dropped;
+    _cut = dropped.cut;
+    _clipboardNote = null;
+    _copied.text = dropped.text;
   }
 
   @override
@@ -433,19 +461,51 @@ class _AskBoxState extends State<AskBox> {
       old.focusSignal?.removeListener(_takeFocus);
       widget.focusSignal?.addListener(_takeFocus);
     }
+    if (old.ask != widget.ask) {
+      old.ask.draft.removeListener(_draftChanged);
+      old.ask.peek?.removeListener(_peekChanged);
+      _draft.addListener(_draftChanged);
+      _peek?.addListener(_peekChanged);
+    }
   }
 
   void _takeFocus() {
     if (mounted) _focus.requestFocus();
   }
 
+  void _draftChanged() {
+    if (!mounted) return;
+    final dropped = _draft.takeText();
+    final count = _draft.files.length + _draft.links.length;
+    final more = dropped != null || count > _draftCount;
+    _draftCount = count;
+    setState(() {
+      if (dropped != null) _adopt(dropped);
+    });
+    // On to the question about it.
+    if (more) _focus.requestFocus();
+  }
+
+  void _peekChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// What the text attachment is called: "copied" or "dropped".
+  String get _word => _kind == _TextKind.copied ? 'copied' : 'dropped';
+
   void _send() {
     final text = _text.text.trim();
-    final copied = _attached ? _copied.text : null;
-    if (text.isEmpty && (copied == null || copied.trim().isEmpty)) return;
+    final attachedText = _attached ? _copied.text : null;
+    final copied = _kind == _TextKind.copied ? attachedText : null;
+    final dropped = _kind == _TextKind.dropped ? attachedText : null;
+    final peek = _peek;
+    final extras = AskExtras(dropped: dropped, files: _draft.files, links: _draft.links, screen: peek?.preview);
+    if (text.isEmpty && (copied == null || copied.trim().isEmpty) && extras.isEmpty) return;
     _text.clear();
     _removeCopied(refocus: false);
-    widget.ask.ask(text, copied: copied);
+    _draft.clear();
+    peek?.remove();
+    widget.ask.ask(text, copied: copied, extras: extras.isEmpty ? null : extras);
     _focus.requestFocus();
   }
 
@@ -476,6 +536,7 @@ class _AskBoxState extends State<AskBox> {
     setState(() {
       _reading = false;
       _attached = true;
+      _kind = _TextKind.copied;
       _cut = limited.cut;
       _copied.text = limited.text;
     });
@@ -497,6 +558,8 @@ class _AskBoxState extends State<AskBox> {
   @override
   void dispose() {
     widget.focusSignal?.removeListener(_takeFocus);
+    _draft.removeListener(_draftChanged);
+    _peek?.removeListener(_peekChanged);
     _text.dispose();
     _copied.dispose();
     _focus.dispose();
@@ -521,19 +584,19 @@ class _AskBoxState extends State<AskBox> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.content_paste_rounded, size: 16, color: p.tint),
+                  Icon(_kind == _TextKind.copied ? Icons.content_paste_rounded : Icons.text_snippet_outlined, size: 16, color: p.tint),
                   const SizedBox(width: Space.xs),
                   Expanded(
                     child: Text(
-                      'What you copied · $count character${count == 1 ? '' : 's'}',
+                      'What you $_word · $count character${count == 1 ? '' : 's'}',
                       style: context.type.footnote.copyWith(fontWeight: FontWeight.w700),
                     ),
                   ),
-                  IconButton(onPressed: _removeCopied, tooltip: 'Remove what I copied', icon: const Icon(Icons.close_rounded, size: 18)),
+                  IconButton(onPressed: _removeCopied, tooltip: 'Remove what I $_word', icon: const Icon(Icons.close_rounded, size: 18)),
                 ],
               ),
               Semantics(
-                label: 'The text you copied. You can edit it before sending.',
+                label: 'The text you $_word. You can edit it before sending.',
                 child: TextField(
                   controller: _copied,
                   focusNode: _copiedFocus,
@@ -564,121 +627,299 @@ class _AskBoxState extends State<AskBox> {
     );
   }
 
+  /// The files and links handed over, as chips with a remove button each.
+  Widget _chips(BuildContext context) {
+    final p = context.palette;
+    Widget chip({required IconData icon, required String label, required String semantics, required String remove, required VoidCallback onRemove}) {
+      // The chip reads as its label (the file's name and size, or the link); its x button is named by the tooltip.
+      return InputChip(
+        avatar: Icon(icon, size: 16, color: p.tint),
+        label: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 240),
+          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.type.footnote),
+        ),
+        tooltip: semantics,
+        onDeleted: onRemove,
+        deleteButtonTooltipMessage: remove,
+        visualDensity: VisualDensity.compact,
+      );
+    }
+
+    return Wrap(
+      spacing: Space.xs,
+      runSpacing: Space.xs,
+      children: [
+        for (final file in _draft.files)
+          chip(
+            icon: Icons.insert_drive_file_outlined,
+            label: '${file.name} · ${file.sizeText}',
+            semantics: 'File ${file.name}, ${file.sizeText}',
+            remove: 'Remove ${file.name}',
+            onRemove: () {
+              _draft.removeFile(file);
+              _focus.requestFocus();
+            },
+          ),
+        for (final link in _draft.links)
+          chip(
+            icon: Icons.link_rounded,
+            label: link.toString(),
+            semantics: 'Link ${link.host}',
+            remove: 'Remove the link to ${link.host}',
+            onRemove: () {
+              _draft.removeLink(link);
+              _focus.requestFocus();
+            },
+          ),
+      ],
+    );
+  }
+
+  /// The picture of the window, before anything is sent.
+  Widget _screenCard(BuildContext context, ScreenPreview preview, String pet) {
+    final p = context.palette;
+    return Container(
+      padding: const EdgeInsets.all(Space.s),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(Radii.card),
+        border: Border.all(color: p.tint.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.window_rounded, size: 16, color: p.tint),
+              const SizedBox(width: Space.xs),
+              Expanded(
+                child: Text('Your ${preview.app} window', style: context.type.footnote.copyWith(fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          const SizedBox(height: Space.xs),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 220),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Image.memory(
+                preview.png,
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+                semanticLabel: 'A picture of your ${preview.app} window, taken just now',
+                errorBuilder: (context, error, stack) => Text('(The picture can’t be shown here, but it is ready.)', style: context.type.footnote),
+              ),
+            ),
+          ),
+          const SizedBox(height: Space.xs),
+          Text(
+            'This is exactly what $pet would see. Nothing leaves this PC until you press Send, and the picture is deleted when the question is done.',
+            style: context.type.footnote.copyWith(color: p.inkSecondary),
+          ),
+          const SizedBox(height: Space.xs),
+          Row(
+            children: [
+              TextButton(onPressed: () => _peek?.remove(), child: const Text('Remove')),
+              const SizedBox(width: Space.xs),
+              FilledButton(onPressed: _send, child: const Text('Send')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The suggestion in the question box.
+  String _hint() {
+    final peek = _peek;
+    if (peek?.preview != null) return "What's on my screen?";
+    if (_draft.files.isNotEmpty) return _draft.files.length == 1 ? "What's in this file?" : "What's in these files?";
+    if (_draft.links.isNotEmpty) return "What's this link about?";
+    if (_attached) return 'Ask about what you $_word';
+    return 'Ask Mochi, or try “status”';
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
     return ListenableBuilder(
-      listenable: widget.ask,
+      listenable: Listenable.merge([widget.ask, _draft]),
       builder: (context, _) {
         // The card gone (answered, or declined by the time running out): back to the question box.
         final approval = widget.ask.approval;
         if (_hadApproval && approval == null) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _focus.requestFocus() : null);
         _hadApproval = approval != null;
-        return ClayCard(
-          padding: const EdgeInsets.all(Space.m),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _text,
-                      focusNode: _focus,
-                      autofocus: widget.autofocus,
-                      onSubmitted: (_) => _send(),
-                      textInputAction: TextInputAction.send,
-                      decoration: InputDecoration(
-                        hintText: _attached ? 'Ask about what you copied' : 'Ask Mochi, or try “status”',
-                        semanticCounterText: '',
+        final peek = _peek;
+        final preview = peek?.preview;
+        final dropNote = _draft.note;
+        return DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Radii.card),
+            border: _draft.hovering ? Border.all(color: p.tint, width: 2) : null,
+          ),
+          child: ClayCard(
+            padding: const EdgeInsets.all(Space.m),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_draft.hovering)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Space.xs),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        'Drop it here and ${widget.ask.petName} will look. Nothing is sent until you press Send.',
+                        style: context.type.footnote.copyWith(color: p.tint, fontWeight: FontWeight.w700),
                       ),
                     ),
                   ),
-                  const SizedBox(width: Space.s),
-                  IconButton.filled(onPressed: _send, tooltip: 'Send to Mochi', icon: const Icon(Icons.arrow_upward_rounded)),
-                ],
-              ),
-              const SizedBox(height: Space.xs),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Semantics(
-                  button: true,
-                  label:
-                      'Ask about what I copied: reads the text on your clipboard now and adds it to your question. '
-                      'Nothing is sent until you press Send.',
-                  excludeSemantics: true,
-                  onTap: _reading ? null : _readClipboard,
-                  child: TextButton.icon(
-                    onPressed: _reading ? null : _readClipboard,
-                    icon: const Icon(Icons.content_paste_rounded, size: 18),
-                    label: const Text('Ask about what I copied'),
-                  ),
-                ),
-              ),
-              if (_clipboardNote != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: Space.xs),
-                  child: Semantics(
-                    liveRegion: true,
-                    child: NoteLabel(text: _clipboardNote!, icon: Icons.info_outline_rounded, tint: p.warning),
-                  ),
-                ),
-              if (_attached) ...[const SizedBox(height: Space.xs), _copiedCard(context, widget.ask.petName)],
-              if (approval != null) ...[
-                const SizedBox(height: Space.m),
-                ApprovalCard(
-                  key: ValueKey(approval.id),
-                  approval: approval,
-                  pet: widget.ask.petName,
-                  onSend: widget.ask.approve,
-                  onDecline: widget.ask.decline,
-                ),
-              ],
-              for (final exchange in widget.ask.exchanges.reversed.take(4)) ...[
-                const SizedBox(height: Space.m),
-                MergeSemantics(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: switch (exchange.state) {
-                          AskState.working => SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, semanticsLabel: 'Mochi is thinking', color: p.tint),
-                          ),
-                          AskState.done => Icon(Icons.chat_bubble_rounded, size: 16, color: p.success, semanticLabel: 'Answered'),
-                          AskState.failed => Icon(Icons.info_rounded, size: 16, color: p.warning, semanticLabel: 'Not done'),
-                        },
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _text,
+                        focusNode: _focus,
+                        autofocus: widget.autofocus,
+                        onSubmitted: (_) => _send(),
+                        textInputAction: TextInputAction.send,
+                        decoration: InputDecoration(hintText: _hint(), semanticCounterText: ''),
                       ),
-                      const SizedBox(width: Space.s),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              [
-                                exchange.text,
-                                if (exchange.copiedCharacters > 0) 'with what you copied',
-                                if (exchange.fromPhone) 'from your phone',
-                              ].join('  ·  '),
-                              style: context.type.footnote.copyWith(fontWeight: FontWeight.w700, color: p.ink),
-                            ),
-                            for (final step in exchange.steps.take(4))
-                              Text(
-                                step.state == AskStepState.failed ? '${step.text} (not done)' : step.text,
-                                style: context.type.footnote.copyWith(color: p.inkSecondary),
-                              ),
-                            if (exchange.reply != null) Text(exchange.reply!, style: context.type.subheadline),
-                          ],
+                    ),
+                    const SizedBox(width: Space.s),
+                    IconButton.filled(onPressed: _send, tooltip: 'Send to Mochi', icon: const Icon(Icons.arrow_upward_rounded)),
+                  ],
+                ),
+                const SizedBox(height: Space.xs),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: Space.xs,
+                    children: [
+                      Semantics(
+                        button: true,
+                        label:
+                            'Ask about what I copied: reads the text on your clipboard now and adds it to your question. '
+                            'Nothing is sent until you press Send.',
+                        excludeSemantics: true,
+                        onTap: _reading ? null : _readClipboard,
+                        child: TextButton.icon(
+                          onPressed: _reading ? null : _readClipboard,
+                          icon: const Icon(Icons.content_paste_rounded, size: 18),
+                          label: const Text('Ask about what I copied'),
                         ),
                       ),
+                      if (peek != null && peek.enabled)
+                        Semantics(
+                          button: true,
+                          label:
+                              "What's on my screen?: takes one picture of the window you were using before Mochi came up and "
+                              'shows it here. Nothing is sent until you press Send.',
+                          excludeSemantics: true,
+                          onTap: peek.busy ? null : peek.look,
+                          child: TextButton.icon(
+                            onPressed: peek.busy ? null : peek.look,
+                            icon: const Icon(Icons.desktop_windows_outlined, size: 18),
+                            label: const Text("What's on my screen?"),
+                          ),
+                        ),
                     ],
                   ),
                 ),
+                if (_clipboardNote != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Space.xs),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: NoteLabel(text: _clipboardNote!, icon: Icons.info_outline_rounded, tint: p.warning),
+                    ),
+                  ),
+                if (dropNote != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Space.xs),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: NoteLabel(text: dropNote, icon: Icons.info_outline_rounded, tint: p.warning),
+                    ),
+                  ),
+                if (peek?.note != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Space.xs),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: NoteLabel(text: peek!.note!, icon: Icons.info_outline_rounded, tint: p.warning),
+                    ),
+                  ),
+                if (_draft.files.isNotEmpty || _draft.links.isNotEmpty) ...[
+                  const SizedBox(height: Space.xs),
+                  _chips(context),
+                  const SizedBox(height: Space.xs),
+                  Text(
+                    'Nothing leaves this PC until you press Send. Claude Code reads only the files you dropped, for this question.',
+                    style: context.type.footnote.copyWith(color: p.inkSecondary),
+                  ),
+                ],
+                if (_attached) ...[const SizedBox(height: Space.xs), _copiedCard(context, widget.ask.petName)],
+                if (preview != null) ...[const SizedBox(height: Space.xs), _screenCard(context, preview, widget.ask.petName)],
+                if (approval != null) ...[
+                  const SizedBox(height: Space.m),
+                  ApprovalCard(
+                    key: ValueKey(approval.id),
+                    approval: approval,
+                    pet: widget.ask.petName,
+                    onSend: widget.ask.approve,
+                    onDecline: widget.ask.decline,
+                  ),
+                ],
+                for (final exchange in widget.ask.exchanges.reversed.take(4)) ...[
+                  const SizedBox(height: Space.m),
+                  MergeSemantics(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: switch (exchange.state) {
+                            AskState.working => SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, semanticsLabel: 'Mochi is thinking', color: p.tint),
+                            ),
+                            AskState.done => Icon(Icons.chat_bubble_rounded, size: 16, color: p.success, semanticLabel: 'Answered'),
+                            AskState.failed => Icon(Icons.info_rounded, size: 16, color: p.warning, semanticLabel: 'Not done'),
+                          },
+                        ),
+                        const SizedBox(width: Space.s),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                [
+                                  exchange.text,
+                                  if (exchange.copiedCharacters > 0) 'with what you copied',
+                                  if (exchange.droppedCharacters > 0) 'with what you dropped',
+                                  if (exchange.files > 0) 'with ${exchange.files} file${exchange.files == 1 ? '' : 's'}',
+                                  if (exchange.links > 0) 'with ${exchange.links == 1 ? 'a link' : '${exchange.links} links'}',
+                                  if (exchange.screen) 'with a picture of your window',
+                                  if (exchange.fromPhone) 'from your phone',
+                                ].join('  ·  '),
+                                style: context.type.footnote.copyWith(fontWeight: FontWeight.w700, color: p.ink),
+                              ),
+                              for (final step in exchange.steps.take(4))
+                                Text(
+                                  step.state == AskStepState.failed ? '${step.text} (not done)' : step.text,
+                                  style: context.type.footnote.copyWith(color: p.inkSecondary),
+                                ),
+                              if (exchange.reply != null) Text(exchange.reply!, style: context.type.subheadline),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         );
       },

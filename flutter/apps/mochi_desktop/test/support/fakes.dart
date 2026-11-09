@@ -18,6 +18,7 @@ import 'package:mochi_desktop/src/core/hotkeys.dart';
 import 'package:mochi_desktop/src/core/jump_list.dart';
 import 'package:mochi_desktop/src/core/json_store.dart';
 import 'package:mochi_desktop/src/core/pc_rhythm.dart';
+import 'package:mochi_desktop/src/core/screen_peek.dart' show ScreenshotStore, WindowCapturer;
 import 'package:mochi_desktop/src/core/session_store.dart';
 import 'package:mochi_desktop/src/core/sounds.dart';
 import 'package:mochi_desktop/src/core/toasts.dart';
@@ -25,6 +26,7 @@ import 'package:mochi_desktop/src/desktop.dart';
 import 'package:mochi_desktop/src/link/link_host.dart';
 import 'package:mochi_desktop/src/platform/credential_vault.dart';
 import 'package:mochi_desktop/src/platform/displays.dart';
+import 'package:mochi_desktop/src/platform/file_drop.dart' show DropSource;
 import 'package:mochi_desktop/src/platform/foreground_window.dart';
 import 'package:mochi_desktop/src/platform/startup.dart';
 import 'package:mochi_desktop/src/platform/system.dart';
@@ -740,6 +742,10 @@ class TestDesktop {
     bool Function()? fullScreen,
     Stream<void>? sessionEnding,
     JumpListService? jumpList,
+    DropSource? drops,
+    WindowCapturer? windowCapturer,
+    ForegroundWindows? foregroundWindows,
+    ScreenshotStore? screenshots,
   }) {
     final stores = {for (final entry in files.entries) entry.key: MemoryJsonStore(entry.value)};
     final temp = Directory.systemTemp.createTempSync('mochi_desktop_test');
@@ -801,6 +807,10 @@ class TestDesktop {
       stage: stage,
       fullScreen: fullScreen,
       sessionEnding: sessionEnding,
+      drops: drops,
+      windowCapturer: windowCapturer,
+      foregroundWindows: foregroundWindows,
+      screenshots: screenshots,
     );
     return TestDesktop._(temp, desktop, sockets, api, claude, vault, document, start, toastService, sound, usage, hotkeys, store, stores);
   }

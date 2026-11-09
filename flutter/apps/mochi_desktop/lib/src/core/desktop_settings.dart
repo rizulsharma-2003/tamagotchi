@@ -194,6 +194,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   bool _shareSummaries = false;
   bool _acceptCommands = true;
   bool _messageSessions = true;
+  bool _showScreen = false;
   String _model = 'haiku';
   Offset? _petPosition;
   Size? _mainWindowSize;
@@ -286,6 +287,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _shareSummaries = flag('shareSummaries', false);
     _acceptCommands = flag('acceptCommands', true);
     _messageSessions = flag('messageSessions', true);
+    _showScreen = flag('showScreen', false);
     _model = json['model'] == 'sonnet' ? 'sonnet' : 'haiku';
     final position = json['petPosition'];
     _petPosition = position is List && position.length == 2 && position.every((value) => value is num)
@@ -469,6 +471,11 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   /// "Ask me before sending" is always on here). Off: every such request is declined.
   bool get messageSessions => _messageSessions;
   set messageSessions(bool value) => _set(() => _messageSessions = value);
+
+  /// "Let me show Mochi my screen" (X17): the Ask box gets a "What's on my screen?" button that pictures the one window you
+  /// were using, on a preview card, sent only when you press Send. Off at first; the button is hidden while it's off.
+  bool get showScreen => _showScreen;
+  set showScreen(bool value) => _set(() => _showScreen = value);
 
   /// The model Ask Mochi uses: haiku (fast) or sonnet.
   String get model => _model;
@@ -818,6 +825,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'shareSummaries': _shareSummaries,
     'acceptCommands': _acceptCommands,
     'messageSessions': _messageSessions,
+    'showScreen': _showScreen,
     'model': _model,
     if (_petPosition != null) 'petPosition': [_petPosition!.dx, _petPosition!.dy],
     if (_mainWindowSize != null) 'mainWindowSize': [_mainWindowSize!.width, _mainWindowSize!.height],
