@@ -12,6 +12,7 @@ import 'package:mochi_desktop/src/platform/credential_vault.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_wire/mochi_wire.dart';
 
+import 'support/brain_fakes.dart';
 import 'support/fakes.dart';
 
 Future<void> settle() async {
@@ -241,7 +242,7 @@ void main() {
       expect(t.socket.sentFrames('put', 'sessions').last['to'], isNull);
     });
 
-    test('commands: working, then the answer; never twice; too old ignored; one-session replies not yet', () async {
+    test('commands: working, then the answer; never twice; too old ignored; one-session replies need the helper', () async {
       await paired();
       List<LinkReply> replies() => [for (final value in t.socket.values(LinkKey.reply)) LinkReply.fromValue(value)!];
 
@@ -272,7 +273,7 @@ void main() {
       );
       await settle();
       expect(replies().last.state, 'failed');
-      expect(replies().last.text, contains("can't pass messages to a Claude session yet"));
+      expect(replies().last.text, contains("couldn't start my helper Claude, so I didn't send it"));
 
       t.socket.fromPhone(LinkCommand(id: 'c3', text: 'tell me a joke', at: now, typed: true).toValue(), LinkKey.command);
       await settle();
@@ -286,6 +287,55 @@ void main() {
       await settle();
       expect(replies().last.state, 'failed');
     });
+
+    test(
+      'Mochi’s approval card goes to the phones too; their Send or Don’t send counts for that card only, while phones may ask',
+      () async {
+        await paired();
+        final rig = BrainRig();
+        addTearDown(rig.brain.dispose);
+        rig.sessions.apply(hook('UserPromptSubmit', project: 'web', at: rig.clock.now));
+        t.desktop.ask.brain = rig.brain;
+        rig.brain.phones = t.desktop.phone;
+        List<ApprovalRequest?> cards() => [for (final value in t.socket.values(LinkKey.approval)) ApprovalRequest.fromValue(value)];
+
+        await rig.ask('tell web to run the tests', commandId: 'c9');
+        var channel = await rig.askToSend();
+        await settle();
+        final card = cards().last!;
+        expect((card.command, card.target, card.project, card.message), ('c9', 'web-ab', 'web', 'Please run the tests.'));
+        expect(card.id, rig.brain.approval!.id);
+
+        // Someone else's id, or phones not allowed to ask: nothing happens.
+        t.socket.fromPhone(LinkVerdict(id: 'other', allow: true, at: now).toValue(), LinkKey.verdict);
+        t.desktop.settings.acceptCommands = false;
+        t.socket.fromPhone(LinkVerdict(id: card.id, allow: true, at: now).toValue(), LinkKey.verdict);
+        await settle();
+        expect(rig.brain.approval, isNotNull);
+        t.desktop.settings.acceptCommands = true;
+        // The phone says Don't send: denied, and the card is cleared from the phones.
+        t.socket.fromPhone(LinkVerdict(id: card.id, allow: false, at: now).toValue(), LinkKey.verdict);
+        await settle();
+        await rig.settle();
+        expect(rig.verdict(channel)['behavior'], 'deny');
+        expect(cards().last, isNull);
+        rig.process.print(FakeBrainProcess.result('Not sent.'));
+        await rig.settle();
+
+        // Next time the phone says Send.
+        await rig.ask('again', commandId: 'c10');
+        channel = await rig.askToSend(toolUse: 't2');
+        await settle();
+        final second = cards().last!;
+        t.socket.fromPhone(LinkVerdict(id: second.id, allow: true, at: now).toValue(), LinkKey.verdict);
+        await settle();
+        await rig.settle();
+        expect(rig.verdict(channel)['behavior'], 'allow');
+        // A late repeat of the same verdict does nothing.
+        t.socket.fromPhone(LinkVerdict(id: second.id, allow: false, at: now).toValue(), LinkKey.verdict);
+        await settle();
+      },
+    );
 
     test('pets from the phone reach Mochi; pets here reach the phones', () async {
       await paired();

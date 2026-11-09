@@ -347,6 +347,22 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.ask
       ..explore = _askExplore
       ..comeHome = _askComeHome;
+    // Mochi's other tricks for the brain's `mochi` tool, and the approval card's place: Ask Mochi, in Mochi's window.
+    desktop.ask.tricks.addAll({
+      'games': (_) {
+        openGames();
+        return const AskOutcome("Let's play a game!");
+      },
+      'recap': (_) {
+        openRecap();
+        return const AskOutcome("Here's your day.");
+      },
+      'decorate': (_) {
+        openDecorate();
+        return const AskOutcome("Let's decorate!");
+      },
+    });
+    desktop.ask.brain?.onApproval = _approvalShown;
     _mischief.adventure?.addListener(_exploreChanged);
     desktop.settings.addListener(_exploreChanged);
     _exploreChanged();
@@ -679,6 +695,14 @@ class DesktopAppState extends State<DesktopApp> {
   }
 
   bool _askFirst = false;
+
+  /// Mochi asks before messaging a Claude session: the approval card is in Ask Mochi's place, so Mochi's window opens to
+  /// it unless it already shows (from the popover or the pet, as "Ask Mochi" does).
+  void _approvalShown(Object approval) {
+    if (_surface == Surface.main && _page == MainPage.home) return;
+    openAsk();
+  }
+
   Timer? _rhythmLog;
 
   /// The session a Windows notification was about: its card is outlined in Mochi's window.
@@ -833,6 +857,11 @@ class DesktopAppState extends State<DesktopApp> {
     desktop.ask
       ..explore = null
       ..comeHome = null;
+    desktop.ask.tricks
+      ..remove('games')
+      ..remove('recap')
+      ..remove('decorate');
+    desktop.ask.brain?.onApproval = null;
     _stroll
       ..onDropOff = null
       ..stand = null;

@@ -129,9 +129,11 @@ class PhonesPane extends StatelessWidget {
                 onChanged: (value) => settings.acceptCommands = value,
               ),
               if (lastCommand != null) NoteRow(text: 'Last: “${lastCommand.text}”', icon: Icons.smartphone_rounded),
-              SoonRow(
-                title: 'Replies to one Claude session',
-                detail: 'Sending a session its next request from a phone, with an approval first, works with a Mac for now.',
+              NoteRow(
+                icon: Icons.reply_rounded,
+                text:
+                    'A reply you write for one Claude session on a phone goes to that session after you tap Send on the '
+                    'approval, here on this PC or on your phone: the first answer counts.',
               ),
             ],
           ),
@@ -347,6 +349,9 @@ class _NotificationsPaneState extends State<NotificationsPane> {
               icon: Icons.bedtime_outlined,
               tint: quiet.enabled ? p.tint : null,
               detail: quiet.enabled ? '${QuietHours.format(quiet.startMinute)}–${QuietHours.format(quiet.endMinute)}' : 'Off',
+            ),
+            ActionsRow(
+              children: [PaneLink(host: host, tab: SettingsTab.general, label: 'Quiet hours and quiet mode')],
             ),
             ActionsRow(children: [PaneLink(host: host, tab: SettingsTab.general, label: 'Quiet hours and quiet mode')]),
           ],

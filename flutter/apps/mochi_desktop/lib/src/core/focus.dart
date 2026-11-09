@@ -68,6 +68,20 @@ class DesktopFocus extends ChangeNotifier {
   /// Starts a session ([durations]: seconds instead of the settings' minutes, for a quick look).
   void begin({w.FocusDurations? durations}) => _act(() => buddy.begin(durations: durations));
 
+  /// Starts a session whose focus block is [minutes] long (1 to 180), the breaks as in Settings (Ask Mochi's "focus for 25
+  /// minutes").
+  void beginMinutes(int minutes) {
+    final base = w.FocusDurations.fromSettings(_settings);
+    begin(
+      durations: w.FocusDurations(
+        focus: minutes.clamp(1, 180) * 60.0,
+        shortBreak: base.shortBreak,
+        longBreak: base.longBreak,
+        cyclesBeforeLongBreak: base.cyclesBeforeLongBreak,
+      ),
+    );
+  }
+
   void stop() => _act(buddy.stop);
 
   /// Ends the current phase now (a skipped focus block isn't counted).

@@ -1,13 +1,15 @@
-// Ask Mochi on Windows, v1: quick commands on the spot, everything else to a one-off `claude -p` that can only search
-// the web. The Mac's Ask Mochi (Sources/App/Features/Assistant) runs a long-lived helper session with tools that act
-// on the Mac and can message other Claude sessions after an approval card; on Windows that comes in v2 (see
-// docs/MOCHI_LINK_PLAN.md phase 11). Here nothing can change the PC or reach another Claude session.
+// Ask Mochi on Windows: quick commands on the spot; everything else to Mochi's brain (ask_brain.dart), a long-lived
+// helper Claude session with a few tools that can message the user's other Claude sessions, each message only after an
+// approval card says Send. When the brain can't start, the v1 path answers instead: a one-off `claude -p` that can only
+// search the web. The Mac's PC actions (open apps, media keys, volume, windows) are not here yet (W9).
 
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'ask_brain.dart';
 import 'claude_cli.dart';
+import 'paws_server.dart';
 import 'pet_cues.dart';
 import 'quick_commands.dart';
 import 'session_store.dart';
@@ -43,6 +45,9 @@ class AskExchange {
   final DateTime at;
   AskState state = AskState.working;
   String? reply;
+
+  /// What the brain is doing for this request (empty for quick commands and the one-off path).
+  List<AskStep> steps = const [];
 }
 
 /// The safe `claude -p` Ask Mochi runs on Windows: the web search tool only, no user settings, no MCP servers, nothing
@@ -109,14 +114,61 @@ class AskMochi extends ChangeNotifier {
     String Function()? petName,
     this.timeout = const Duration(seconds: 90),
     DateTime Function()? clock,
+    BrainSetup? Function()? brainSetup,
+    bool Function()? messagingAllowed,
+    void Function(String message)? log,
+    @visibleForTesting AskBrain Function(AskMochi ask)? brainFactory,
   }) : _runner = runner,
        _cue = cue,
        _opener = opener,
        _model = model ?? (() => 'haiku'),
        _petName = petName ?? (() => 'Mochi'),
-       _clock = clock ?? DateTime.now;
+       _clock = clock ?? DateTime.now {
+    if (brainFactory != null) {
+      brain = brainFactory(this);
+    } else if (brainSetup != null) {
+      brain = AskBrain(
+        sessions: sessions,
+        setup: brainSetup,
+        model: _model,
+        petName: _petName,
+        context: context,
+        tools: brainTool,
+        messagingAllowed: messagingAllowed ?? () => true,
+        clock: clock,
+        log: log,
+      );
+    }
+    brain?.addListener(_brainChanged);
+  }
 
   final SessionStore sessions;
+
+  /// Mochi's brain (null: v1 only).
+  AskBrain? brain;
+
+  /// The message waiting for Send or Don't send, if any.
+  AskApproval? get approval => brain?.approval;
+
+  /// Send (the card's button).
+  void approve() => brain?.approve();
+
+  /// Don't send.
+  void decline() => brain?.decline();
+
+  /// Stops the brain's request (a pending card is declined).
+  void cancel() => brain?.cancel();
+
+  /// The app is quitting: a pending card is a denial and the brain goes.
+  void shutdown() => brain?.shutdown();
+
+  AskExchange? _brainExchange;
+
+  void _brainChanged() {
+    _brainExchange?.steps = brain?.steps ?? const [];
+    notifyListeners();
+  }
+
   final ClaudeRunner? Function() _runner;
   final void Function(PetCue cue) _cue;
   final UrlOpener? _opener;
@@ -133,6 +185,9 @@ class AskMochi extends ChangeNotifier {
   AskOutcome Function()? explore;
   AskOutcome Function()? comeHome;
 
+  /// The rest of Mochi's tricks, set by the app: `games`, `recap`, `decorate`, `focus_start` (with minutes), `focus_stop`.
+  final Map<String, AskOutcome Function(int? minutes)> tricks = {};
+
   final List<AskExchange> _exchanges = [];
   int _counter = 0;
 
@@ -142,7 +197,7 @@ class AskMochi extends ChangeNotifier {
   bool get working => _exchanges.any((exchange) => exchange.state == AskState.working);
 
   /// Answers [text]. Never throws: problems come back as a failed outcome in words.
-  Future<AskOutcome> ask(String text, {bool spoken = false, bool fromPhone = false}) async {
+  Future<AskOutcome> ask(String text, {bool spoken = false, bool fromPhone = false, String? commandId, AskTarget? target}) async {
     final words = text.trim();
     if (words.isEmpty) return const AskOutcome('Say something first.', ok: false);
     final exchange = AskExchange(id: 'ask-${++_counter}', text: words, fromPhone: fromPhone, at: _clock());
@@ -152,8 +207,10 @@ class AskMochi extends ChangeNotifier {
     notifyListeners();
     AskOutcome outcome;
     try {
-      final quick = QuickCommands.parse(words);
-      outcome = quick == null ? await _askClaude(words, spoken: spoken) : await perform(quick);
+      final quick = target == null ? QuickCommands.parse(words) : null;
+      outcome = quick == null
+          ? await _askClaude(words, spoken: spoken, exchange: exchange, commandId: commandId, target: target)
+          : await perform(quick);
     } on Object catch (error) {
       outcome = AskOutcome('Something went wrong (${error.runtimeType}).', ok: false);
     }
@@ -171,16 +228,7 @@ class AskMochi extends ChangeNotifier {
       case SimpleCommand.sessionsStatus:
         return AskOutcome(sessions.statusSummary());
       case InteractCommand(:final kind):
-        _cue(switch (kind) {
-          'pet' => PetCue.pet,
-          'play' => PetCue.play,
-          _ => PetCue.treat,
-        });
-        return AskOutcome(switch (kind) {
-          'pet' => 'Purr…',
-          'play' => 'Pounce!',
-          _ => 'Yum, thank you!',
-        });
+        return _interact(kind);
       case SimpleCommand.agentNews:
         return const AskOutcome("My agent (mail, calendar and Notion) isn't on Windows yet.", ok: false);
       case SiteCommand(:final url):
@@ -203,6 +251,59 @@ class AskMochi extends ChangeNotifier {
     }
   }
 
+  AskOutcome _interact(String kind) {
+    _cue(switch (kind) {
+      'pet' => PetCue.pet,
+      'play' => PetCue.play,
+      _ => PetCue.treat,
+    });
+    return AskOutcome(switch (kind) {
+      'pet' => 'Purr…',
+      'play' => 'Pounce!',
+      _ => 'Yum, thank you!',
+    });
+  }
+
+  /// The brain's tools other than `approve`: Mochi's tricks, the Claude sessions, and https links.
+  Future<PawsResult> brainTool(String name, Map<String, Object?> arguments) async {
+    switch (name) {
+      case 'claude_sessions':
+        return PawsResult(sessions.statusSummary());
+      case 'open_url':
+        final url = arguments['url'];
+        final uri = url is String ? Uri.tryParse(url.trim()) : null;
+        if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return const PawsResult('I only open https links.', isError: true);
+        final opener = _opener;
+        if (opener == null) return const PawsResult("I can't open links here.", isError: true);
+        return await opener.open(uri) ? PawsResult('Opening ${uri.host}.') : PawsResult("I couldn't open ${uri.host}.", isError: true);
+      case 'mochi':
+        final minutes = arguments['minutes'];
+        final outcome = trick(arguments['action'] is String ? arguments['action'] as String : '', minutes is num ? minutes.round() : null);
+        return PawsResult(outcome.text, isError: !outcome.ok);
+      default:
+        return const PawsResult('Unknown tool.', isError: true);
+    }
+  }
+
+  /// One of Mochi's tricks, for the brain's `mochi` tool.
+  AskOutcome trick(String action, int? minutes) {
+    switch (action) {
+      case 'explore':
+        return explore?.call() ?? const AskOutcome("That trick isn't on Windows yet.", ok: false);
+      case 'come_home':
+        return comeHome?.call() ?? const AskOutcome("That trick isn't on Windows yet.", ok: false);
+      case 'pet':
+        return _interact('pet');
+      case 'play':
+        return _interact('play');
+      case 'treat':
+        return _interact('treat');
+      default:
+        final run = tricks[action];
+        return run == null ? const AskOutcome("I don't know that trick.", ok: false) : run(minutes);
+    }
+  }
+
   /// What `claude -p` is told about this computer: the time and the sessions (names and states only).
   String context() {
     final now = _clock();
@@ -215,7 +316,32 @@ class AskMochi extends ChangeNotifier {
     return 'Time $time. $list';
   }
 
-  Future<AskOutcome> _askClaude(String text, {required bool spoken}) async {
+  Future<AskOutcome> _askClaude(
+    String text, {
+    required bool spoken,
+    required AskExchange exchange,
+    String? commandId,
+    AskTarget? target,
+  }) async {
+    final brain = this.brain;
+    if (brain != null) {
+      _cue(PetCue.working);
+      _brainExchange = exchange;
+      BrainAnswer? answer;
+      try {
+        answer = await brain.ask(text, spoken: spoken, commandId: commandId, target: target);
+      } finally {
+        if (identical(_brainExchange, exchange)) _brainExchange = null;
+      }
+      if (answer != null) return AskOutcome(answer.text, ok: answer.ok);
+    }
+    // A message for one session can't go through the one-off path, which has no way to send it.
+    if (target != null) return const AskOutcome("I couldn't start my helper Claude, so I didn't send it.", ok: false);
+    return _askOnce(text, spoken: spoken);
+  }
+
+  /// v1: a one-off `claude -p` that can only search the web.
+  Future<AskOutcome> _askOnce(String text, {required bool spoken}) async {
     final runner = _runner();
     if (runner == null) {
       return const AskOutcome('I need Claude Code for that: install it from claude.com/claude-code, then ask again.', ok: false);

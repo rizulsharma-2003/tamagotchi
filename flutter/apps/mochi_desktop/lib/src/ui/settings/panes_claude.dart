@@ -331,7 +331,7 @@ class _AssistantPaneState extends State<AssistantPane> {
             TextRow(
               'Type to $pet in Mochi’s window${settings.shortcut(MochiShortcut.ask) == null ? '' : ', or press ${settings.shortcut(MochiShortcut.ask)!.label} anywhere'}. '
               'Quick commands like “status”, “open youtube” or “focus for 25 minutes” are answered on the spot; anything '
-              'else goes to Claude, which can search the web.',
+              'else goes to Claude, which can search the web, open links and, with your OK, message your Claude sessions.',
             ),
             ShortcutRow(
               desktop: host.desktop,
@@ -362,12 +362,30 @@ class _AssistantPaneState extends State<AssistantPane> {
           ],
         ),
         SettingsGroup(
+          title: 'Claude sessions',
+          children: [
+            ToggleRow(
+              title: 'Let $pet message my Claude sessions',
+              subtitle:
+                  'Ask $pet to tell a session what to do next. Every message shows on a card with the session and the whole '
+                  'text, and only goes after you press Send; anything else (Don’t send, Escape, no answer in two minutes) '
+                  'means it isn’t sent. It reaches the session through Claude Code’s own session messaging, never by typing '
+                  'into a window.',
+              value: settings.messageSessions,
+              onChanged: (value) => settings.messageSessions = value,
+            ),
+          ],
+        ),
+        SettingsGroup(
           title: 'From your phones',
           children: [
             StatusRow(
               title: 'Requests from your phones',
               ok: settings.acceptCommands,
               detail: settings.acceptCommands ? 'Run here, like Ask $pet' : 'Turned off',
+            ),
+            ActionsRow(
+              children: [PaneLink(host: host, tab: SettingsTab.phones)],
             ),
             ActionsRow(children: [PaneLink(host: host, tab: SettingsTab.phones)]),
           ],
@@ -376,10 +394,6 @@ class _AssistantPaneState extends State<AssistantPane> {
           title: 'From the Mac',
           children: [
             SoonRow(title: 'Talking and spoken answers', detail: 'Hold the shortcut to talk; $pet reads answers aloud.'),
-            SoonRow(
-              title: 'Messages to your Claude sessions',
-              detail: 'Ask $pet to tell a session what to do next, with an approval on this PC or your phones first.',
-            ),
             SoonRow(title: 'Controlling this PC', detail: 'Opening apps, pressing music keys and bringing a window forward.'),
           ],
         ),
@@ -388,7 +402,10 @@ class _AssistantPaneState extends State<AssistantPane> {
           children: [
             TextRow(
               'What you ask goes to Claude (Anthropic) like any prompt, with the names and states of your Claude sessions. '
-              'Each request is a fresh claude -p with web search only: no files, no settings, nothing saved.',
+              '$pet keeps the conversation in memory only (nothing is saved) and stops its helper Claude after 10 quiet '
+              'minutes. The helper can search the web, open https links, run $pet’s tricks and, only after your Send, message a '
+              'Claude session. It can’t read files, run commands or change anything else on this PC. Without a helper tool '
+              'or a native Claude Code, $pet answers with a one-off web-search-only claude -p.',
               secondary: true,
             ),
           ],

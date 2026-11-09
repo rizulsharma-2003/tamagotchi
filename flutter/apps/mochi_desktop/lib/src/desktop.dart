@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:mochi_link/mochi_link.dart';
 import 'package:mochi_wire/mochi_wire.dart';
 
+import 'core/ask_brain.dart' show BrainSetup;
 import 'core/ask_mochi.dart';
+import 'core/brain_session.dart' show BrainEnvironment, ProcessBrain;
 import 'core/claude_cli.dart';
 import 'core/desktop_settings.dart';
 import 'core/desktop_world.dart';
@@ -70,6 +72,7 @@ class MochiDesktop {
     this.folders,
     StartupItem? startup,
     String? Function()? locateClaude,
+    BrainSetup? Function()? brainSetup,
     BridgeServer? bridge,
     DateTime Function()? clock,
     Updater? updater,
@@ -157,6 +160,9 @@ class MochiDesktop {
       model: () => settings.model,
       petName: () => settings.petName,
       clock: clock,
+      brainSetup: brainSetup,
+      messagingAllowed: () => settings.messageSessions,
+      log: kDebugMode ? (message) => debugPrint('Mochi: $message') : null,
     );
     phone = PhoneSync(
       host: link,
@@ -171,6 +177,25 @@ class MochiDesktop {
       resting: () => rhythm.resting,
       friendship: () => world.world.progress.friendshipLevel,
     );
+    // Ask Mochi's brain: approvals also show on the phones, a delivered prompt's follow-up is Mochi's bubble, and quitting
+    // (or Windows ending the session) declines a pending card and stops the helper session.
+    ask.brain
+      ?..phones = phone
+      ..announce = (line) {
+        world.world.say(line, duration: 6);
+        world.noteChanged();
+      };
+    ask.tricks.addAll({
+      'focus_start': (minutes) {
+        minutes == null ? focus.begin() : focus.beginMinutes(minutes);
+        return AskOutcome('Focus time${minutes == null ? '' : ': $minutes minutes'}. I\'ll nap till your break.');
+      },
+      'focus_stop': (_) {
+        focus.stop();
+        return const AskOutcome('Focus stopped.');
+      },
+    });
+    addExitHook(ask.shutdown);
     // Windows ending the session (a log off or a shutdown): whatever Mochi moved goes back first (X2).
     _ending = sessionEnding?.listen((_) {
       runExitHooks();
@@ -253,6 +278,24 @@ class MochiDesktop {
       );
     }
 
+    // Mochi's brain needs a native `claude` (not npm's cmd shim) and the helper that relays its tools; without either the
+    // one-off path answers.
+    BrainSetup? brainSetup() {
+      if (demoMode) return null;
+      claude();
+      final found = executable;
+      if (found == null || !ProcessBrain.canRun(found)) return null;
+      final installedHelper = File(paths.installedHelper).existsSync() ? paths.installedHelper : null;
+      final helper = HookSetup.findBundledHelper() ?? installedHelper;
+      if (helper == null) return null;
+      return BrainSetup(
+        executable: found,
+        helper: helper,
+        environment: BrainEnvironment.build(environment, windows: Platform.isWindows),
+        workingDirectory: paths.assistantDirectory,
+      );
+    }
+
     final name = computerName();
     final startup = systemStartup();
     final link = LinkHost(
@@ -315,6 +358,7 @@ class MochiDesktop {
       link: link,
       motion: SystemMotion(),
       claude: claude,
+      brainSetup: brainSetup,
       opener: const SystemUrlOpener(),
       folders: const SystemFolderOpener(),
       startup: startup,

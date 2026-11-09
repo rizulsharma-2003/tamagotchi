@@ -5,12 +5,14 @@ import 'package:mochi_art/mochi_art.dart' show SeasonalEvent;
 import 'package:mochi_link/mochi_link.dart' show LinkStatus;
 import 'package:mochi_ui/mochi_ui.dart';
 
+import '../../core/ask_brain.dart' show AskStepState;
 import '../../core/ask_mochi.dart';
 import '../../core/sessions.dart';
 import '../../desktop.dart';
 import '../pet/companion_director.dart';
 import '../pet/pet_director.dart';
 import '../pet/room_view.dart';
+import '../widgets/approval_card.dart';
 import '../widgets/session_card.dart';
 
 /// The main window, as the phones' home screens: Mochi's name and how Claude is doing, the room with Mochi and Patch,
@@ -386,6 +388,7 @@ class AskBox extends StatefulWidget {
 class _AskBoxState extends State<AskBox> {
   final TextEditingController _text = TextEditingController();
   final FocusNode _focus = FocusNode();
+  bool _hadApproval = false;
 
   void _send() {
     final text = _text.text.trim();
@@ -407,65 +410,86 @@ class _AskBoxState extends State<AskBox> {
     final p = context.palette;
     return ListenableBuilder(
       listenable: widget.ask,
-      builder: (context, _) => ClayCard(
-        padding: const EdgeInsets.all(Space.m),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _text,
-                    focusNode: _focus,
-                    autofocus: widget.autofocus,
-                    onSubmitted: (_) => _send(),
-                    textInputAction: TextInputAction.send,
-                    decoration: const InputDecoration(hintText: 'Ask Mochi, or try “status”', semanticCounterText: ''),
+      builder: (context, _) {
+        // The card gone (answered, or declined by the time running out): back to the question box.
+        final approval = widget.ask.approval;
+        if (_hadApproval && approval == null) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _focus.requestFocus() : null);
+        _hadApproval = approval != null;
+        return ClayCard(
+          padding: const EdgeInsets.all(Space.m),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _text,
+                      focusNode: _focus,
+                      autofocus: widget.autofocus,
+                      onSubmitted: (_) => _send(),
+                      textInputAction: TextInputAction.send,
+                      decoration: const InputDecoration(hintText: 'Ask Mochi, or try “status”', semanticCounterText: ''),
+                    ),
+                  ),
+                  const SizedBox(width: Space.s),
+                  IconButton.filled(onPressed: _send, tooltip: 'Send to Mochi', icon: const Icon(Icons.arrow_upward_rounded)),
+                ],
+              ),
+              if (approval != null) ...[
+                const SizedBox(height: Space.m),
+                ApprovalCard(
+                  key: ValueKey(approval.id),
+                  approval: approval,
+                  pet: widget.ask.petName,
+                  onSend: widget.ask.approve,
+                  onDecline: widget.ask.decline,
+                ),
+              ],
+              for (final exchange in widget.ask.exchanges.reversed.take(4)) ...[
+                const SizedBox(height: Space.m),
+                MergeSemantics(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: switch (exchange.state) {
+                          AskState.working => SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, semanticsLabel: 'Mochi is thinking', color: p.tint),
+                          ),
+                          AskState.done => Icon(Icons.chat_bubble_rounded, size: 16, color: p.success, semanticLabel: 'Answered'),
+                          AskState.failed => Icon(Icons.info_rounded, size: 16, color: p.warning, semanticLabel: 'Not done'),
+                        },
+                      ),
+                      const SizedBox(width: Space.s),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              exchange.fromPhone ? '${exchange.text}  ·  from your phone' : exchange.text,
+                              style: context.type.footnote.copyWith(fontWeight: FontWeight.w700, color: p.ink),
+                            ),
+                            for (final step in exchange.steps.take(4))
+                              Text(
+                                step.state == AskStepState.failed ? '${step.text} (not done)' : step.text,
+                                style: context.type.footnote.copyWith(color: p.inkSecondary),
+                              ),
+                            if (exchange.reply != null) Text(exchange.reply!, style: context.type.subheadline),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: Space.s),
-                IconButton.filled(onPressed: _send, tooltip: 'Send to Mochi', icon: const Icon(Icons.arrow_upward_rounded)),
               ],
-            ),
-            for (final exchange in widget.ask.exchanges.reversed.take(4)) ...[
-              const SizedBox(height: Space.m),
-              MergeSemantics(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: switch (exchange.state) {
-                        AskState.working => SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, semanticsLabel: 'Mochi is thinking', color: p.tint),
-                        ),
-                        AskState.done => Icon(Icons.chat_bubble_rounded, size: 16, color: p.success, semanticLabel: 'Answered'),
-                        AskState.failed => Icon(Icons.info_rounded, size: 16, color: p.warning, semanticLabel: 'Not done'),
-                      },
-                    ),
-                    const SizedBox(width: Space.s),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            exchange.fromPhone ? '${exchange.text}  ·  from your phone' : exchange.text,
-                            style: context.type.footnote.copyWith(fontWeight: FontWeight.w700, color: p.ink),
-                          ),
-                          if (exchange.reply != null) Text(exchange.reply!, style: context.type.subheadline),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

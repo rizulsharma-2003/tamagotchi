@@ -6,6 +6,7 @@
 /// - [HookCli] is `mochi_hook` (bin/mochi_hook.dart); [BridgeClient] / [BridgeServer] carry events from it to the
 ///   app over a loopback socket with a token from the user's private folder ([BridgePaths]); [EventSpool] keeps
 ///   what arrives while the app isn't running.
+/// - [PawsRelay] is `mochi_hook paws`: the MCP relay between Mochi's helper Claude session and the app's tools.
 /// - [ClaudeHookInstaller] adds Mochi's hooks to Claude Code's settings.json and takes them out again without
 ///   touching anything else ([HookSettingsMerger]), with a backup first.
 /// - [UpdateCli] is the helper's `update`, `launch` and `uninstall` (Mochi for Windows installs itself per user in
@@ -22,6 +23,7 @@ export 'src/folder_swap.dart';
 export 'src/hook_cli.dart';
 export 'src/hook_sanitizer.dart';
 export 'src/install_layout.dart';
+export 'src/paws_relay.dart';
 export 'src/process_control.dart';
 export 'src/update_cli.dart';
 export 'src/wire_event.dart';

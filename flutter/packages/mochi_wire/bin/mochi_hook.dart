@@ -29,6 +29,12 @@ Future<void> main(List<String> arguments) async {
     exit(code);
   }
 
+  if (command == 'paws') {
+    // Mochi's helper Claude session starts this as an MCP server: it relays stdio to the app's tools for as long as that
+    // session lives, so it has no deadline (stdin closing, or the app closing the socket, ends it).
+    exit(await PawsRelay(environment: Platform.environment, input: stdin, output: stdout, err: stderr).run());
+  }
+
   final hook = command == HelperInfo.hookSubcommand;
   // A hook must never hang Claude Code: a hard deadline, then exit quietly.
   Timer(Duration(seconds: hook ? 3 : 5), () => exit(0));

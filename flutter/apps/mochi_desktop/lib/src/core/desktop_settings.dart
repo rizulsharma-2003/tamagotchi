@@ -193,6 +193,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   bool _showPet = true;
   bool _shareSummaries = false;
   bool _acceptCommands = true;
+  bool _messageSessions = true;
   String _model = 'haiku';
   Offset? _petPosition;
   Size? _mainWindowSize;
@@ -284,6 +285,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     _companionOnlyMoments = flag('companionOnlyMoments', false);
     _shareSummaries = flag('shareSummaries', false);
     _acceptCommands = flag('acceptCommands', true);
+    _messageSessions = flag('messageSessions', true);
     _model = json['model'] == 'sonnet' ? 'sonnet' : 'haiku';
     final position = json['petPosition'];
     _petPosition = position is List && position.length == 2 && position.every((value) => value is num)
@@ -462,6 +464,11 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
   /// Answer what you send from a phone (Ask Mochi and quick commands).
   bool get acceptCommands => _acceptCommands;
   set acceptCommands(bool value) => _set(() => _acceptCommands = value);
+
+  /// Mochi may ask to message your Claude sessions (each message still needs your Send on an approval card; the Mac's
+  /// "Ask me before sending" is always on here). Off: every such request is declined.
+  bool get messageSessions => _messageSessions;
+  set messageSessions(bool value) => _set(() => _messageSessions = value);
 
   /// The model Ask Mochi uses: haiku (fast) or sonnet.
   String get model => _model;
@@ -810,6 +817,7 @@ class DesktopSettings extends ChangeNotifier implements NotificationPreferences 
     'companionOnlyMoments': _companionOnlyMoments,
     'shareSummaries': _shareSummaries,
     'acceptCommands': _acceptCommands,
+    'messageSessions': _messageSessions,
     'model': _model,
     if (_petPosition != null) 'petPosition': [_petPosition!.dx, _petPosition!.dy],
     if (_mainWindowSize != null) 'mainWindowSize': [_mainWindowSize!.width, _mainWindowSize!.height],
