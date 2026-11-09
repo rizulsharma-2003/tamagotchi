@@ -213,6 +213,12 @@ class FakeClaude implements ClaudeRunner {
 
 /// The native window: records what was shown (and where the pet went).
 class FakeShell implements DesktopShell {
+  /// Every holdOnTop call (the approval card's window above the others).
+  final List<bool> holds = [];
+
+  @override
+  Future<void> holdOnTop(bool on) async => holds.add(on);
+
   FakeShell({this.petWindow});
 
   final List<Surface> shown = [];

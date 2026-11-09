@@ -88,6 +88,11 @@ abstract final class LaunchRequest {
 enum WindowEdge { top, bottom, left, right, topLeft, topRight, bottomLeft, bottomRight }
 
 abstract interface class DesktopShell {
+  /// Keeps Mochi's window above the others while [on] (an approval card waits for Send: Windows keeps a background app's
+  /// window behind the one you're using, and won't let it take the focus), without taking the focus from what you type
+  /// in. Off: back to an ordinary window.
+  Future<void> holdOnTop(bool on);
+
   /// Shows [surface]: the pet at [petPosition] (screen coordinates; null: bottom left, just above the taskbar), with
   /// the window [petSize] big, or exactly at [petFrame] (physical pixels, Windows), above other windows or not ([onTop]).
   Future<void> show(Surface surface, {Offset? petPosition, Size petSize = SurfaceSizes.pet, bool onTop = true, PixelRect? petFrame});
@@ -386,7 +391,7 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
         if (previous == Surface.hidden || previous == Surface.main) await windowManager.show();
         await windowManager.focus();
       case Surface.main:
-        await _form(onTop: false, skipTaskbar: false, resizable: _resizable ?? false, shadow: true);
+        await _form(onTop: _held, skipTaskbar: false, resizable: _resizable ?? false, shadow: true);
         if (previous != Surface.main) {
           await windowManager.setMinimumSize(SurfaceSizes.mainMinimum);
           await windowManager.setSize(mainSize);
@@ -407,6 +412,18 @@ class NativeShell with WindowListener, TrayListener implements DesktopShell {
   }
 
   bool? _onTop, _skipTaskbar, _resizable, _shadow;
+
+  /// Mochi's window is held above the others ([holdOnTop]).
+  bool _held = false;
+
+  @override
+  Future<void> holdOnTop(bool on) async {
+    _held = on;
+    if (_surface == Surface.main && _onTop != on) {
+      await windowManager.setAlwaysOnTop(on);
+      _onTop = on;
+    }
+  }
 
   /// The window's form, changing only what differs: each of these calls makes Windows redo something (taking the
   /// taskbar's tab away repaints the taskbar, and always-on-top activates the window), and the pet and the popover

@@ -382,6 +382,7 @@ class DesktopAppState extends State<DesktopApp> {
       },
     });
     desktop.ask.brain?.onApproval = _approvalShown;
+    desktop.ask.brain?.addListener(_approvalChanged);
     _mischief.adventure?.addListener(_exploreChanged);
     desktop.settings.addListener(_exploreChanged);
     _exploreChanged();
@@ -720,8 +721,23 @@ class DesktopAppState extends State<DesktopApp> {
   /// Mochi asks before messaging a Claude session: the approval card is in Ask Mochi's place, so Mochi's window opens to
   /// it unless it already shows (from the popover or the pet, as "Ask Mochi" does).
   void _approvalShown(Object approval) {
-    if (_surface == Surface.main && _page == MainPage.home) return;
-    openAsk();
+    if (!(_surface == Surface.main && _page == MainPage.home)) openAsk();
+    // Windows keeps a background app's window behind the one you're using (seen on the VM: the card opened behind the
+    // terminal): while the card waits, Mochi's window stays above the others, without taking the focus.
+    if (!_cardOnTop) {
+      _cardOnTop = true;
+      unawaited(widget.shell.holdOnTop(true));
+    }
+  }
+
+  bool _cardOnTop = false;
+
+  /// The card was answered (Send, Don't send, the time ran out): Mochi's window is an ordinary one again.
+  void _approvalChanged() {
+    if (_cardOnTop && desktop.ask.brain?.approval == null) {
+      _cardOnTop = false;
+      unawaited(widget.shell.holdOnTop(false));
+    }
   }
 
   Timer? _rhythmLog;
@@ -883,6 +899,7 @@ class DesktopAppState extends State<DesktopApp> {
       ..remove('recap')
       ..remove('decorate');
     desktop.ask.brain?.onApproval = null;
+    desktop.ask.brain?.removeListener(_approvalChanged);
     _stroll
       ..onDropOff = null
       ..stand = null;
