@@ -439,7 +439,7 @@ void main() {
     });
 
     test('list_tasks lists names, sorted, and says when there are none', () async {
-      expect((await actions.listTasks()).text, 'Backup, Clean up');
+      expect((await actions.listTasks()).text, 'Tasks in your Mochi folder: Backup, Clean up.');
       pc.mochiTasks = const PcTasks(PcTaskState.ok);
       expect((await actions.listTasks()).text, 'There are no tasks in your Mochi folder yet.');
       pc.mochiTasks = const PcTasks(PcTaskState.failed);

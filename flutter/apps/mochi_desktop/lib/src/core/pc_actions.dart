@@ -422,7 +422,7 @@ class PcActionsImpl implements PcActions {
       case PcTaskState.ok:
         if (tasks.names.isEmpty) return const PcResult('There are no tasks in your Mochi folder yet.');
         final names = [...tasks.names]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-        return PcResult(names.take(mostTasks).join(', '));
+        return PcResult('Tasks in your Mochi folder: ${names.take(mostTasks).join(', ')}.');
     }
   }
 }
