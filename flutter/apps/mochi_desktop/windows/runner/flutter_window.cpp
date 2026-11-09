@@ -95,6 +95,50 @@ int IntArgument(const flutter::EncodableMap& arguments, const char* name) {
   return -1;
 }
 
+double DoubleArgument(const flutter::EncodableMap& arguments, const char* name, double fallback) {
+  const auto found = arguments.find(flutter::EncodableValue(name));
+  if (found == arguments.end()) {
+    return fallback;
+  }
+  if (const auto* value = std::get_if<double>(&found->second)) {
+    return *value;
+  }
+  if (const auto* value = std::get_if<int32_t>(&found->second)) {
+    return static_cast<double>(*value);
+  }
+  return fallback;
+}
+
+bool BoolArgument(const flutter::EncodableMap& arguments, const char* name) {
+  const auto found = arguments.find(flutter::EncodableValue(name));
+  if (found == arguments.end()) {
+    return false;
+  }
+  const auto* value = std::get_if<bool>(&found->second);
+  return value != nullptr && *value;
+}
+
+// W9: how a PC action ended, as the word Dart reads.
+const char* PcStatusName(mochi_pc::Status status) {
+  switch (status) {
+    case mochi_pc::Status::Ok:
+      return "ok";
+    case mochi_pc::Status::NotFound:
+      return "notFound";
+    case mochi_pc::Status::NoFolder:
+      return "noFolder";
+    case mochi_pc::Status::Failed:
+      break;
+  }
+  return "failed";
+}
+
+flutter::EncodableValue PcStatusOnly(const char* status) {
+  flutter::EncodableMap map;
+  map[flutter::EncodableValue("status")] = flutter::EncodableValue(std::string(status));
+  return flutter::EncodableValue(map);
+}
+
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -157,11 +201,16 @@ void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
     mochi_media::Stop();
     mochi_icons::Stop();
+    mochi_pc::Stop();
   }
   if (icons_result_) {
     icons_result_->Success(IconsError("closing"));
     icons_result_ = nullptr;
   }
+  for (auto& pending : pc_results_) {
+    pending.second->Success(PcStatusOnly("failed"));
+  }
+  pc_results_.clear();
   stage_ = nullptr;
   drop_ = nullptr;
   if (display_notification_ != nullptr) {
@@ -188,6 +237,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   // X5: the icon worker has an answer: the pending result is completed here, on the UI thread.
   if (message == kDesktopIconsDone) {
     AnswerIcons();
+    return 0;
+  }
+
+  // W9: the PC actions worker has an answer for the request numbered in WPARAM.
+  if (message == kPcActionsDone) {
+    AnswerPc(static_cast<uint32_t>(wparam));
     return 0;
   }
 
@@ -314,6 +369,73 @@ void FlutterWindow::HandleSystemCall(const flutter::MethodCall<flutter::Encodabl
     AskIcons(true, arguments, std::move(result));
     return;
   }
+  // W9: Ask Mochi's PC actions. Each is asked for by the Dart side only after the Settings switch and the brain's limits
+  // (core/pc_actions.dart); the native side checks again what it can (the app id must be in the last listing, a task name is
+  // only a name, the music key is one of three). The answers come later, from the worker's post (kPcActionsDone).
+  if (method == "pcListApps") {
+    mochi_pc::Job job;
+    job.kind = mochi_pc::Kind::ListApps;
+    AskPc(job, std::move(result));
+    return;
+  }
+  if (method == "pcLaunchApp" && arguments != nullptr) {
+    mochi_pc::Job job;
+    job.kind = mochi_pc::Kind::LaunchApp;
+    job.text = RawStringArgument(*arguments, "id");
+    AskPc(job, std::move(result));
+    return;
+  }
+  if (method == "pcVolumeGet") {
+    mochi_pc::Job job;
+    job.kind = mochi_pc::Kind::VolumeGet;
+    AskPc(job, std::move(result));
+    return;
+  }
+  if (method == "pcVolumeSet" && arguments != nullptr) {
+    mochi_pc::Job job;
+    job.kind = mochi_pc::Kind::VolumeSet;
+    job.level = DoubleArgument(*arguments, "level", -1.0);
+    if (job.level < 0.0 || job.level > 1.0) {
+      result->Success(PcStatusOnly("failed"));
+      return;
+    }
+    AskPc(job, std::move(result));
+    return;
+  }
+  if (method == "pcMute" && arguments != nullptr) {
+    mochi_pc::Job job;
+    job.kind = mochi_pc::Kind::MuteSet;
+    job.muted = BoolArgument(*arguments, "muted");
+    AskPc(job, std::move(result));
+    return;
+  }
+  if (method == "pcListTasks") {
+    mochi_pc::Job job;
+    job.kind = mochi_pc::Kind::ListTasks;
+    AskPc(job, std::move(result));
+    return;
+  }
+  if (method == "pcRunTask" && arguments != nullptr) {
+    mochi_pc::Job job;
+    job.kind = mochi_pc::Kind::RunTask;
+    job.text = RawStringArgument(*arguments, "name");
+    AskPc(job, std::move(result));
+    return;
+  }
+  // W9: a music key (media.cpp), only these three words; the key is pressed on the media worker, so this answers at once.
+  if (method == "pcMediaKey" && arguments != nullptr) {
+    const std::string key = RawStringArgument(*arguments, "key");
+    if (key == "playPause") {
+      result->Success(flutter::EncodableValue(mochi_media::Press(mochi_media::Key::PlayPause)));
+    } else if (key == "next") {
+      result->Success(flutter::EncodableValue(mochi_media::Press(mochi_media::Key::Next)));
+    } else if (key == "previous") {
+      result->Success(flutter::EncodableValue(mochi_media::Press(mochi_media::Key::Previous)));
+    } else {
+      result->Success(flutter::EncodableValue(false));
+    }
+    return;
+  }
   if (method == "registerHotKey" && arguments != nullptr) {
     const int id = IntArgument(*arguments, "id");
     const int modifiers = IntArgument(*arguments, "modifiers");
@@ -383,6 +505,52 @@ void FlutterWindow::AskIcons(bool move, const flutter::EncodableMap* arguments,
   }
   icons_seq_ = seq;
   icons_result_ = std::move(result);
+}
+
+// W9: hands |job| to the PC actions worker; the result is completed in AnswerPc when it answers.
+void FlutterWindow::AskPc(const mochi_pc::Job& job, std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  const uint32_t token = mochi_pc::Request(GetHandle(), kPcActionsDone, job);
+  if (token == 0) {
+    result->Success(PcStatusOnly("failed"));
+    return;
+  }
+  pc_results_[token] = std::move(result);
+}
+
+// W9: the worker answered request |token|: completes its pending result (one with nobody waiting is dropped).
+void FlutterWindow::AnswerPc(uint32_t token) {
+  mochi_pc::Answer answer;
+  if (!mochi_pc::Take(token, &answer)) {
+    return;
+  }
+  const auto pending = pc_results_.find(token);
+  if (pending == pc_results_.end()) {
+    return;
+  }
+  auto result = std::move(pending->second);
+  pc_results_.erase(pending);
+  flutter::EncodableMap map;
+  map[flutter::EncodableValue("status")] = flutter::EncodableValue(std::string(PcStatusName(answer.status)));
+  if (answer.kind == mochi_pc::Kind::ListApps) {
+    flutter::EncodableList apps;
+    for (const auto& app : answer.apps) {
+      flutter::EncodableMap entry;
+      entry[flutter::EncodableValue("name")] = flutter::EncodableValue(app.name);
+      entry[flutter::EncodableValue("id")] = flutter::EncodableValue(app.id);
+      apps.push_back(flutter::EncodableValue(entry));
+    }
+    map[flutter::EncodableValue("apps")] = flutter::EncodableValue(apps);
+  } else if (answer.kind == mochi_pc::Kind::ListTasks) {
+    flutter::EncodableList tasks;
+    for (const auto& name : answer.tasks) {
+      tasks.push_back(flutter::EncodableValue(name));
+    }
+    map[flutter::EncodableValue("tasks")] = flutter::EncodableValue(tasks);
+  } else if (answer.kind == mochi_pc::Kind::VolumeGet) {
+    map[flutter::EncodableValue("level")] = flutter::EncodableValue(answer.level);
+    map[flutter::EncodableValue("muted")] = flutter::EncodableValue(answer.muted);
+  }
+  result->Success(flutter::EncodableValue(map));
 }
 
 // The worker answered: completes the pending result when the answer is the one it waits for (an older answer is dropped).

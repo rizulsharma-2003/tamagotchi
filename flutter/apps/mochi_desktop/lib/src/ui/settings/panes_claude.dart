@@ -393,6 +393,12 @@ class _AssistantPaneState extends State<AssistantPane> {
               value: settings.showScreen,
               onChanged: (value) => settings.showScreen = value,
             ),
+            ToggleRow(
+              title: 'Let Mochi use my PC',
+              subtitle: 'Open apps and links, bring windows forward, music and volume',
+              value: settings.pcControl,
+              onChanged: (value) => settings.pcControl = value,
+            ),
           ],
         ),
         SettingsGroup(

@@ -22,6 +22,7 @@ import 'core/hook_setup.dart';
 import 'core/hotkeys.dart';
 import 'core/jump_list.dart';
 import 'core/pc_rhythm.dart';
+import 'core/pc_actions.dart';
 import 'core/pet_cues.dart';
 import 'core/purr.dart';
 import 'core/reacts.dart';
@@ -40,6 +41,7 @@ import 'link/link_host.dart';
 import 'link/phone_sync.dart';
 import 'platform/credential_vault.dart';
 import 'platform/file_drop.dart';
+import 'platform/pc_platform.dart';
 import 'platform/foreground_window.dart';
 import 'platform/screen_capture.dart';
 import 'platform/reacts_readers.dart';
@@ -75,6 +77,7 @@ class MochiDesktop {
     required this.motion,
     required ClaudeRunner? Function() claude,
     this.opener,
+    PcActions? pc,
     this.folders,
     StartupItem? startup,
     String? Function()? locateClaude,
@@ -169,6 +172,8 @@ class MochiDesktop {
       runner: claude,
       cue: cue,
       opener: opener,
+      pc: pc,
+      pcAllowed: () => settings.pcControl,
       model: () => settings.model,
       petName: () => settings.petName,
       clock: clock,
@@ -390,6 +395,7 @@ class MochiDesktop {
       claude: claude,
       brainSetup: brainSetup,
       opener: const SystemUrlOpener(),
+      pc: systemPcActions(),
       folders: const SystemFolderOpener(),
       startup: startup,
       locateClaude: () {

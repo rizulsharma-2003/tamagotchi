@@ -1,7 +1,9 @@
 // Ask Mochi on Windows: quick commands on the spot; everything else to Mochi's brain (ask_brain.dart), a long-lived
 // helper Claude session with a few tools that can message the user's other Claude sessions, each message only after an
 // approval card says Send. When the brain can't start, the v1 path answers instead: a one-off `claude -p` that can only
-// search the web. The Mac's PC actions (open apps, media keys, volume, windows) are not here yet (W9).
+// search the web. The PC actions (W9: open apps and links, bring windows forward, music keys, volume, the user's own
+// `\Mochi\` Task Scheduler tasks) run at once, with no card, as on the Mac; Settings › Assistant › "Let Mochi use my PC"
+// turns them off for the brain's tools and the quick commands alike.
 
 import 'dart:async';
 
@@ -10,8 +12,10 @@ import 'package:flutter/services.dart' show Clipboard;
 
 import 'ask_attach.dart';
 import 'ask_brain.dart';
+import 'brain_session.dart' show AgentNames;
 import 'claude_cli.dart';
 import 'paws_server.dart';
+import 'pc_actions.dart';
 import 'pet_cues.dart';
 import 'quick_commands.dart';
 import 'screen_peek.dart';
@@ -172,6 +176,8 @@ class AskMochi extends ChangeNotifier {
     required ClaudeRunner? Function() runner,
     required void Function(PetCue cue) cue,
     UrlOpener? opener,
+    PcActions? pc,
+    bool Function()? pcAllowed,
     String Function()? model,
     String Function()? petName,
     this.timeout = const Duration(seconds: 90),
@@ -185,6 +191,8 @@ class AskMochi extends ChangeNotifier {
   }) : _runner = runner,
        _cue = cue,
        _opener = opener,
+       _pc = pc,
+       _pcAllowed = pcAllowed ?? (() => true),
        _model = model ?? (() => 'haiku'),
        _petName = petName ?? (() => 'Mochi'),
        _clock = clock ?? DateTime.now,
@@ -270,6 +278,13 @@ class AskMochi extends ChangeNotifier {
   final ClaudeRunner? Function() _runner;
   final void Function(PetCue cue) _cue;
   final UrlOpener? _opener;
+
+  /// The PC actions (null: not here, as in tests of everything else) and whether Settings lets Mochi use them.
+  final PcActions? _pc;
+  final bool Function() _pcAllowed;
+
+  /// What a PC action says when Settings › Assistant has "Let Mochi use my PC" off.
+  static const String pcOff = 'PC control is off in Settings › Assistant.';
   final String Function() _model;
   final DateTime Function() _clock;
   final String Function() _petName;
@@ -333,7 +348,7 @@ class AskMochi extends ChangeNotifier {
     notifyListeners();
     AskOutcome outcome;
     try {
-      final quick = target == null && attached == null && more == null ? QuickCommands.parse(words) : null;
+      final quick = target == null && attached == null && more == null ? await _quick(words) : null;
       outcome = quick == null
           ? await _askClaude(
               attached == null ? words : AskCopied.frame(words, attached),
@@ -365,12 +380,27 @@ class AskMochi extends ChangeNotifier {
       case SimpleCommand.agentNews:
         return const AskOutcome("My agent (mail, calendar and Notion) isn't on Windows yet.", ok: false);
       case SiteCommand(:final url):
+        if (!_pcAllowed()) return const AskOutcome(pcOff, ok: false);
         final opener = _opener;
         if (opener == null || url.scheme != 'https') return const AskOutcome("I can't open links here yet.", ok: false);
         final opened = await opener.open(url);
         return opened ? AskOutcome('Opening ${url.host}.') : AskOutcome("I couldn't open ${url.host}.", ok: false);
-      case MediaCommand() || VolumeCommand() || AppCommand():
-        return const AskOutcome("I can't do that on Windows yet.", ok: false);
+      case MediaCommand(:final key):
+        final pc = _pc;
+        if (!_pcAllowed()) return const AskOutcome(pcOff, ok: false);
+        if (pc == null) return const AskOutcome("I can't do that on this PC yet.", ok: false);
+        return _outcome(await pc.media(key));
+      case VolumeCommand(:final change, :final level):
+        final pc = _pc;
+        if (!_pcAllowed()) return const AskOutcome(pcOff, ok: false);
+        if (pc == null) return const AskOutcome("I can't do that on this PC yet.", ok: false);
+        return _outcome(await pc.volume(level: level, change: change));
+      case AppCommand(:final name):
+        // "switch to X" for a running app and "open X" are the same on the Mac: the running app is switched to.
+        final pc = _pc;
+        if (!_pcAllowed()) return const AskOutcome(pcOff, ok: false);
+        if (pc == null) return const AskOutcome("I can't do that on this PC yet.", ok: false);
+        return _outcome(await pc.openApp(name));
       case SimpleCommand.explore:
         return explore?.call() ?? const AskOutcome("That trick isn't on Windows yet.", ok: false);
       case SimpleCommand.comeHome:
@@ -383,6 +413,18 @@ class AskMochi extends ChangeNotifier {
         return const AskOutcome("That trick isn't on Windows yet.", ok: false);
     }
   }
+
+  static AskOutcome _outcome(PcResult result) => AskOutcome(result.text, ok: result.ok);
+
+  /// [QuickCommands.parse] of [words]; for "open …" and "switch to …" it is given the PC's installed and running apps (as the
+  /// Mac gives them), so "open vs code" is an app and not a link.
+  Future<QuickCommand?> _quick(String words) async {
+    final pc = _pc;
+    if (pc == null || !_pcAllowed() || !_namesApp.hasMatch(QuickCommands.normalize(words))) return QuickCommands.parse(words);
+    return QuickCommands.parse(words, installedApps: await pc.installedNames(), runningApps: pc.runningNames());
+  }
+
+  static final RegExp _namesApp = RegExp(r'^(?:open|launch|start|run|go to|switch to|bring up|show me|show|focus on|jump to) ');
 
   AskOutcome _interact(String kind) {
     _cue(switch (kind) {
@@ -397,18 +439,21 @@ class AskMochi extends ChangeNotifier {
     });
   }
 
-  /// The brain's tools other than `approve`: Mochi's tricks, the Claude sessions, and https links.
+  /// The brain's tools other than `approve`: Mochi's tricks, the Claude sessions, https links and the PC actions.
   Future<PawsResult> brainTool(String name, Map<String, Object?> arguments) async {
     switch (name) {
       case 'claude_sessions':
         return PawsResult(sessions.statusSummary());
       case 'open_url':
+        if (!_pcAllowed()) return const PawsResult(pcOff, isError: true);
         final url = arguments['url'];
         final uri = url is String ? Uri.tryParse(url.trim()) : null;
         if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return const PawsResult('I only open https links.', isError: true);
         final opener = _opener;
         if (opener == null) return const PawsResult("I can't open links here.", isError: true);
         return await opener.open(uri) ? PawsResult('Opening ${uri.host}.') : PawsResult("I couldn't open ${uri.host}.", isError: true);
+      case 'open_app' || 'list_apps' || 'focus_window' || 'show_project' || 'media' || 'set_volume' || 'run_task' || 'list_tasks':
+        return _pcTool(name, arguments);
       case 'mochi':
         final minutes = arguments['minutes'];
         final outcome = trick(arguments['action'] is String ? arguments['action'] as String : '', minutes is num ? minutes.round() : null);
@@ -416,6 +461,62 @@ class AskMochi extends ChangeNotifier {
       default:
         return const PawsResult('Unknown tool.', isError: true);
     }
+  }
+
+  /// The brain's PC tools. The Settings switch is checked first; what each may do is in core/pc_actions.dart. A window's
+  /// title is never part of what comes back, and nothing is logged here (the brain logs the tool's name and whether it worked).
+  Future<PawsResult> _pcTool(String name, Map<String, Object?> arguments) async {
+    if (!_pcAllowed()) return const PawsResult(pcOff, isError: true);
+    final pc = _pc;
+    if (pc == null) return const PawsResult("I can't do that on this PC yet.", isError: true);
+    String? text(String key) {
+      final value = arguments[key];
+      return value is String ? value : null;
+    }
+
+    final PcResult result;
+    switch (name) {
+      case 'open_app':
+        result = await pc.openApp(text('name') ?? '');
+      case 'list_apps':
+        result = pc.listApps();
+      case 'focus_window':
+        result = await pc.focusWindow(app: text('app'), title: text('title'));
+      case 'show_project':
+        result = await pc.focusWindow(title: _projectWords(text('project') ?? ''));
+      case 'media':
+        result = await pc.media(switch (text('action')) {
+          'next' => 'next',
+          'previous' => 'previous',
+          _ => 'playPause',
+        });
+      case 'set_volume':
+        final level = arguments['level'];
+        final steps = level is num && level.isFinite ? level.round() : null;
+        result = await pc.volume(level: steps, change: text('change'));
+      case 'run_task':
+        result = await pc.runTask(text('name') ?? '');
+      default:
+        result = await pc.listTasks();
+    }
+    return PawsResult(result.text, isError: !result.ok);
+  }
+
+  /// The words to look for in a window title for [wanted]: the project's folder name when it is a session or project Mochi
+  /// knows (the Mac's `show_project`), otherwise what was asked for.
+  String _projectWords(String wanted) {
+    final seen = <String>{};
+    final projects = [
+      for (final session in sessions.all)
+        if (session.projectKey != null && session.project != null && seen.add(session.projectKey!))
+          (key: session.projectKey!, name: session.project!),
+    ];
+    final match = AgentNames.project(wanted, among: projects);
+    if (match != null) return match.name;
+    for (final project in projects) {
+      if (project.name.toLowerCase() == wanted.trim().toLowerCase()) return project.name;
+    }
+    return wanted;
   }
 
   /// One of Mochi's tricks, for the brain's `mochi` tool.

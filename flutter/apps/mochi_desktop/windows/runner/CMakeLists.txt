@@ -14,6 +14,7 @@ add_executable(${BINARY_NAME} WIN32
   "main.cpp"
   "media.cpp"
   "native_stage.cpp"
+  "pc_actions.cpp"
   "toasts.cpp"
   "utils.cpp"
   "win32_window.cpp"
@@ -47,6 +48,9 @@ target_link_libraries(${BINARY_NAME} PRIVATE "wtsapi32.lib" "shell32.lib" "runti
 target_link_libraries(${BINARY_NAME} PRIVATE "ole32.lib" "oleaut32.lib" "uuid.lib")
 # The Start menu jump list (X16): InitPropVariantFromString and PKEY_Title.
 target_link_libraries(${BINARY_NAME} PRIVATE "propsys.lib")
+# Ask Mochi's PC actions (W9, pc_actions.cpp): the Task Scheduler (taskschd.lib), the default speaker's volume through Core
+# Audio (header-only interfaces; the CLSIDs come from __uuidof) and the shell's Apps folder (shell32, ole32, uuid above).
+target_link_libraries(${BINARY_NAME} PRIVATE "taskschd.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
