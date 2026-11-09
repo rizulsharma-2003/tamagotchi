@@ -486,7 +486,7 @@ class AskBrain extends ChangeNotifier {
       final m = input['message'], c = input['content'];
       String shape(Object? v) => v is String ? 'text of ${v.length}' : (v is Map ? 'object {${v.keys.join(', ')}}' : (v is List ? 'list of ${v.length}' : v.runtimeType.toString()));
       final holds = m is String && c is String && c.contains(m);
-      return _deny('Nothing to send (the message was unclear: message is ${shape(m)}, content is ${shape(c)}${holds ? ', content holds the message' : ''}).');
+      return _deny('Nothing to send (the message was unclear: message is ${shape(m)}, content is ${shape(c)}${holds ? ', content holds the message' : ''}; DIAG content=<<$c>> keys=${input.keys.join(',')}).');
     }
     final target = to is String ? AgentNames.display(to) : '';
     final message = body is String ? body : '';
