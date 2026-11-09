@@ -867,6 +867,40 @@ void main() {
       expect(rig.verdict(channel)['behavior'], 'deny');
     });
 
+    test('Claude Code’s own input (seen on Windows): content is a 50-character preview; the card shows the whole message', () async {
+      const message = 'From the user, via Mochi: Please reply with the single word hello.';
+      final input = {
+        'to': 'bin-42',
+        'summary': 'Ask bin-42 session to reply hello.',
+        'message': message,
+        'type': 'message',
+        'recipient': 'bin-42 [eb4027]',
+        'recipient_kind': 'session',
+        'content': '${message.substring(0, 49)}.',
+      };
+      final channel = rig.connect();
+      channel.send(
+        jsonEncode({
+          'jsonrpc': '2.0',
+          'id': 11,
+          'method': 'tools/call',
+          'params': {
+            'name': 'approve',
+            'arguments': {'tool_name': 'SendMessage', 'input': input},
+          },
+        }),
+      );
+      await rig.settle();
+      final card = rig.brain.approval!;
+      expect(card.message, message, reason: 'the whole message, not the preview');
+      expect(card.target, 'bin-42');
+      rig.brain.approve();
+      await rig.settle();
+      final verdict = rig.verdict(channel);
+      expect(verdict['behavior'], 'allow');
+      expect(verdict['updatedInput'], input);
+    });
+
     test('a denial for a message it can’t read names the fields it saw, never their values', () async {
       final verdict = await ask({
         'tool_name': 'SendMessage',

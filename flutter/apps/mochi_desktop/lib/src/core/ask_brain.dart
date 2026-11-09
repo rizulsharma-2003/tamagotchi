@@ -462,6 +462,18 @@ class AskBrain extends ChangeNotifier {
   /// Both names of one SendMessage field, with different values.
   static const Object _ambiguous = Object();
 
+  /// [preview] is [full] cut short: its start, maybe ending in a full stop or an ellipsis where it was cut.
+  static bool _previewOf(String preview, String full) {
+    var start = preview;
+    for (final end in const ['…', '...', '.']) {
+      if (start.endsWith(end)) {
+        start = start.substring(0, start.length - end.length);
+        break;
+      }
+    }
+    return start.isNotEmpty && full.startsWith(start);
+  }
+
   /// The answer Claude Code's permission prompt tool expects: only `SendMessage`, only after the card says Send.
   Future<String> _approvalVerdict(Map<String, Object?> arguments) async {
     if (arguments['tool_name'] != 'SendMessage') return _deny("Mochi only approves messages to the user's Claude sessions.");
@@ -479,15 +491,12 @@ class AskBrain extends ChangeNotifier {
     }
 
     final to = one('to', 'recipient', same: AgentNames.display);
-    final body = one('message', 'content');
+    // Claude Code adds `content`, a short preview of `message` (its first 49 characters and a full stop); the message is
+    // what goes, and the card shows it whole. A `content` that isn't such a preview leaves the card unsure: denied.
+    final m = input['message'], c = input['content'];
+    final body = m is String && c is String && m != c && !_previewOf(c, m) ? _ambiguous : (m ?? c);
     if (identical(to, _ambiguous)) return _deny('Nothing to send (the message was unclear: to/recipient differ).');
-    if (identical(body, _ambiguous)) {
-      // Their shape only (never their text): what Claude Code put beside the message.
-      final m = input['message'], c = input['content'];
-      String shape(Object? v) => v is String ? 'text of ${v.length}' : (v is Map ? 'object {${v.keys.join(', ')}}' : (v is List ? 'list of ${v.length}' : v.runtimeType.toString()));
-      final holds = m is String && c is String && c.contains(m);
-      return _deny('Nothing to send (the message was unclear: message is ${shape(m)}, content is ${shape(c)}${holds ? ', content holds the message' : ''}; DIAG content=<<$c>> keys=${input.keys.join(',')}).');
-    }
+    if (identical(body, _ambiguous)) return _deny('Nothing to send (the message was unclear: message/content differ).');
     final target = to is String ? AgentNames.display(to) : '';
     final message = body is String ? body : '';
     // The field names (never their values) say what didn't fit, should Claude Code's tool change again.
