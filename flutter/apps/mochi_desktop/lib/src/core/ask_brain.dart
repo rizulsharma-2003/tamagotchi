@@ -459,19 +459,30 @@ class AskBrain extends ChangeNotifier {
 
   static String _deny(String message) => jsonEncode({'behavior': 'deny', 'message': message});
 
+  /// Both names of one SendMessage field, with different values.
+  static const Object _ambiguous = Object();
+
   /// The answer Claude Code's permission prompt tool expects: only `SendMessage`, only after the card says Send.
   Future<String> _approvalVerdict(Map<String, Object?> arguments) async {
     if (arguments['tool_name'] != 'SendMessage') return _deny("Mochi only approves messages to the user's Claude sessions.");
     if (!messagingAllowed()) return _deny('The user turned off messages to their Claude sessions.');
     final input = arguments['input'] is Map ? Map<String, Object?>.from(arguments['input'] as Map) : <String, Object?>{};
-    // The card shows exactly what SendMessage sends: its `to` and its `message`. Any other field that could carry a
-    // recipient or text (a `recipient`, a `content`) means the card might not show what goes: denied.
-    if (input.containsKey('recipient') || input.containsKey('content')) return _deny('Nothing to send.');
-    final to = input['to'];
-    final body = input['message'];
+    // The card shows exactly what SendMessage sends. Claude Code names the fields `to` and `message` (some versions
+    // `recipient` and `content`, as the Mac reads them); both names of one field with different values would leave the
+    // card unsure what goes: denied.
+    Object? one(String a, String b) {
+      final first = input[a], second = input[b];
+      if (first != null && second != null && first != second) return _ambiguous;
+      return first ?? second;
+    }
+
+    final to = one('to', 'recipient');
+    final body = one('message', 'content');
+    if (identical(to, _ambiguous) || identical(body, _ambiguous)) return _deny('Nothing to send (the message was unclear).');
     final target = to is String ? AgentNames.display(to) : '';
     final message = body is String ? body : '';
-    if (target.isEmpty || message.isEmpty || _current == null) return _deny('Nothing to send.');
+    // The field names (never their values) say what didn't fit, should Claude Code's tool change again.
+    if (target.isEmpty || message.isEmpty || _current == null) return _deny('Nothing to send (fields: ${input.keys.join(', ')}).');
     final project = AgentNames.project(target, among: _knownProjects());
     final allowed = await _askApproval(AskApproval(id: _newId(), target: target, project: project?.name, message: message));
     if (!allowed) {

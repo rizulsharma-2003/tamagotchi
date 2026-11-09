@@ -808,6 +808,75 @@ void main() {
       expect(rig.brain.approval, isNull);
     });
 
+    test('the other field names (recipient, content) show on the card and pass on as they were', () async {
+      final channel = rig.connect();
+      channel.send(
+        jsonEncode({
+          'jsonrpc': '2.0',
+          'id': 9,
+          'method': 'tools/call',
+          'params': {
+            'name': 'approve',
+            'arguments': {
+              'tool_name': 'SendMessage',
+              'input': {'recipient': 'web-ab [123456]', 'content': 'Please run the tests.'},
+            },
+          },
+        }),
+      );
+      await rig.settle();
+      final card = rig.brain.approval!;
+      expect(card.target, 'web-ab');
+      expect(card.message, 'Please run the tests.');
+      rig.brain.approve();
+      await rig.settle();
+      final verdict = rig.verdict(channel);
+      expect(verdict['behavior'], 'allow');
+      expect(verdict['updatedInput'], {'recipient': 'web-ab [123456]', 'content': 'Please run the tests.'});
+    });
+
+    test('both names of one field with different values: denied without a card (it could show the wrong one)', () async {
+      for (final input in [
+        {'to': 'web-ab', 'recipient': 'other-cd', 'message': 'hi'},
+        {'to': 'web-ab', 'message': 'hi', 'content': 'something else'},
+      ]) {
+        final verdict = await ask({'tool_name': 'SendMessage', 'input': input});
+        expect(verdict['behavior'], 'deny', reason: '$input');
+        expect(rig.brain.approval, isNull, reason: '$input');
+      }
+      // The same value under both names is no doubt at all.
+      final channel = rig.connect();
+      channel.send(
+        jsonEncode({
+          'jsonrpc': '2.0',
+          'id': 10,
+          'method': 'tools/call',
+          'params': {
+            'name': 'approve',
+            'arguments': {
+              'tool_name': 'SendMessage',
+              'input': {'to': 'web-ab', 'recipient': 'web-ab', 'message': 'hi', 'content': 'hi'},
+            },
+          },
+        }),
+      );
+      await rig.settle();
+      expect(rig.brain.approval?.message, 'hi');
+      rig.brain.decline();
+      await rig.settle();
+      expect(rig.verdict(channel)['behavior'], 'deny');
+    });
+
+    test('a denial for a message it can’t read names the fields it saw, never their values', () async {
+      final verdict = await ask({
+        'tool_name': 'SendMessage',
+        'input': {'target': 'web-ab', 'text': 'a secret'},
+      });
+      expect(verdict['behavior'], 'deny');
+      expect(verdict['message'], contains('target, text'));
+      expect(verdict['message'], isNot(contains('a secret')));
+    });
+
     test('turned off in Settings: every message request is declined, with no card', () async {
       final off = BrainRig(messaging: false);
       addTearDown(off.brain.dispose);
